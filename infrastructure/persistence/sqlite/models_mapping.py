@@ -1,0 +1,369 @@
+from sqlalchemy import (Column, Integer, String, Float, Boolean, DateTime, 
+                        ForeignKey, UniqueConstraint, Table, Numeric, Text, Enum, DECIMAL, JSON)
+from sqlalchemy.orm import relationship, registry
+import datetime
+import uuid
+
+# Import the Base directly from database
+from infrastructure.persistence.sqlite.database import Base
+
+# Import the SQLiteUUID type
+from .types import SQLiteUUID
+
+# Import core models after Base is initialized
+from core.models.product import Product as CoreProduct, Department as CoreDepartment
+from core.models.inventory import InventoryMovement as CoreInventoryMovement
+from core.models.sale import Sale as CoreSale, SaleItem as CoreSaleItem
+from core.models.customer import Customer as CoreCustomer
+from core.models.credit import CreditPayment as CoreCreditPayment
+from core.models.user import User as CoreUser
+from core.models.invoice import Invoice as CoreInvoice
+from core.models.cash_drawer import CashDrawerEntryType
+
+# Import core models for reference if needed, but avoid direct coupling in ORM definitions
+# from core.models.supplier import Supplier as CoreSupplier
+# from core.models.purchase import PurchaseOrder as CorePurchaseOrder, PurchaseOrderItem as CorePurchaseOrderItem
+
+# Base.metadata is used implicitly by declarative classes inheriting from Base
+mapper_registry = registry(metadata=Base.metadata)
+
+# --- User --- (define UserOrm first to avoid circular references)
+class UserOrm(Base):
+    __tablename__ = "users"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    # Define relationships with strings to avoid circular references
+    sales = relationship("SaleOrm", back_populates="user")
+    inventory_movements = relationship("InventoryMovementOrm", back_populates="user")
+    credit_payments = relationship("CreditPaymentOrm", back_populates="user")
+    cash_drawer_entries = relationship("CashDrawerEntryOrm", back_populates="user")
+
+    def __repr__(self):
+        return f"<UserOrm(id={self.id}, username='{self.username}', is_active={self.is_active})>"
+
+class DepartmentOrm(Base):
+    __tablename__ = "departments"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+
+    # Relationship: One-to-Many (One Department has Many Products)
+    products = relationship("ProductOrm", back_populates="department")
+
+    def __repr__(self):
+        return f"<DepartmentOrm(id={self.id}, name='{self.name}')>"
+
+class ProductOrm(Base):
+    __tablename__ = "products"
+    __table_args__ = (
+        UniqueConstraint('code', name='uq_product_code'),
+        {'extend_existing': True}
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, index=True, nullable=False)
+    description = Column(String, nullable=False)
+    cost_price = Column(Float, nullable=False, default=0.0)
+    sell_price = Column(Float, nullable=False, default=0.0)
+    wholesale_price = Column(Float, nullable=True) # Price 2
+    special_price = Column(Float, nullable=True) # Price 3
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)
+    unit = Column(String, nullable=False, default="Unidad")
+    uses_inventory = Column(Boolean, nullable=False, default=True)
+    quantity_in_stock = Column(Float, nullable=False, default=0.0)
+    min_stock = Column(Float, nullable=True, default=0.0)
+    max_stock = Column(Float, nullable=True)
+    last_updated = Column(DateTime, nullable=True, onupdate=datetime.datetime.now)
+    notes = Column(String, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    # created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # Relationship: Many-to-One (Many Products belong to One Department)
+    department = relationship("DepartmentOrm", back_populates="products")
+
+    def __repr__(self):
+        return f"<ProductOrm(id={self.id}, code='{self.code}', description='{self.description}')>"
+
+class InventoryMovementOrm(Base):
+    __tablename__ = "inventory_movements"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True) # User performing the movement
+    timestamp = Column(DateTime, nullable=False, default=datetime.datetime.now, index=True)
+    movement_type = Column(String, nullable=False, index=True) # 'SALE', 'PURCHASE', 'ADJUSTMENT', 'INITIAL'
+    quantity = Column(Float, nullable=False) # Positive for addition, negative for removal
+    description = Column(String, nullable=True)
+    related_id = Column(Integer, nullable=True, index=True) # e.g., Sale ID, Purchase ID
+
+    # Relationship: Many-to-One (Many Movements belong to One Product)
+    product = relationship("ProductOrm") # No back_populates needed if ProductOrm doesn't track movements directly
+
+    # Relationship: Many-to-One (Many Movements performed by one User)
+    user = relationship("UserOrm", back_populates="inventory_movements")
+
+    def __repr__(self):
+        return f"<InventoryMovementOrm(id={self.id}, product_id={self.product_id}, type='{self.movement_type}', qty={self.quantity})>"
+
+class SaleOrm(Base):
+    __tablename__ = "sales"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, index=True)
+    date_time = Column(DateTime, nullable=False, default=datetime.datetime.utcnow, index=True)
+    total_amount = Column(Float, nullable=False, default=0.0) # Calculated from items
+    customer_id = Column(SQLiteUUID, ForeignKey('customers.id'), nullable=True, index=True)
+    is_credit_sale = Column(Boolean, nullable=False, default=False) # Added credit flag
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True) # User who performed the sale
+    payment_type = Column(String, nullable=True, index=True) # e.g., 'Efectivo', 'Tarjeta'
+
+    # Relationship: One-to-Many (One Sale has Many SaleItems)
+    items = relationship(
+        "SaleItemOrm",
+        back_populates="sale",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+
+    # Relationship: Many-to-One (Many Sales belong to one Customer)
+    customer = relationship("CustomerOrm", back_populates="sales")
+
+    # Relationship: Many-to-One (Many Sales performed by one User)
+    user = relationship("UserOrm", back_populates="sales")
+
+    def __repr__(self):
+        return f"<SaleOrm(id={self.id}, timestamp='{self.date_time}', total={self.total_amount})>"
+
+class SaleItemOrm(Base):
+    __tablename__ = "sale_items"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, index=True)
+    sale_id = Column(Integer, ForeignKey("sales.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
+    quantity = Column(Float, nullable=False)
+    unit_price = Column(Float, nullable=False) # Price at the time of sale
+    product_code = Column(String, nullable=True) # Denormalized
+    product_description = Column(String, nullable=True) # Denormalized
+
+    # Relationship: Many-to-One (Many SaleItems belong to One Sale)
+    sale = relationship("SaleOrm", back_populates="items")
+
+    # Relationship: Many-to-One (Many SaleItems relate to One Product)
+    # We don't strictly need full product object here often, just ID is key.
+    # A relationship can be added if needed for reporting joins.
+    product = relationship("ProductOrm") # No back_populates unless Product needs SaleItems
+
+    def __repr__(self):
+        return f"<SaleItemOrm(id={self.id}, sale_id={self.sale_id}, product_id={self.product_id}, qty={self.quantity})>"
+
+# New ORM Model for Customer
+class CustomerOrm(Base):
+    __tablename__ = 'customers'
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(SQLiteUUID, primary_key=True, index=True, default=uuid.uuid4)
+    name = Column(String, nullable=False, index=True)
+    phone = Column(String, nullable=True)
+    email = Column(String, nullable=True, index=True)
+    address = Column(String, nullable=True)
+    cuit = Column(String, nullable=True, unique=True, index=True) # Often unique
+    iva_condition = Column(String, nullable=True)
+    credit_limit = Column(Float, default=0.0, nullable=False)
+    credit_balance = Column(Float, default=0.0, nullable=False) # Current debt
+    is_active = Column(Boolean, default=True, index=True)
+
+    # Relationships
+    # Add back-population for the Sale relationship
+    sales = relationship("SaleOrm", back_populates="customer")
+    # invoices = relationship("InvoiceOrm", back_populates="customer") # Add later
+    credit_payments = relationship("CreditPaymentOrm", back_populates="customer") # Added CreditPayment relationship
+
+    def __repr__(self):
+        return f"<CustomerOrm(id={self.id}, name='{self.name}', phone='{self.phone}', email='{self.email}', cuit='{self.cuit}')>"
+
+# New ORM Model for CreditPayment
+class CreditPaymentOrm(Base):
+    __tablename__ = 'credit_payments'
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(SQLiteUUID, ForeignKey('customers.id'), nullable=False, index=True)
+    amount = Column(Float, nullable=False) # Store as Float, handle conversion if needed
+    timestamp = Column(DateTime, nullable=False, default=datetime.datetime.now, index=True)
+    notes = Column(String, nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True) # User registering the payment
+
+    # Relationship: Many-to-One (Many Payments belong to One Customer)
+    customer = relationship("CustomerOrm", back_populates="credit_payments")
+
+    # Relationship: Many-to-One (Many Payments made by One User)
+    user = relationship("UserOrm", back_populates="credit_payments")
+
+    def __repr__(self):
+        return f"<CreditPaymentOrm(id={self.id}, customer_id={self.customer_id}, amount={self.amount})>"
+
+class SupplierOrm(Base):
+    __tablename__ = "suppliers"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True, index=True)
+    contact_person = Column(String, nullable=True) # Renamed from contact_name
+    phone = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    address = Column(Text, nullable=True)
+    cuit = Column(String, nullable=True, unique=True, index=True)
+    notes = Column(Text, nullable=True) # Added notes field
+
+    # Relationship: One-to-Many (One Supplier has Many Purchase Orders)
+    purchase_orders = relationship("PurchaseOrderOrm", back_populates="supplier")
+
+    def __repr__(self):
+        return f"<SupplierOrm(id={self.id}, name='{self.name}')>"
+
+class PurchaseOrderOrm(Base):
+    __tablename__ = "purchase_orders"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, index=True)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=False, index=True)
+    supplier_name = Column(String, nullable=True) # Added denormalized supplier name
+    order_date = Column(DateTime, nullable=False, default=datetime.datetime.now)
+    expected_delivery_date = Column(DateTime, nullable=True)
+    status = Column(String, nullable=False, default="PENDING", index=True) # Match core model default
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.datetime.now) # Added created_at
+    updated_at = Column(DateTime, nullable=False, default=datetime.datetime.now, onupdate=datetime.datetime.now) # Added updated_at
+
+    # Relationship: Many-to-One (Many POs belong to One Supplier)
+    supplier = relationship("SupplierOrm", back_populates="purchase_orders")
+    # Relationship: One-to-Many (One PO has Many Items)
+    items = relationship("PurchaseOrderItemOrm", back_populates="purchase_order", cascade="all, delete-orphan", lazy="selectin")
+
+    def __repr__(self):
+        return f"<PurchaseOrderOrm(id={self.id}, supplier_id={self.supplier_id}, status='{self.status}')>"
+
+class PurchaseOrderItemOrm(Base):
+    __tablename__ = "purchase_order_items"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, index=True)
+    purchase_order_id = Column(Integer, ForeignKey("purchase_orders.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
+    product_code = Column(String, nullable=True) # Denormalized, allow null initially
+    product_description = Column(String, nullable=True) # Denormalized, allow null initially
+    quantity_ordered = Column(Float, nullable=False) # Renamed from quantity, changed type
+    cost_price = Column(Float, nullable=False) # Changed type
+    quantity_received = Column(Float, nullable=False, default=0.0) # Added quantity_received
+
+    # Relationship: Many-to-One (Many Items belong to One PO)
+    purchase_order = relationship("PurchaseOrderOrm", back_populates="items")
+    # Relationship: Many-to-One (Many Items relate to One Product)
+    product = relationship("ProductOrm") # No back_populates needed if ProductOrm doesn't track PO items
+
+    def __repr__(self):
+        return f"<PurchaseOrderItemOrm(id={self.id}, purchase_order_id={self.purchase_order_id}, product_id={self.product_id}, qty={self.quantity_ordered})>"
+
+class InvoiceOrm(Base):
+    __tablename__ = "invoices"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, index=True)
+    sale_id = Column(Integer, ForeignKey("sales.id"), nullable=False, unique=True, index=True)  # One invoice per sale
+    customer_id = Column(SQLiteUUID, ForeignKey('customers.id'), nullable=True, index=True)
+    invoice_number = Column(String, nullable=True, unique=True, index=True)  # Unique invoice number
+    date_time = Column(DateTime, nullable=False, default=datetime.datetime.now, index=True)  # Adding missing date_time field
+    invoice_date = Column(DateTime, nullable=False, default=datetime.datetime.now, index=True)
+    invoice_type = Column(String, nullable=False, default="B", index=True)  # A, B, C, etc.
+    
+    # Customer details snapshot (serialized)
+    customer_details = Column(Text, nullable=True)  # JSON serialized
+    
+    # Financial data
+    total_amount = Column(Float, nullable=False, default=0.0)  # Adding missing total_amount field
+    subtotal = Column(Float, nullable=False, default=0.0)
+    iva_amount = Column(Float, nullable=False, default=0.0)
+    total = Column(Float, nullable=False, default=0.0)
+    
+    # IVA condition
+    iva_condition = Column(String, nullable=False, default="Consumidor Final")
+    
+    # AFIP data
+    cae = Column(String, nullable=True)
+    cae_due_date = Column(DateTime, nullable=True)
+    
+    # Other fields
+    notes = Column(Text, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    
+    # Relationships
+    sale = relationship("SaleOrm", backref="invoice")  # One-to-one relationship with sale
+    customer = relationship("CustomerOrm", backref="invoices")  # Many invoices to one customer
+
+    def __repr__(self):
+        return f"<InvoiceOrm(id={self.id}, sale_id={self.sale_id}, invoice_number='{self.invoice_number}')>"
+
+class CashDrawerEntryOrm(Base):
+    """ORM mapping for cash drawer entries."""
+    __tablename__ = "cash_drawer_entries"
+    __table_args__ = {'extend_existing': True}
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, nullable=False, index=True)
+    entry_type = Column(String, nullable=False, index=True)
+    amount = Column(DECIMAL(10, 2), nullable=False)
+    description = Column(Text, nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    drawer_id = Column(Integer, nullable=True, index=True)
+    
+    # Relationship to User
+    user = relationship("UserOrm", back_populates="cash_drawer_entries")
+
+    def __repr__(self):
+        return f"<CashDrawerEntryOrm(id={self.id}, type='{self.entry_type}', amount={self.amount})>"
+
+def ensure_all_models_mapped():
+    """
+    Ensure all ORM model classes inheriting from Base are recognized by SQLAlchemy's metadata.
+    This function primarily relies on Python's import mechanism to have already
+    triggered the declarative mapping process when the classes were defined.
+    """
+    # List all expected ORM model classes
+    model_classes = [
+        UserOrm, DepartmentOrm, ProductOrm, InventoryMovementOrm,
+        SaleOrm, SaleItemOrm, CustomerOrm, CreditPaymentOrm,
+        SupplierOrm, PurchaseOrderOrm, PurchaseOrderItemOrm,
+        InvoiceOrm, CashDrawerEntryOrm
+    ]
+
+    print(f"Verifying mapping for {len(model_classes)} models...")
+    all_mapped = True
+    missing_tables = []
+
+    for model in model_classes:
+        if not hasattr(model, '__table__') or model.__tablename__ not in Base.metadata.tables:
+            print(f"  - ERROR: Model {model.__name__} (table: {getattr(model, '__tablename__', 'N/A')}) not found in Base.metadata!")
+            all_mapped = False
+            if hasattr(model, '__tablename__'):
+                missing_tables.append(model.__tablename__)
+        # else:
+        #     print(f"  - OK: Model {model.__name__} mapped to table {model.__tablename__}")
+
+    if not all_mapped:
+        print(f"Current tables in Base.metadata: {list(Base.metadata.tables.keys())}")
+        raise RuntimeError(f"SQLAlchemy mapping failed. Missing tables in metadata: {missing_tables}")
+
+    print(f"Successfully verified {len(model_classes)} models mapped to {len(Base.metadata.tables)} tables in Base.metadata.")
+    # Optional: Print table names for confirmation
+    # for table_name in Base.metadata.tables:
+    #     print(f"  - Table: {table_name}")
+
+    return True
