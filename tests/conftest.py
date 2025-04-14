@@ -20,15 +20,12 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# Import the application's Base and metadata FIRST
-from infrastructure.persistence.sqlite.database import Base, SessionLocal
+# Import database components in correct order to handle circular imports
+from infrastructure.persistence.sqlite.database import Base, SessionLocal, engine as app_engine, create_all_tables
 
-# Import mappings AFTER Base is imported
+# Import mappings AFTER Base is defined
 import infrastructure.persistence.sqlite.models_mapping
-
-# Explicitly ensure all models are properly mapped
 from infrastructure.persistence.sqlite.models_mapping import ensure_all_models_mapped
-ensure_all_models_mapped()
 
 # Use a completely in-memory database for tests
 TEST_DB_URL = "sqlite:///:memory:"
@@ -36,66 +33,80 @@ TEST_DB_URL = "sqlite:///:memory:"
 @pytest.fixture(scope="session")
 def test_engine():
     """Create and return a SQLAlchemy engine for testing."""
+    print(f"\n=== Creating test engine with URL: {TEST_DB_URL} ===")
     engine = create_engine(
         TEST_DB_URL,
         echo=False,
-        # Required for SQLite in-memory DBs with multiple threads/connections
         connect_args={"check_same_thread": False}
     )
     
-    # Print engine info for debugging
-    print(f"Created test engine with URL: {TEST_DB_URL}")
-    
     yield engine
     
-    # Clean up at the end of the session using application metadata
-    print("Dropping all tables from Base.metadata")
-    Base.metadata.drop_all(engine)
-    engine.dispose() # Dispose of the engine connections
+    print("\n=== Disposing test engine ===")
+    engine.dispose()
 
 @pytest.fixture(scope="session")
 def test_db_session_factory(test_engine):
     """Create a session factory for testing."""
-    # Set up the session with the test engine
+    print("\n=== Creating test db session factory ===")
     factory = sessionmaker(bind=test_engine, autocommit=False, autoflush=False)
-    # Register the factory with the session_scope_provider if needed
-    # session_scope_provider.set_default_session_factory(factory)
     yield factory
 
-@pytest.fixture(scope="session")
-def create_tables(test_engine):
-    """Create all tables in the test database using application metadata."""
-    # Make sure all models are mapped before creating tables
-    ensure_all_models_mapped()
-    
-    # Verify existing tables before creation
-    inspector = inspect(test_engine)
-    existing_tables = inspector.get_table_names()
-    print(f"Existing tables before creation: {existing_tables}")
-    
-    # Create all tables from the application metadata
-    print("Creating all tables from Base.metadata")
-    Base.metadata.create_all(bind=test_engine)
-    
-    # Verify that tables were created
-    inspector = inspect(test_engine)
-    created_tables = inspector.get_table_names()
-    print(f"Created tables for testing: {created_tables}")
-    
-    yield
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_database(test_engine):
+    """Create all tables in the test database ONCE per session."""
+    print("\n=== Fixture 'setup_test_database' starting... ===")
+    try:
+        # Ensure mappings are loaded before creating tables
+        ensure_all_models_mapped()
+        print(f"Attempting to create tables on engine: {test_engine.url}")
+        # Use the helper function from database.py
+        create_all_tables(test_engine)
+        print("Test database tables created successfully.")
+    except Exception as e:
+        pytest.fail(f"Failed to create test database tables: {e}")
+
+    yield # Let tests run
+
+    print("\n=== Fixture 'setup_test_database' tearing down (dropping tables)... ===")
+    try:
+        Base.metadata.drop_all(test_engine)
+        print("Test database tables dropped.")
+    except Exception as e:
+        print(f"Warning: Error dropping test tables: {e}")
 
 @pytest.fixture(scope="function")
-def test_db_session(test_db_session_factory, create_tables):
+def test_db_session(test_db_session_factory, setup_test_database): # Depend on setup
     """
-    Create a session for each test. Session will be rolled back at end of test.
-    Depends on create_tables to ensure the schema exists.
+    Create a session for each test function.
+    Handles transaction rollback automatically.
     """
-    # Open a new session
     session = test_db_session_factory()
-    
+    print(f"\n--- Test session {id(session)} started ---")
     try:
         yield session
     finally:
-        # Rollback any changes and close the session
-        session.rollback() # Ensure clean state
+        session.rollback() # Rollback any uncommitted changes after test
         session.close()
+        print(f"--- Test session {id(session)} closed ---")
+
+@pytest.fixture(scope="function")
+def clean_db(test_db_session):
+    """Provides a session and ensures tables are empty before the test."""
+    session = test_db_session # Get session from the existing fixture
+    print("--- Cleaning DB tables for test ---")
+    # Delete data from tables in reverse order of dependencies
+    # Use Base.metadata.sorted_tables for correct order
+    for table in reversed(Base.metadata.sorted_tables):
+        try:
+            session.execute(table.delete())
+        except Exception as e:
+            print(f"Warning: Could not delete from table {table.name}: {e}")
+    try:
+        session.commit() # Commit the deletions
+    except Exception as e:
+        print(f"Warning: Could not commit cleanup transaction: {e}")
+        session.rollback()
+    print("--- DB tables cleaned ---")
+    yield session # Provide the clean session to the test
+    # Rollback/close handled by test_db_session fixture's teardown

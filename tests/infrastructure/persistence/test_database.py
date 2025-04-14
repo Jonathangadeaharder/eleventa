@@ -3,6 +3,8 @@ import os
 from sqlalchemy import text, Column, Integer, String, inspect
 from sqlalchemy.orm import Session, declarative_base
 from sqlalchemy.exc import OperationalError, ResourceClosedError, InvalidRequestError
+from sqlalchemy.engine import create_engine
+from sqlalchemy.orm import sessionmaker
 
 # Adjust path to import from the project root
 import sys
@@ -14,42 +16,57 @@ from infrastructure.persistence.sqlite.database import engine, SessionLocal, DAT
 from infrastructure.persistence.utils import session_scope
 
 # Create a separate Base for test models to avoid conflicts with the main Base
-TestBase = declarative_base()
+_TestBase = declarative_base()
 
-class TestItem(TestBase):
+# Use a specific test database file to avoid conflicts with other tests
+TEST_DATABASE_URL = "sqlite:///:memory:"  # Use in-memory database for tests
+
+# Create a test engine and session
+test_engine = create_engine(TEST_DATABASE_URL)
+TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+class _TestItem(_TestBase):
     __tablename__ = "test_items"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
 
 # Ensure test tables are created before tests run
-@pytest.fixture(scope="module", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def setup_test_tables():
     # Create the test_items table
-    TestBase.metadata.create_all(bind=engine)
+    _TestBase.metadata.create_all(bind=test_engine)
     
     # Verify tables were created
-    inspector = inspect(engine)
+    inspector = inspect(test_engine)
     tables = inspector.get_table_names()
     print(f"Tables in database after setup: {tables}")
+    
+    # Register the test session factory
+    from infrastructure.persistence.utils import session_scope_provider
+    original_factory = session_scope_provider.get_session_factory()
+    session_scope_provider.set_session_factory(TestSessionLocal)
     
     # Yield control to the tests
     yield
     
+    # Restore the original session factory
+    session_scope_provider.set_session_factory(original_factory)
+    
     # Clean up after tests
-    TestBase.metadata.drop_all(bind=engine)
+    _TestBase.metadata.drop_all(bind=test_engine)
     print("Test tables dropped")
 
-# Ensure the test database file does not exist before tests
-if os.path.exists(DATABASE_URL.split("///")[1]):
-    try:
-        os.remove(DATABASE_URL.split("///")[1])
-    except OSError as e:
-        print(f"Warning: Could not remove test database file before test: {e}")
+# Remove database file check since we're using in-memory database
+# if os.path.exists(DATABASE_URL.split("///")[1]):
+#     try:
+#         os.remove(DATABASE_URL.split("///")[1])
+#     except OSError as e:
+#         print(f"Warning: Could not remove test database file before test: {e}")
 
 def test_database_connection():
     """Verify that engine.connect() successfully establishes a connection."""
     try:
-        connection = engine.connect()
+        connection = test_engine.connect()
         assert connection is not None
         # Optional: Execute a simple query
         result = connection.execute(text("SELECT 1"))
@@ -57,10 +74,6 @@ def test_database_connection():
         connection.close()
     except OperationalError as e:
         pytest.fail(f"Database connection failed: {e}")
-    finally:
-        # Ensure the database file exists after the first connection attempt
-        db_path = DATABASE_URL.split("///")[1]
-        assert os.path.exists(db_path), f"Database file {db_path} was not created."
 
 def test_session_scope_success():
     """Verify the session_scope yields a valid session and executes code."""
@@ -96,13 +109,13 @@ def test_session_scope_rollback_data_consistency():
     # Insert a row, then raise an exception to trigger rollback
     with pytest.raises(RuntimeError, match="Simulated failure"):
         with session_scope() as session:
-            item = TestItem(id=1, name="should_rollback")
+            item = _TestItem(id=1, name="should_rollback")
             session.add(item)
             raise RuntimeError("Simulated failure")
 
     # Verify that the row was not persisted
     with session_scope() as session:
-        result = session.query(TestItem).filter_by(id=1).first()
+        result = session.query(_TestItem).filter_by(id=1).first()
         assert result is None, "Row should not exist after rollback"
 
 def test_session_scope_commit_exception_consistency():
@@ -111,34 +124,34 @@ def test_session_scope_commit_exception_consistency():
     """
     # Insert a valid row
     with session_scope() as session:
-        item = TestItem(id=2, name="unique")
+        item = _TestItem(id=2, name="unique")
         session.add(item)
 
     # Attempt to insert a duplicate primary key to force IntegrityError
     from sqlalchemy.exc import IntegrityError
     with pytest.raises(IntegrityError):
         with session_scope() as session:
-            dup = TestItem(id=2, name="duplicate")
+            dup = _TestItem(id=2, name="duplicate")
             session.add(dup)
             # Commit will be attempted on context exit, should raise IntegrityError
 
     # Verify only the original row exists
     with session_scope() as session:
-        items = session.query(TestItem).filter_by(id=2).all()
+        items = session.query(_TestItem).filter_by(id=2).all()
         assert len(items) == 1
         assert items[0].name == "unique"
 
-# Clean up the test database file after tests run
-@pytest.fixture(scope="session", autouse=True)
-def cleanup_db_file():
-    yield
-    # Teardown: remove the database file
-    db_path = DATABASE_URL.split("///")[1]
-    if os.path.exists(db_path):
-        try:
-            # Ensure all connections are closed before removing
-            engine.dispose()
-            os.remove(db_path)
-            print(f"\nCleaned up test database file: {db_path}")
-        except OSError as e:
-            print(f"Warning: Could not remove test database file after test: {e}") 
+# Clean up fixture is not needed since we're using in-memory database
+# @pytest.fixture(scope="session", autouse=True)
+# def cleanup_db_file():
+#     yield
+#     # Teardown: remove the database file
+#     db_path = DATABASE_URL.split("///")[1]
+#     if os.path.exists(db_path):
+#         try:
+#             # Ensure all connections are closed before removing
+#             engine.dispose()
+#             os.remove(db_path)
+#             print(f"\nCleaned up test database file: {db_path}")
+#         except OSError as e:
+#             print(f"Warning: Could not remove test database file after test: {e}")

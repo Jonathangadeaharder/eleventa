@@ -24,11 +24,12 @@ def mock_dept_repo(mocker):
 # Fixture for the service instance with mocked dependencies
 @pytest.fixture
 def product_service(mock_product_repo, mock_dept_repo):
-    # Create factory functions that return the mocks, ignoring the session parameter
-    def product_repo_factory(session):
+    # Create factory functions that return the mocks, IGNORING the session parameter
+    # because the mocks themselves don't need a real session.
+    def product_repo_factory(session=None): # Add default None for session
         return mock_product_repo
-        
-    def department_repo_factory(session):
+
+    def department_repo_factory(session=None): # Add default None for session
         return mock_dept_repo
         
     return ProductService(product_repo_factory, department_repo_factory)
@@ -313,12 +314,13 @@ def test_product_service_integration(tmp_path):
     from infrastructure.persistence.sqlite.repositories import SqliteDepartmentRepository, SqliteProductRepository
     from core.services.product_service import ProductService
     from core.models.product import Department, Product
+    from infrastructure.persistence.utils import session_scope # Import session_scope
 
-    # Factories for real repositories
-    def product_repo_factory(session):
-        return SqliteProductRepository(session)
-    def department_repo_factory(_session):
-        return SqliteDepartmentRepository()
+    # Factories for real repositories - THESE NEED THE SESSION
+    def product_repo_factory(session): # Accept session
+        return SqliteProductRepository(session) # Pass session
+    def department_repo_factory(session): # Accept session
+        return SqliteDepartmentRepository(session) # Pass session
 
     # Service instance
     service = ProductService(product_repo_factory, department_repo_factory)

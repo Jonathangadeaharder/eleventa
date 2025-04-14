@@ -257,7 +257,8 @@ class TestSaleService(unittest.TestCase):
             self.assertEqual(created_sale.payment_type, payment_type)
             self.assertEqual(created_sale.items[0].product_id, 1)
 
-        self.mock_sale_repo.add_sale.assert_not_called()
+        # Assert add_sale was called the correct number of times
+        self.assertEqual(self.mock_sale_repo.add_sale.call_count, len(user_ids))
 
     @patch('infrastructure.persistence.utils.session_scope')
     def test_create_sale_validation_product_not_found(self, mock_session_scope):

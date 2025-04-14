@@ -23,13 +23,6 @@ except ImportError:
 # Create a declarative base directly
 Base = declarative_base()
 
-# Import mappings AFTER Base is defined but BEFORE engine/session creation
-import infrastructure.persistence.sqlite.models_mapping
-
-# Force model mapping to happen before engine creation
-from infrastructure.persistence.sqlite.models_mapping import ensure_all_models_mapped
-ensure_all_models_mapped()
-
 # Use check_same_thread=False only for SQLite!
 # It allows the connection to be shared across threads, which is fine for this
 # simple setup but might require careful handling in complex multithreaded apps.
@@ -41,6 +34,26 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Register the SessionLocal with the session_scope_provider as the default factory
 session_scope_provider.set_default_session_factory(SessionLocal)
+
+# Import mappings AFTER Base is defined and AFTER engine/session creation
+# This helps avoid circular imports
+def import_mappings():
+    """Import model mappings at runtime to avoid circular imports."""
+    # Only import when needed to break circular dependencies
+    import infrastructure.persistence.sqlite.models_mapping
+    return infrastructure.persistence.sqlite.models_mapping
+
+def ensure_all_models_mapped():
+    """Wrapper to call ensure_all_models_mapped from models_mapping."""
+    mappings = import_mappings()
+    # Ensure the function exists in the imported module
+    if hasattr(mappings, 'ensure_all_models_mapped'):
+         return mappings.ensure_all_models_mapped()
+    else:
+         print("Warning: ensure_all_models_mapped function not found in models_mapping.")
+         # Attempt to load models implicitly by importing
+         import infrastructure.persistence.sqlite.models_mapping
+         return True # Assume success if import works
 
 def init_db():
     """Initializes the database by creating tables based on ORM models."""

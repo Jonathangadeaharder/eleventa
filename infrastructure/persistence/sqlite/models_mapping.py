@@ -1,11 +1,12 @@
 from sqlalchemy import (Column, Integer, String, Float, Boolean, DateTime, 
                         ForeignKey, UniqueConstraint, Table, Numeric, Text, Enum, DECIMAL, JSON)
-from sqlalchemy.orm import relationship, registry
+from sqlalchemy.orm import relationship, registry, mapper
 import datetime
 import uuid
 
-# Import the Base directly from database
-from infrastructure.persistence.sqlite.database import Base
+# Import the Base directly from database (modified to avoid circular import)
+import infrastructure.persistence.sqlite.database as db
+Base = db.Base
 
 # Import the SQLiteUUID type
 from .types import SQLiteUUID
@@ -280,7 +281,6 @@ class InvoiceOrm(Base):
     sale_id = Column(Integer, ForeignKey("sales.id"), nullable=False, unique=True, index=True)  # One invoice per sale
     customer_id = Column(SQLiteUUID, ForeignKey('customers.id'), nullable=True, index=True)
     invoice_number = Column(String, nullable=True, unique=True, index=True)  # Unique invoice number
-    date_time = Column(DateTime, nullable=False, default=datetime.datetime.now, index=True)  # Adding missing date_time field
     invoice_date = Column(DateTime, nullable=False, default=datetime.datetime.now, index=True)
     invoice_type = Column(String, nullable=False, default="B", index=True)  # A, B, C, etc.
     
@@ -288,7 +288,6 @@ class InvoiceOrm(Base):
     customer_details = Column(Text, nullable=True)  # JSON serialized
     
     # Financial data
-    total_amount = Column(Float, nullable=False, default=0.0)  # Adding missing total_amount field
     subtotal = Column(Float, nullable=False, default=0.0)
     iva_amount = Column(Float, nullable=False, default=0.0)
     total = Column(Float, nullable=False, default=0.0)
@@ -333,8 +332,8 @@ class CashDrawerEntryOrm(Base):
 def ensure_all_models_mapped():
     """
     Ensure all ORM model classes inheriting from Base are recognized by SQLAlchemy's metadata.
-    This function primarily relies on Python's import mechanism to have already
-    triggered the declarative mapping process when the classes were defined.
+    This function now primarily serves as a verification step. The actual mapping
+    happens when the classes are defined inheriting from Base.
     """
     # List all expected ORM model classes
     model_classes = [
@@ -348,22 +347,88 @@ def ensure_all_models_mapped():
     all_mapped = True
     missing_tables = []
 
+    # Check if Base.metadata exists and has tables
+    if not hasattr(Base, 'metadata') or not hasattr(Base.metadata, 'tables'):
+         print("ERROR: Base.metadata or Base.metadata.tables not found!")
+         return False
+
+    tables_in_metadata = list(Base.metadata.tables.keys())
+    print(f"Tables currently in Base.metadata: {tables_in_metadata}")
+
     for model in model_classes:
-        if not hasattr(model, '__table__') or model.__tablename__ not in Base.metadata.tables:
-            print(f"  - ERROR: Model {model.__name__} (table: {getattr(model, '__tablename__', 'N/A')}) not found in Base.metadata!")
+        # Check if the class itself exists and has a __tablename__
+        if not hasattr(model, '__tablename__'):
+            print(f"  - ERROR: Model {model.__name__} missing __tablename__ attribute.")
             all_mapped = False
-            if hasattr(model, '__tablename__'):
-                missing_tables.append(model.__tablename__)
-        # else:
-        #     print(f"  - OK: Model {model.__name__} mapped to table {model.__tablename__}")
+            continue # Skip further checks for this model
+
+        table_name = model.__tablename__
+
+        # Check if the table name is registered in the metadata
+        if table_name not in tables_in_metadata:
+            print(f"  - ERROR: Model {model.__name__} table '{table_name}' not found in Base.metadata.")
+            all_mapped = False
+            missing_tables.append(table_name)
+        else:
+            print(f"  - Model {model.__name__} correctly mapped to table '{table_name}'")
 
     if not all_mapped:
-        print(f"Current tables in Base.metadata: {list(Base.metadata.tables.keys())}")
-        raise RuntimeError(f"SQLAlchemy mapping failed. Missing tables in metadata: {missing_tables}")
+        # Attempting to access __table__ might trigger registration if it hasn't happened
+        # but the primary issue is usually the import order or Base inheritance.
+        print(f"Attempting to force registration by accessing __table__...")
+        try:
+            for model in model_classes:
+                if hasattr(model, '__tablename__'):
+                    _ = model.__table__ # Access __table__
+            # Re-check metadata
+            tables_in_metadata = list(Base.metadata.tables.keys())
+            print(f"Tables in Base.metadata after forced registration: {tables_in_metadata}")
+            remaining_missing = [m.__tablename__ for m in model_classes if hasattr(m, '__tablename__') and m.__tablename__ not in tables_in_metadata]
+            if remaining_missing:
+                 raise RuntimeError(f"SQLAlchemy mapping failed. Missing tables in metadata after attempt: {remaining_missing}")
+            else:
+                 print("All tables seem registered after explicit access.")
+                 all_mapped = True # Mark as mapped if successful
+        except Exception as e:
+             print(f"Error during forced registration: {e}")
+             # Keep all_mapped as False
 
-    print(f"Successfully verified {len(model_classes)} models mapped to {len(Base.metadata.tables)} tables in Base.metadata.")
-    # Optional: Print table names for confirmation
-    # for table_name in Base.metadata.tables:
-    #     print(f"  - Table: {table_name}")
+    if not all_mapped:
+         # Provide more specific advice if mapping failed
+         print("\nMapping Error Detected:")
+         print("Please ensure:")
+         print("  1. All ORM classes in models_mapping.py inherit from the 'Base' defined in database.py.")
+         print("  2. The 'infrastructure.persistence.sqlite.database' module correctly initializes 'Base'.")
+         print("  3. Imports are handled correctly to avoid circular dependencies.")
+         raise RuntimeError(f"SQLAlchemy mapping verification failed. Missing tables: {missing_tables}")
 
+
+    print(f"Successfully verified {len(model_classes)} models mapped to {len(tables_in_metadata)} tables in Base.metadata.")
     return True
+
+def map_models():
+    """
+    Explicitly initialize and map all models to ensure they are properly registered
+    with SQLAlchemy's registry. This is especially important for multithreaded contexts
+    where clear_mappers() may have been called.
+    """
+    global mapper_registry
+    
+    # List all ORM model classes
+    model_classes = [
+        UserOrm, DepartmentOrm, ProductOrm, InventoryMovementOrm,
+        SaleOrm, SaleItemOrm, CustomerOrm, CreditPaymentOrm,
+        SupplierOrm, PurchaseOrderOrm, PurchaseOrderItemOrm,
+        InvoiceOrm, CashDrawerEntryOrm
+    ]
+    
+    # Force model mapping by accessing __table__ for each class
+    for model in model_classes:
+        if hasattr(model, '__tablename__'):
+            # Accessing __table__ ensures the model is properly registered
+            _ = model.__table__
+    
+    # Return True to indicate successful mapping
+    return True
+
+# Ensure this function is called appropriately, e.g., in database.init_db()

@@ -3,13 +3,13 @@ from datetime import datetime, date, timedelta
 from typing import Optional, List, Dict, Any
 
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
-from core.interfaces.repository_interfaces import CashDrawerRepository
+from core.interfaces.repository_interfaces import ICashDrawerRepository
 
 
 class CashDrawerService:
     """Service for cash drawer operations."""
     
-    def __init__(self, cash_drawer_repository: CashDrawerRepository):
+    def __init__(self, cash_drawer_repository: ICashDrawerRepository):
         self.repository = cash_drawer_repository
         
     def open_drawer(self, initial_amount: Decimal, description: str, user_id: int, drawer_id: Optional[int] = None) -> CashDrawerEntry:

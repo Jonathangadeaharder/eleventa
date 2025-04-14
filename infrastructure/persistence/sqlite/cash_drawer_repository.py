@@ -6,12 +6,12 @@ from functools import wraps
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, and_, select
 
-from core.interfaces.repository_interfaces import CashDrawerRepository
+from core.interfaces.repository_interfaces import ICashDrawerRepository
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
 from infrastructure.persistence.sqlite.models_mapping import CashDrawerEntryOrm
 from infrastructure.persistence.sqlite.base_repository import BaseRepository
 
-class SQLiteCashDrawerRepository(CashDrawerRepository):
+class SQLiteCashDrawerRepository(ICashDrawerRepository):
     """SQLite implementation of the CashDrawerRepository."""
     
     def __init__(self, session_or_factory: Union[Session, Callable[[], Session]]):
@@ -188,3 +188,56 @@ class SQLiteCashDrawerRepository(CashDrawerRepository):
             drawer_id=entry_orm.drawer_id,
             id=entry_orm.id
         )
+
+    def get_entries_by_type(self, entry_type: str, start_date: Optional[datetime] = None, 
+                          end_date: Optional[datetime] = None) -> List[CashDrawerEntry]:
+        """Retrieves cash drawer entries of a specific type."""
+        @self._session_wrapper
+        def _get_entries_by_type(session, entry_type, start_date, end_date):
+            # Convert string to enum type if needed
+            if isinstance(entry_type, str):
+                try:
+                    entry_type = CashDrawerEntryType[entry_type].value
+                except KeyError:
+                    # Handle invalid entry type
+                    return []
+            
+            # Start building the query
+            query = session.query(CashDrawerEntryOrm).filter(
+                CashDrawerEntryOrm.entry_type == entry_type
+            )
+            
+            # Add date range filters if provided
+            if start_date:
+                query = query.filter(CashDrawerEntryOrm.timestamp >= start_date)
+            if end_date:
+                query = query.filter(CashDrawerEntryOrm.timestamp <= end_date)
+                
+            # Execute query and convert results
+            entries_orm = query.order_by(CashDrawerEntryOrm.timestamp).all()
+            return [self._map_to_domain_model(entry_orm) for entry_orm in entries_orm]
+        return _get_entries_by_type(entry_type, start_date, end_date)
+
+    def get_last_start_entry(self, drawer_id: Optional[int] = None) -> Optional[CashDrawerEntry]:
+        """Gets the most recent START entry for the drawer."""
+        @self._session_wrapper
+        def _get_last_start_entry(session, drawer_id):
+            # Get the most recent entry of type START
+            start_type = CashDrawerEntryType.START.value
+            
+            query = session.query(CashDrawerEntryOrm).filter(
+                CashDrawerEntryOrm.entry_type == start_type
+            )
+            
+            # Apply drawer_id filter if specified
+            if drawer_id is not None:
+                query = query.filter(CashDrawerEntryOrm.drawer_id == drawer_id)
+                
+            # Order by timestamp descending to get the most recent
+            start_entry = query.order_by(desc(CashDrawerEntryOrm.timestamp)).first()
+            
+            if not start_entry:
+                return None
+                
+            return self._map_to_domain_model(start_entry)
+        return _get_last_start_entry(drawer_id)

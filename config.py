@@ -66,5 +66,4 @@ class Config:
 # Try to load configuration on import
 Config.load()
 
-# Make database URL accessible directly
-# DATABASE_URL = Config.DATABASE_URL # <-- Remove this line 
+# Make database URL accessible directly 

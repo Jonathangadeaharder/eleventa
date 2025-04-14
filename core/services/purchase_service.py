@@ -52,7 +52,7 @@ class PurchaseService:
 
     # --- Supplier Methods ---
 
-    def add_supplier(self, supplier_data: Dict) -> Supplier:
+    def add_supplier(self, supplier_data: Dict, session=None) -> Supplier:
         """Adds a new supplier after validation."""
         if not supplier_data.get('name'):
             raise ValueError("Supplier name is required.")
@@ -61,7 +61,7 @@ class PurchaseService:
         # using the supplier_repo_factory
 
         supplier = Supplier(**supplier_data)
-        with session_scope() as session:
+        with session_scope(session) as session:
             # Instantiate repo with session from factory
             supplier_repo = self.supplier_repo_factory(session)
             # Check for duplicates using the session-specific repo
@@ -139,7 +139,7 @@ class PurchaseService:
 
     # --- Purchase Order Methods ---
 
-    def create_purchase_order(self, po_data: Dict) -> PurchaseOrder:
+    def create_purchase_order(self, po_data: Dict, session=None) -> PurchaseOrder:
         """Creates a new purchase order."""
         supplier_id = po_data.get('supplier_id')
         items_data = po_data.get('items', [])
@@ -149,7 +149,7 @@ class PurchaseService:
         if not items_data:
             raise ValueError("Purchase order must contain at least one item.")
 
-        with session_scope() as session:
+        with session_scope(session) as session:
             # Instantiate repos with session from factories
             supplier_repo = self.supplier_repo_factory(session)
             product_repo = self.product_repo_factory(session)
@@ -259,18 +259,15 @@ class PurchaseService:
                     session=session # Pass the session for transactionality
                 )
 
-                # 2. Update the quantity_received on the PurchaseOrderItemOrm
-                #    Need a way to update this specific field. Let's assume a repo method or direct update.
-                #    Direct update within the transaction:
-                item_orm = session.get(PurchaseOrderItemOrm, item_id)
-                if item_orm:
-                    item_orm.quantity_received += qty_received_batch
-                    updated_item_ids.add(item_id)
-                    total_received_this_batch += qty_received_batch
-                else:
-                     # Should not happen if get_by_id worked correctly
-                     raise RuntimeError(f"Failed to find PurchaseOrderItemOrm with ID {item_id} during update.")
-
+                # 2. Update the quantity_received using the repository method
+                success = purchase_order_repo.update_item_received_quantity(item_id, qty_received_batch)
+                if not success:
+                    # Should not happen if PO item was found earlier, but handle the case
+                    raise RuntimeError(f"Failed to update quantity_received for item {item_id}")
+                
+                # Update local tracking
+                updated_item_ids.add(item_id)
+                total_received_this_batch += qty_received_batch
 
             # 3. Update PO Status
             new_total_received = total_items_previously_received + total_received_this_batch

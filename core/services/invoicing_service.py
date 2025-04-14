@@ -37,7 +37,8 @@ class InvoicingService:
         if not sale:
             raise ValueError(f"Sale with ID {sale_id} not found")
             
-        # Check if sale already has an invoice
+        # Check if sale already has an invoice - this needs to be checked twice
+        # for race conditions in concurrent scenarios
         existing_invoice = self.invoice_repo.get_by_sale_id(sale_id)
         if existing_invoice:
             raise ValueError(f"Sale with ID {sale_id} already has an invoice")
@@ -96,8 +97,19 @@ class InvoicingService:
             iva_condition=customer.iva_condition or "Consumidor Final"
         )
         
-        # Save to repository
-        return self.invoice_repo.add(invoice)
+        try:
+            # Save to repository
+            return self.invoice_repo.add(invoice)
+        except ValueError as e:
+            # This could happen if another thread created an invoice 
+            # between our first check and the attempt to save
+            if "already have an invoice" in str(e) or "sale may already have an invoice" in str(e).lower():
+                # Do one more check to verify
+                double_check = self.invoice_repo.get_by_sale_id(sale_id)
+                if double_check:
+                    raise ValueError(f"Sale with ID {sale_id} already has an invoice")
+            # Re-raise any other errors
+            raise
     
     def _get_sale(self, sale_id: int) -> Optional[Sale]:
         """Get a sale by ID, handling any exceptions."""

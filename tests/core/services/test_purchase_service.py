@@ -49,7 +49,7 @@ def test_add_supplier(purchase_service, test_db_session):
         "email": "test@supplier.com",
         "cuit": "123456789"
     }
-    supplier = purchase_service.add_supplier(supplier_data)
+    supplier = purchase_service.add_supplier(supplier_data, test_db_session)
     assert supplier.id is not None
     assert supplier.name == "Test Supplier"
 
@@ -62,7 +62,7 @@ def test_create_purchase_order(purchase_service, test_db_session):
         "email": "po@supplier.com",
         "cuit": "987654321"
     }
-    supplier = purchase_service.add_supplier(supplier_data)
+    supplier = purchase_service.add_supplier(supplier_data, test_db_session)
 
     # Add a product directly using the product repo
     product_repo = purchase_service.product_repo_factory(test_db_session)
@@ -88,7 +88,7 @@ def test_create_purchase_order(purchase_service, test_db_session):
         ],
         "notes": "Test PO"
     }
-    purchase_order = purchase_service.create_purchase_order(po_data)
+    purchase_order = purchase_service.create_purchase_order(po_data, test_db_session)
     assert purchase_order.id is not None
     assert purchase_order.supplier_id == supplier.id
     assert len(purchase_order.items) == 1

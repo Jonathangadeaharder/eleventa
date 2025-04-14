@@ -12,12 +12,11 @@ if project_root not in sys.path:
 from core.models.customer import Customer
 from core.models.sale import Sale, SaleItem
 from core.models.invoice import Invoice
-from infrastructure.persistence.compat import (
-    SqliteCustomerRepositoryCompat as SqliteCustomerRepository,
-    SqliteSaleRepositoryCompat as SqliteSaleRepository,
-    SqliteInvoiceRepositoryCompat as SqliteInvoiceRepository
+from infrastructure.persistence.sqlite.repositories import (
+    SqliteCustomerRepository,
+    SqliteSaleRepository,
+    SqliteInvoiceRepository
 )
-from infrastructure.persistence.utils import session_scope
 from infrastructure.persistence.sqlite.database import engine, Base
 from sqlalchemy import delete
 from infrastructure.persistence.sqlite.models_mapping import (
@@ -25,41 +24,38 @@ from infrastructure.persistence.sqlite.models_mapping import (
 )
 
 @pytest.fixture(scope="function", autouse=True)
-def setup_database():
+def setup_database(test_db_session):
     """Set up the database for each test."""
     # Create tables
     Base.metadata.create_all(bind=engine)
     
     # Clear existing data to avoid unique constraint violations
-    with session_scope() as session:
-        # Delete in correct order to avoid foreign key constraints
-        session.execute(delete(InvoiceOrm))
-        session.execute(delete(SaleItemOrm))  
-        session.execute(delete(SaleOrm))
-        session.execute(delete(CustomerOrm))
-        session.commit()
+    test_db_session.execute(delete(InvoiceOrm))
+    test_db_session.execute(delete(SaleItemOrm))  
+    test_db_session.execute(delete(SaleOrm))
+    test_db_session.execute(delete(CustomerOrm))
+    test_db_session.flush()
     
     yield
     
     # Cleanup after each test
-    with session_scope() as session:
-        session.execute(delete(InvoiceOrm))
-        session.execute(delete(SaleItemOrm))
-        session.execute(delete(SaleOrm))
-        session.execute(delete(CustomerOrm))
-        session.commit()
+    test_db_session.execute(delete(InvoiceOrm))
+    test_db_session.execute(delete(SaleItemOrm))
+    test_db_session.execute(delete(SaleOrm))
+    test_db_session.execute(delete(CustomerOrm))
+    test_db_session.flush()
 
 @pytest.fixture
-def customer_repo():
-    return SqliteCustomerRepository()
+def customer_repo(test_db_session):
+    return SqliteCustomerRepository(test_db_session)
 
 @pytest.fixture
-def sale_repo():
-    return SqliteSaleRepository()
+def sale_repo(test_db_session):
+    return SqliteSaleRepository(test_db_session)
 
 @pytest.fixture
-def invoice_repo():
-    return SqliteInvoiceRepository()
+def invoice_repo(test_db_session):
+    return SqliteInvoiceRepository(test_db_session)
 
 def create_sample_customer(customer_repo):
     unique_suffix = str(int(time.time()))

@@ -15,7 +15,7 @@ from infrastructure.persistence.sqlite.models_mapping import (
 )
 
 # Test-specific repository implementation
-class TestSqliteSaleRepository(ISaleRepository):
+class _HelperSqliteSaleRepository(ISaleRepository):
     """SQLite implementation of Sale Repository for testing."""
     
     def __init__(self, session):
@@ -417,12 +417,11 @@ class TestSqliteSaleRepository(ISaleRepository):
         }
 
 # Test-specific department repository
-class TestSqliteDepartmentRepository:
+class _HelperSqliteDepartmentRepository:
     """SQLite Department Repository for testing."""
     
-    def __init__(self, session=None):
-        from tests.conftest import test_db_session_factory
-        self._session = session or test_db_session_factory()
+    def __init__(self, session):
+        self._session = session
     
     def add(self, department):
         """Add a new department."""
@@ -440,12 +439,11 @@ class TestSqliteDepartmentRepository:
             raise ValueError(f"Error adding department: {e}")
 
 # Test-specific product repository
-class TestSqliteProductRepository:
+class _HelperSqliteProductRepository:
     """SQLite Product Repository for testing."""
     
-    def __init__(self, session=None):
-        from tests.conftest import test_db_session_factory
-        self._session = session or test_db_session_factory()
+    def __init__(self, session):
+        self._session = session
     
     def add(self, product):
         """Add a new product."""
@@ -482,8 +480,8 @@ class TestSaleRepository:
         self.session = clean_db
         
         # Setup repositories
-        self.product_repo = TestSqliteProductRepository(self.session)
-        self.dept_repo = TestSqliteDepartmentRepository(self.session)
+        self.product_repo = _HelperSqliteProductRepository(self.session)
+        self.dept_repo = _HelperSqliteDepartmentRepository(self.session)
         
         # Create a dummy department and product for FK constraints
         dept = self.dept_repo.add(Department(name="Test Dept"))
@@ -497,7 +495,7 @@ class TestSaleRepository:
 
     def test_add_sale(self, test_db_session):
         """Verify sale header and all associated sale items are saved correctly."""
-        sale_repo = TestSqliteSaleRepository(test_db_session)
+        sale_repo = _HelperSqliteSaleRepository(test_db_session)
 
         # 1. Prepare Sale and SaleItem core models
         item1 = SaleItem(
@@ -560,7 +558,7 @@ class TestSaleRepository:
 
     def test_get_sales_summary_by_period(self, test_db_session):
         """Test get_sales_summary_by_period returns correct aggregation by day."""
-        sale_repo = TestSqliteSaleRepository(test_db_session)
+        sale_repo = _HelperSqliteSaleRepository(test_db_session)
 
         # Add two sales on different days
         from datetime import timedelta
@@ -604,7 +602,7 @@ class TestSaleRepository:
 
     def test_get_sales_by_payment_type(self, test_db_session):
         """Test get_sales_by_payment_type returns correct aggregation."""
-        sale_repo = TestSqliteSaleRepository(test_db_session)
+        sale_repo = _HelperSqliteSaleRepository(test_db_session)
         # Add sales with different payment types
         item = SaleItem(
             product_id=self.prod1.id,
@@ -627,7 +625,7 @@ class TestSaleRepository:
 
     def test_get_sales_by_department(self, test_db_session):
         """Test get_sales_by_department returns correct aggregation."""
-        sale_repo = TestSqliteSaleRepository(test_db_session)
+        sale_repo = _HelperSqliteSaleRepository(test_db_session)
         # Add a new department and product
         dept2 = self.dept_repo.add(Department(name="Dept2"))
         prod3 = self.product_repo.add(Product(code="P003", description="Prod 3", sell_price=30.0, department_id=dept2.id))
@@ -657,7 +655,7 @@ class TestSaleRepository:
 
     def test_get_sales_by_customer(self, test_db_session):
         """Test get_sales_by_customer returns correct aggregation."""
-        sale_repo = TestSqliteSaleRepository(test_db_session)
+        sale_repo = _HelperSqliteSaleRepository(test_db_session)
         # Add sales with different customer IDs
         item = SaleItem(
             product_id=self.prod1.id,
@@ -680,7 +678,7 @@ class TestSaleRepository:
 
     def test_get_top_selling_products(self, test_db_session):
         """Test get_top_selling_products returns correct aggregation."""
-        sale_repo = TestSqliteSaleRepository(test_db_session)
+        sale_repo = _HelperSqliteSaleRepository(test_db_session)
         # Add sales for different products
         item1 = SaleItem(
             product_id=self.prod1.id,
@@ -706,7 +704,7 @@ class TestSaleRepository:
 
     def test_calculate_profit_for_period(self, test_db_session):
         """Test calculate_profit_for_period returns correct profit calculation."""
-        sale_repo = TestSqliteSaleRepository(test_db_session)
+        sale_repo = _HelperSqliteSaleRepository(test_db_session)
         # Set up products with cost price 
         # Must update directly in the database to ensure the cost price is set
         product1 = test_db_session.query(ProductOrm).filter(ProductOrm.id == self.prod1.id).first()

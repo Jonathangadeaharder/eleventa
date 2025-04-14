@@ -405,27 +405,16 @@ class SqliteProductRepository(IProductRepository):
                 raise ValueError(f"Error adding product: {e}")
 
     def get_by_id(self, product_id: int) -> Optional[Product]:
-        # Eager load department
-        prod_orm = self.session.get(ProductOrm, product_id)
-        if prod_orm and prod_orm.department_id:
-            # Manually get the department if needed
-            dept_orm = self.session.get(DepartmentOrm, prod_orm.department_id)
-            # Manually set the relationship if needed
-            if dept_orm:
-                prod_orm.department = dept_orm
+        # Use joinedload to eager load department
+        stmt = select(ProductOrm).options(joinedload(ProductOrm.department)).where(ProductOrm.id == product_id)
+        prod_orm = self.session.execute(stmt).scalar_one_or_none()
         return _map_product_orm_to_model(prod_orm)
 
     def get_by_code(self, code: str) -> Optional[Product]:
         try:
-            # Proper way to query using select and column reference
-            stmt = select(ProductOrm).where(ProductOrm.code == code)
+            # Use joinedload to eager load department
+            stmt = select(ProductOrm).options(joinedload(ProductOrm.department)).where(ProductOrm.code == code)
             prod_orm = self.session.execute(stmt).scalar_one_or_none()
-            if prod_orm and prod_orm.department_id:
-                # Manually get the department if needed
-                dept_orm = self.session.get(DepartmentOrm, prod_orm.department_id)
-                # Manually set the relationship if needed
-                if dept_orm:
-                    prod_orm.department = dept_orm
             return _map_product_orm_to_model(prod_orm)
         except Exception as e:
             logging.error(f"Repository operation get_by_code failed: {e}")
@@ -433,20 +422,9 @@ class SqliteProductRepository(IProductRepository):
             return None
 
     def get_all(self) -> List[Product]:
-        stmt = select(ProductOrm).where(ProductOrm.is_active == True).order_by(ProductOrm.description)
+        # Use joinedload to eager load departments for all products
+        stmt = select(ProductOrm).options(joinedload(ProductOrm.department)).where(ProductOrm.is_active == True).order_by(ProductOrm.description)
         results = self.session.execute(stmt).scalars().all()
-        
-        # Manually load departments for each product
-        dept_ids = {prod.department_id for prod in results if prod.department_id is not None}
-        if dept_ids:
-            depts = {dept.id: dept for dept in 
-                    self.session.execute(select(DepartmentOrm).where(DepartmentOrm.id.in_(dept_ids))).scalars().all()}
-            
-            # Manually set relationships
-            for prod in results:
-                if prod.department_id and prod.department_id in depts:
-                    prod.department = depts[prod.department_id]
-                    
         return [_map_product_orm_to_model(prod_orm) for prod_orm in results]
 
     def update(self, product: Product) -> None:
@@ -564,9 +542,10 @@ class SqliteInventoryRepository(IInventoryRepository):
 # --- Sale Repository Implementation ---
 
 class SqliteSaleRepository(ISaleRepository):
-    """SQLite implementation of the ISaleRepository interface."""
-    
+    """SQLite implementation of the sale repository interface."""
+
     def __init__(self, session):
+        """Initialize with database session."""
         self.session = session
 
     def add_sale(self, sale: Sale) -> Sale:
@@ -607,29 +586,19 @@ class SqliteSaleRepository(ISaleRepository):
         return persisted_sale # Return the newly mapped object with IDs
 
     def get_by_id(self, sale_id: int) -> Optional[Sale]:
-        """
-        Alias for get_sale_by_id to maintain compatibility with service layer.
-        Gets a sale by its ID, including its items.
-        """
-        return self.get_sale_by_id(sale_id)
-        
-    def get_sale_by_id(self, sale_id: int) -> Optional[Sale]:
-        """Gets a sale by its ID, including its items."""
+        """Retrieves a sale by its unique ID."""
         try:
-            # Use joinedload to efficiently load items along with the sale
-            sale_orm = self.session.query(SaleOrm).options(
-                joinedload(SaleOrm.items) # Eager load items
-            ).filter(SaleOrm.id == sale_id).first()
-
-            if not sale_orm:
-                return None
-
-            # Map the ORM object (which now includes items) to the domain model
+            stmt = select(SaleOrm).filter(SaleOrm.id == sale_id).options(joinedload(SaleOrm.items))
+            sale_orm = self.session.execute(stmt).unique().scalar_one_or_none()
             return _map_sale_orm_to_model(sale_orm)
         except Exception as e:
-            # Log the error appropriately
-            print(f"Error retrieving sale by ID {sale_id}: {e}")
+            # Log error but don't crash - handle gracefully for concurrent access
+            print(f"Error retrieving sale: {e}")
             return None
+
+    def get_sale_by_id(self, sale_id: int) -> Optional[Sale]:
+        """Legacy method - use get_by_id instead."""
+        return self.get_by_id(sale_id)
 
     def get_sales_by_period(self, start_date, end_date) -> List[Sale]:
         """Gets all sales within a specific time period."""
@@ -1099,10 +1068,16 @@ class SqliteCustomerRepository(ICustomerRepository):
             # LOGGING: Print type and value of customer.id and customer.cuit before adding
             print(f"[DEBUG] Adding customer: customer.id={customer.id} (type={type(customer.id)}), customer.cuit={customer.cuit} (type={type(customer.cuit)})")
             # Check for duplicates
-            existing = self.session.query(CustomerOrm).filter(CustomerOrm.cuit == customer.cuit).first()
-            if existing and customer.cuit:  # Only check if CUIT is provided
-                raise ValueError(f"Customer with CUIT {customer.cuit} already exists")
-            
+            if customer.cuit:  # Only check if CUIT is provided
+                # Use text SQL for simpler and more reliable query
+                existing = self.session.execute(
+                    text("SELECT id FROM customers WHERE cuit = :cuit"),
+                    {"cuit": customer.cuit}
+                ).scalar_one_or_none()
+                
+                if existing:
+                    raise ValueError(f"Customer with CUIT {customer.cuit} already exists")
+
             # Create a new CustomerOrm object and set attributes individually
             customer_orm = CustomerOrm()
             # Assign customer.id directly (should be uuid.UUID)
@@ -1127,10 +1102,10 @@ class SqliteCustomerRepository(ICustomerRepository):
 
             # LOGGING: Print type and value of customer_orm.id after flush
             print(f"[DEBUG] CustomerOrm after flush: id={customer_orm.id} (type={type(customer_orm.id)})")
-            
+
             # Map the generated UUID back to the domain model
             customer.id = customer_orm.id
-            
+
             return customer
         except Exception as e:
             # Removed self.session.rollback() - let the caller's session_scope handle it
@@ -1447,15 +1422,46 @@ class SqlitePurchaseOrderRepository(IPurchaseOrderRepository):
         return [_map_purchase_order_orm_to_model(po) for po in pos_orm]
 
     def update_status(self, po_id: int, status: str) -> bool:
-        stmt = update(PurchaseOrderOrm).where(PurchaseOrderOrm.id == po_id).values(status=status)
-        result = self.session.execute(stmt)
+        """Update the status of a purchase order."""
+        stmt = update(PurchaseOrderOrm).where(PurchaseOrderOrm.id == po_id).values(
+            status=status,
+            updated_at=datetime.now()
+        )
+        self.session.execute(stmt)
         self.session.flush()
-        return result.rowcount == 1
+        return True
+
+    def update_item_received_quantity(self, item_id: int, quantity_received: float) -> bool:
+        """
+        Update the quantity_received for a purchase order item.
+        
+        Args:
+            item_id: The ID of the purchase order item
+            quantity_received: The additional quantity received (will be added to current value)
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        # Get current item to ensure it exists and to calculate new quantity
+        item_orm = self.session.get(PurchaseOrderItemOrm, item_id)
+        if not item_orm:
+            return False
+            
+        # Update with the new quantity_received (adding to existing value)
+        new_qty = item_orm.quantity_received + quantity_received
+        stmt = update(PurchaseOrderItemOrm).where(PurchaseOrderItemOrm.id == item_id).values(
+            quantity_received=new_qty
+        )
+        self.session.execute(stmt)
+        self.session.flush()
+        return True
 
     def get_items(self, po_id: int) -> List[PurchaseOrderItem]:
-        stmt = select(PurchaseOrderItemOrm).where(PurchaseOrderItemOrm.purchase_order_id == po_id)
-        items_orm = self.session.scalars(stmt).all()
-        return [_map_purchase_order_item_orm_to_model(item) for item in items_orm]
+        """Get the items for a purchase order."""
+        po_orm = self.get_po_orm_by_id(po_id)
+        if not po_orm:
+            return []
+        return [_map_purchase_order_item_orm_to_model(item) for item in po_orm.items]
 
 # --- User Repository Implementation ---
 
@@ -1570,39 +1576,54 @@ class SqliteInvoiceRepository(IInvoiceRepository):
         self.session = session
 
     def add(self, invoice: Invoice) -> Invoice:
-        """Adds a new invoice to the repository."""
-        # Convert customer_details to JSON string
-        customer_details_json = None
-        if invoice.customer_details:
-            customer_details_json = json.dumps(invoice.customer_details)
-        
-        invoice_orm = InvoiceOrm(
-            sale_id=invoice.sale_id,
-            customer_id=invoice.customer_id,
-            invoice_number=invoice.invoice_number,
-            date_time=datetime.now(),  # Fixed: use datetime.now() instead of datetime.datetime.now()
-            invoice_date=invoice.invoice_date,
-            invoice_type=invoice.invoice_type,
-            customer_details=customer_details_json,
-            total_amount=float(invoice.total),  # Set total_amount to match total
-            subtotal=float(invoice.subtotal),
-            iva_amount=float(invoice.iva_amount),
-            total=float(invoice.total),
-            iva_condition=invoice.iva_condition,
-            cae=invoice.cae,
-            cae_due_date=invoice.cae_due_date,
-            notes=invoice.notes,
-            is_active=invoice.is_active
-        )
-        
+        """Add a new invoice."""
         try:
+            # Check if there's already an invoice with the same sale_id
+            existing = self.session.query(InvoiceOrm).filter(
+                InvoiceOrm.sale_id == invoice.sale_id
+            ).first()
+            
+            if existing:
+                raise ValueError(f"Invoice for sale {invoice.sale_id} already exists")
+                
+            # Create the invoice ORM object
+            invoice_orm = InvoiceOrm(
+                id=invoice.id,
+                sale_id=invoice.sale_id,
+                customer_id=invoice.customer_id,
+                invoice_number=invoice.invoice_number,
+                invoice_date=invoice.invoice_date,
+                invoice_type=invoice.invoice_type,
+                customer_details=json.dumps(invoice.customer_details) if invoice.customer_details else None,
+                subtotal=float(invoice.subtotal),
+                iva_amount=float(invoice.iva_amount),
+                total=float(invoice.total),
+                iva_condition=invoice.iva_condition,
+                cae=invoice.cae,
+                cae_due_date=invoice.cae_due_date,
+                notes=invoice.notes,
+                is_active=invoice.is_active
+            )
+            
+            # Try to add the invoice with transaction handling
             self.session.add(invoice_orm)
             self.session.flush()
-            self.session.refresh(invoice_orm)
-            return _map_invoice_orm_to_model(invoice_orm)
-        except IntegrityError as e:
+            
+            # Return the mapped domain model with the newly assigned ID
+            invoice.id = invoice_orm.id
+            return invoice
+            
+        except Exception as e:
             self.session.rollback()
-            raise ValueError(f"Error adding invoice: Sale may already have an invoice or invalid data. {e}")
+            # Re-check for duplicate after rollback
+            existing = self.session.query(InvoiceOrm).filter(
+                InvoiceOrm.sale_id == invoice.sale_id
+            ).first()
+            
+            if existing:
+                raise ValueError(f"Invoice for sale {invoice.sale_id} already exists")
+            # Otherwise, propagate the original error
+            raise e
             
     def get_by_id(self, invoice_id: int) -> Optional[Invoice]:
         """Retrieves an invoice by its unique ID."""

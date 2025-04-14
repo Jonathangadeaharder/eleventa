@@ -1,6 +1,7 @@
 import os
 import sys
 import pyperclip
+import subprocess
 from tqdm import tqdm
 
 def collect_py_files(directory='.'):
@@ -46,10 +47,22 @@ def create_file_content_document(file_paths):
         str: The formatted document
     """
     document = []
+    # List of files to exclude (binary files and large data files)
+    exclude_files = ['eleventa_clone.db']
     
     print("Creating document from files...")
     for file_path in tqdm(file_paths, desc="Processing files"):
+        # Skip excluded files
+        filename = os.path.basename(file_path)
+        if filename in exclude_files:
+            document.append(f"# {file_path}")
+            document.append("")
+            document.append(f"[SKIPPED] Binary or large data file")
+            document.append("\n" + "-" * 80 + "\n")
+            continue
+            
         try:
+            # Try to read as text file
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
                 
@@ -70,6 +83,29 @@ def create_file_content_document(file_paths):
     
     return "\n".join(document)
 
+def run_tests():
+    """
+    Run the tests using run_tests.py and return the output
+    
+    Returns:
+        str: The output of the test run
+    """
+    print("Running tests (python run_tests.py)...")
+    try:
+        result = subprocess.run(
+            [sys.executable, 'run_tests.py'], 
+            capture_output=True, 
+            text=True,
+            timeout=300  # 5-minute timeout
+        )
+        return f"Exit code: {result.returncode}\n\nSTDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+    except FileNotFoundError:
+        return "Error: run_tests.py not found in the current directory."
+    except subprocess.TimeoutExpired:
+        return "Error: Test execution timed out after 5 minutes."
+    except Exception as e:
+        return f"Error running tests: {str(e)}"
+
 def main():
     # Get the directory from command line argument or use current directory
     directory = sys.argv[1] if len(sys.argv) > 1 else '.'
@@ -86,8 +122,15 @@ def main():
     
     print(f"Found {len(py_files)} Python files.")
     
-    # Create the document
+    # Create the document with file contents
     document = create_file_content_document(py_files)
+    
+    # Run tests and add results to the document
+    print("\n" + "=" * 40)
+    test_results = run_tests()
+    document += "\n\n" + "=" * 80 + "\n"
+    document += "# TEST RESULTS\n\n"
+    document += test_results
     
     print("Copying document to clipboard...")
     # Copy to clipboard

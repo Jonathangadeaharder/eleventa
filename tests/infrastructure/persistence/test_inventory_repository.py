@@ -1,5 +1,6 @@
 import unittest
 import os
+import pytest
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -7,12 +8,8 @@ from sqlalchemy.orm import sessionmaker
 # Assume these paths might need adjustment depending on execution context
 from infrastructure.persistence.sqlite.database import Base
 from infrastructure.persistence.sqlite.models_mapping import ProductOrm, InventoryMovementOrm, DepartmentOrm # Added InventoryMovementOrm
-from infrastructure.persistence.utils import session_scope, session_scope_provider
-# Import compatibility wrappers instead of direct repositories
-from infrastructure.persistence.compat import (
-    SqliteProductRepositoryCompat as SqliteProductRepository,
-    SqliteInventoryRepositoryCompat as SqliteInventoryRepository
-)
+# Import repository classes directly
+from infrastructure.persistence.sqlite.repositories import SqliteProductRepository, SqliteInventoryRepository
 from core.interfaces.repository_interfaces import IInventoryRepository
 from core.models.product import Product
 from core.models.inventory import InventoryMovement
@@ -26,6 +23,7 @@ class TestSqliteInventoryRepository(unittest.TestCase):
     SessionLocal = None
     test_product_id = None
     test_product_id_2 = None
+    session = None
 
     @classmethod
     def setUpClass(cls):
@@ -34,11 +32,11 @@ class TestSqliteInventoryRepository(unittest.TestCase):
         Base.metadata.create_all(bind=cls.engine)
         cls.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=cls.engine)
         
-        # Set up the session provider to use our test session
-        session_scope_provider.set_session_factory(cls.SessionLocal)
+        # Create a session for this test class
+        cls.session = cls.SessionLocal()
 
         # Add a product to associate movements with
-        product_repo = SqliteProductRepository()  # No session needed with compat adapter
+        product_repo = SqliteProductRepository(cls.session)  # Pass session
         test_product = Product(
             code="TESTPROD",
             description="Test Product",
@@ -57,6 +55,8 @@ class TestSqliteInventoryRepository(unittest.TestCase):
         added_product_2 = product_repo.add(test_product_2)
         cls.test_product_id = added_product.id
         cls.test_product_id_2 = added_product_2.id
+        cls.session.commit()  # Commit the changes
+        
         if not cls.test_product_id or not cls.test_product_id_2:
             raise Exception("Failed to set up test products.")
 
@@ -64,20 +64,19 @@ class TestSqliteInventoryRepository(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         """Clean up the database."""
+        if cls.session:
+            cls.session.close()
         Base.metadata.drop_all(bind=cls.engine)
-        # Reset session factory provider
-        session_scope_provider.set_session_factory(None)
 
     def setUp(self):
-        """Ensure each test starts with a clean state if needed (or use setUpClass)."""
-        # Optionally, clean movements before each test if needed
-        # with session_scope() as session:
-        #     session.query(InventoryMovementOrm).delete()
-        pass
+        """Ensure each test starts with a clean state if needed."""
+        # Clean movements before each test
+        self.__class__.session.query(InventoryMovementOrm).delete()
+        self.__class__.session.commit()
 
     def test_add_movement(self):
         """Verify an inventory movement is added correctly."""
-        repo: IInventoryRepository = SqliteInventoryRepository()  # No session needed with compat adapter
+        repo = SqliteInventoryRepository(self.__class__.session)  # Pass session
         movement_data = InventoryMovement(
             product_id=self.test_product_id,
             quantity=10.0,
@@ -87,6 +86,7 @@ class TestSqliteInventoryRepository(unittest.TestCase):
             related_id=101
         )
         added_movement = repo.add_movement(movement_data)
+        self.__class__.session.commit()  # Commit changes
 
         self.assertIsNotNone(added_movement.id)
         self.assertEqual(added_movement.product_id, self.test_product_id)
@@ -98,21 +98,19 @@ class TestSqliteInventoryRepository(unittest.TestCase):
         self.assertIsInstance(added_movement.timestamp, datetime)
 
         # Verify in DB
-        with session_scope() as session:
-            db_movement = session.query(InventoryMovementOrm).filter_by(id=added_movement.id).first()
-            self.assertIsNotNone(db_movement)
-            self.assertEqual(db_movement.quantity, 10.0)
-            self.assertEqual(db_movement.movement_type, "PURCHASE")
+        db_movement = self.__class__.session.query(InventoryMovementOrm).filter_by(id=added_movement.id).first()
+        self.assertIsNotNone(db_movement)
+        self.assertEqual(db_movement.quantity, 10.0)
+        self.assertEqual(db_movement.movement_type, "PURCHASE")
 
     def test_get_movements_for_product(self):
         """Verify retrieving movements only for a specific product."""
-        repo = SqliteInventoryRepository()  # No session needed with compat adapter
+        repo = SqliteInventoryRepository(self.__class__.session)  # Pass session
         now = datetime.now()
         
         # Clear existing movements first to ensure clean test environment
-        with session_scope() as session:
-            session.query(InventoryMovementOrm).delete()
-            session.commit()
+        self.__class__.session.query(InventoryMovementOrm).delete()
+        self.__class__.session.commit()
         
         # Create movements for testing
         m1 = InventoryMovement(product_id=self.test_product_id, quantity=5.0, movement_type="ADJUST", timestamp=now - timedelta(hours=2))
@@ -123,34 +121,40 @@ class TestSqliteInventoryRepository(unittest.TestCase):
         repo.add_movement(m1)
         repo.add_movement(m2)
         repo.add_movement(m3)
+        self.__class__.session.commit()  # Commit changes
 
         # Retrieve movements for the first product only
         retrieved_movements = repo.get_movements_for_product(self.test_product_id)
 
         # Verify we get exactly 2 movements for the first product
         self.assertEqual(len(retrieved_movements), 2)
+        
+        # Sort them by timestamp for predictable testing
+        retrieved_movements.sort(key=lambda x: x.timestamp)
+        
         self.assertEqual(retrieved_movements[0].movement_type, "ADJUST")
         self.assertEqual(retrieved_movements[0].quantity, 5.0)
         self.assertEqual(retrieved_movements[1].movement_type, "SALE")
         self.assertEqual(retrieved_movements[1].quantity, -2.0)
         self.assertEqual(retrieved_movements[1].related_id, 50)
-        # Check if sorted by timestamp (oldest first)
+        # Check if sorted by timestamp
         self.assertTrue(retrieved_movements[0].timestamp < retrieved_movements[1].timestamp)
 
 
     def test_get_all_movements(self):
         """Verify retrieving all movements."""
-        repo = SqliteInventoryRepository()  # No session needed with compat adapter
+        repo = SqliteInventoryRepository(self.__class__.session)  # Pass session
         now = datetime.now()
         # Clear existing movements first for a clean test
-        with session_scope() as session:
-             session.query(InventoryMovementOrm).delete()
+        self.__class__.session.query(InventoryMovementOrm).delete()
+        self.__class__.session.commit()
 
         m1 = InventoryMovement(product_id=self.test_product_id, quantity=1.0, movement_type="INIT", timestamp=now - timedelta(days=1))
         m2 = InventoryMovement(product_id=self.test_product_id_2, quantity=5.0, movement_type="PURCHASE", timestamp=now)
 
         repo.add_movement(m1)
         repo.add_movement(m2)
+        self.__class__.session.commit()  # Commit changes
 
         all_movements = repo.get_all_movements()
 

@@ -445,62 +445,29 @@ class IInvoiceRepository(ABC):
 # --- Cash Drawer Repository Interface ---
 class ICashDrawerRepository(ABC):
     """Repository interface for cash drawer operations."""
-    
+
     @abstractmethod
     def add_entry(self, entry: CashDrawerEntry) -> CashDrawerEntry:
-        """Add a new cash drawer entry."""
+        """Adds a new cash drawer entry."""
         pass
-        
+
     @abstractmethod
     def get_entries_by_date_range(self, start_date: datetime, end_date: datetime) -> List[CashDrawerEntry]:
-        """Get all cash drawer entries within a date range."""
+        """Retrieves cash drawer entries within a date range."""
         pass
-        
+
     @abstractmethod
     def get_entries_by_type(self, entry_type: str, start_date: Optional[datetime] = None, 
                             end_date: Optional[datetime] = None) -> List[CashDrawerEntry]:
-        """Get cash drawer entries by type within an optional date range."""
+        """Retrieves cash drawer entries of a specific type."""
         pass
         
     @abstractmethod
     def get_last_start_entry(self, drawer_id: Optional[int] = None) -> Optional[CashDrawerEntry]:
-        """Get the most recent START entry for a drawer."""
+        """Gets the most recent START entry for the drawer."""
         pass
         
     @abstractmethod
     def get_entry_by_id(self, entry_id: int) -> Optional[CashDrawerEntry]:
-        """Get a cash drawer entry by ID."""
-        pass
-
-class CashDrawerRepository(ABC):
-    """Repository interface for cash drawer operations."""
-    
-    @abstractmethod
-    def add_entry(self, entry: CashDrawerEntry) -> CashDrawerEntry:
-        """Add a new cash drawer entry."""
-        pass
-        
-    @abstractmethod
-    def get_entry_by_id(self, entry_id: int) -> Optional[CashDrawerEntry]:
-        """Get a cash drawer entry by ID."""
-        pass
-        
-    @abstractmethod
-    def get_entries_by_date_range(self, start_date: date, end_date: date, drawer_id: Optional[int] = None) -> List[CashDrawerEntry]:
-        """Get cash drawer entries within a date range."""
-        pass
-        
-    @abstractmethod
-    def get_entries_by_drawer_id(self, drawer_id: int) -> List[CashDrawerEntry]:
-        """Get all entries for a specific drawer."""
-        pass
-        
-    @abstractmethod
-    def get_current_balance(self, drawer_id: Optional[int] = None) -> Decimal:
-        """Get the current balance of the drawer."""
-        pass
-        
-    @abstractmethod
-    def is_drawer_open(self, drawer_id: Optional[int] = None) -> bool:
-        """Check if the drawer is currently open."""
+        """Gets a cash drawer entry by its ID."""
         pass

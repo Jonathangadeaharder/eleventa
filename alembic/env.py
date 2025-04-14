@@ -14,11 +14,16 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # Import the Base from your models definition
+from infrastructure.persistence.sqlite.database import Base # Use the correct Base
+
+# --- Crucial Change: Import the mapping file itself ---
+# This ensures all ORM classes are defined before Base.metadata is used.
+import infrastructure.persistence.sqlite.models_mapping
+
+# Import the Base from your models definition
 # We need to define where Base lives. Let's assume it will eventually be tied
 # to a central model definition, perhaps infrastructure.persistence.sqlite.database for now.
 # If models are scattered, import them all here so Base registers them.
-from infrastructure.persistence.sqlite.database import Base # Reinstate Base import
-# Ensure all ORM models are imported so Base registers them
 # No longer needed if models_mapping imports everything
 # import infrastructure.persistence.sqlite.models_mapping
 from config import DATABASE_URL # Import the database URL from config
@@ -36,7 +41,7 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-target_metadata = Base.metadata # Use the imported Base
+target_metadata = Base.metadata # Now Base.metadata should be fully populated
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:-
@@ -56,7 +61,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 # Import Base which has metadata populated by models_mapping
 # from infrastructure.persistence.sqlite.database import Base # Already imported above
 # Import the mapping file itself to ensure all ORM classes are defined before Base.metadata is used.
-import infrastructure.persistence.sqlite.models_mapping
+# import infrastructure.persistence.sqlite.models_mapping # Already imported above
 # Make sure all your ORM model files are imported somewhere before Base.metadata is used
 # Often this happens implicitly if models_mapping imports them all,
 # or if they are imported in the __init__.py of the models directory.

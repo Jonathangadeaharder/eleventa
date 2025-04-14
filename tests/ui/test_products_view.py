@@ -1,5 +1,5 @@
 import pytest
-from PyQt5 import QtWidgets
+from PySide6 import QtWidgets, QtCore
 from ui.views.products_view import ProductsView
 from ui.dialogs.product_dialog import ProductDialog
 from ui.dialogs.department_dialog import DepartmentDialog
@@ -39,7 +39,7 @@ def test_add_product_dialog_opens(products_view, qtbot, monkeypatch):
         return 0
 
     monkeypatch.setattr(ProductDialog, "exec", mock_exec)
-    qtbot.mouseClick(products_view.add_button, QtCore.Qt.LeftButton)
+    qtbot.mouseClick(products_view.new_button, QtCore.Qt.LeftButton)
     assert dialog_opened.get('opened', False)
 
 def test_manage_departments_dialog_opens(products_view, qtbot, monkeypatch):
@@ -50,19 +50,23 @@ def test_manage_departments_dialog_opens(products_view, qtbot, monkeypatch):
         return 0
 
     monkeypatch.setattr(DepartmentDialog, "exec", mock_exec)
-    qtbot.mouseClick(products_view.manage_departments_button, QtCore.Qt.LeftButton)
+    qtbot.mouseClick(products_view.departments_button, QtCore.Qt.LeftButton)
     assert dialog_opened.get('opened', False)
 
 def test_model_update_reflected(products_view, product_service, qtbot):
     # Simulate adding a product and refreshing the view
     class DummyProduct:
-        def __init__(self, id, name, price, stock):
+        def __init__(self, id, code, description, sale_price, quantity_in_stock, department_id=None, department_name=None):
             self.id = id
-            self.name = name
-            self.price = price
-            self.stock = stock
-    new_product = DummyProduct(1, "Test Product", 9.99, 10)
+            self.code = code
+            self.description = description
+            self.sale_price = sale_price
+            self.quantity_in_stock = quantity_in_stock
+            self.department_id = department_id
+            self.department_name = department_name or ""
+    
+    new_product = DummyProduct(1, "P001", "Test Product", 9.99, 10, 1, "Test Department")
     product_service.add_product(new_product)
     products_view.refresh_products()
     # Check that the table model now has at least one row
-    assert products_view.table_model.rowCount() > 0
+    assert products_view._model.rowCount() > 0

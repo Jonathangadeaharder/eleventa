@@ -1,9 +1,7 @@
 import threading
 import pytest
-import os
-import tempfile
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker, clear_mappers
 
 from infrastructure.persistence.sqlite.database import Base
 from infrastructure.persistence.sqlite.repositories import (
@@ -15,44 +13,34 @@ from core.services.invoicing_service import InvoicingService
 from core.models.customer import Customer
 from core.models.sale import Sale, SaleItem
 from core.models.product import Product
-from infrastructure.persistence.sqlite.models_mapping import ProductOrm
+from infrastructure.persistence.sqlite.models_mapping import ProductOrm, map_models
 from decimal import Decimal
+import time
+
+# Using file-based SQLite DB for test to ensure all threads can access it
+TEST_DB_URL = "sqlite:///test_db.sqlite"
+global_engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+Base.metadata.create_all(global_engine)
+SessionFactory = sessionmaker(bind=global_engine)
 
 @pytest.fixture(scope="function")
 def db_session():
-    # Create a temporary file for the test database
-    temp_db_file = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
-    temp_db_file.close()
+    # Ensure models are mapped
+    map_models()
     
-    # Create file-based SQLite DB for integration test with check_same_thread=False
-    db_url = f"sqlite:///{temp_db_file.name}?check_same_thread=False"
-    engine = create_engine(db_url)
+    # Clear any existing data from previous tests
+    with global_engine.connect() as conn:
+        for table in reversed(Base.metadata.sorted_tables):
+            conn.execute(text(f"DELETE FROM {table.name}"))
+        conn.commit()
     
-    # Create all tables
-    Base.metadata.create_all(engine)
-    
-    # Create a session
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    
+    # Create session
+    session = SessionFactory()
     yield session
     
     # Cleanup
     session.close()
-    engine.dispose()  # Properly close all connections
     
-    # Give the system a moment to release file handles
-    import time
-    time.sleep(0.1)
-    
-    # Delete the temporary file
-    try:
-        if os.path.exists(temp_db_file.name):
-            os.unlink(temp_db_file.name)
-    except (PermissionError, OSError) as e:
-        print(f"Warning: Could not delete temporary database file: {e}")
-        # This is not critical for test success
-
 @pytest.fixture
 def repositories(db_session):
     return {
@@ -109,6 +97,8 @@ def create_customer_and_sale(db_session, sale_repo, customer_repo):
         payment_type="cash",
     )
     sale = sale_repo.add_sale(sale)
+    # Commit to ensure data is visible to all threads
+    db_session.commit()
     return customer, sale
 
 def test_create_invoice_integration(db_session, repositories, invoicing_service):
@@ -123,55 +113,74 @@ def test_create_invoice_integration(db_session, repositories, invoicing_service)
     assert persisted is not None
 
 def test_concurrent_invoice_creation(db_session, repositories):
-    # Create a customer and sale
     customer, sale = create_customer_and_sale(
         db_session, repositories["sale_repo"], repositories["customer_repo"]
     )
+    print(f"Created test sale with ID: {sale.id}")
     
-    # Commit the session to ensure data is visible to all threads
-    db_session.commit()
+    # Ensure we can fetch the sale from the main thread before creating worker threads
+    fetched_sale = repositories["sale_repo"].get_by_id(sale.id)
+    assert fetched_sale is not None, "Failed to retrieve the sale in the main thread"
     
-    # The shared connection will work across threads with check_same_thread=False
     results = []
     errors = []
-    
+
     def create_invoice():
-        # Use a new session per thread but with same engine
-        thread_session = sessionmaker(bind=db_session.get_bind())()
+        # Each thread needs its own session
+        thread_session = SessionFactory()
         try:
-            # Create repositories with the thread-specific session
             thread_repos = {
                 "invoice_repo": SqliteInvoiceRepository(thread_session),
                 "sale_repo": SqliteSaleRepository(thread_session),
-                "customer_repo": SqliteCustomerRepository(thread_session)
+                "customer_repo": SqliteCustomerRepository(thread_session),
             }
-            
-            # Create a service with thread-safe repositories
             thread_service = InvoicingService(
                 thread_repos["invoice_repo"],
                 thread_repos["sale_repo"],
-                thread_repos["customer_repo"]
+                thread_repos["customer_repo"],
             )
             
-            # Try to create an invoice
-            inv = thread_service.create_invoice_from_sale(sale.id)
-            if inv:
-                thread_session.commit()  # Important: commit the successful creation
-                results.append(inv)
+            # Try to find the sale in this thread
+            thread_sale = thread_repos["sale_repo"].get_by_id(sale.id)
+            if thread_sale is None:
+                errors.append(f"Thread could not find sale with ID {sale.id}")
+                return
+                
+            try:
+                inv = thread_service.create_invoice_from_sale(sale.id)
+                if inv:
+                    results.append(inv)
+                    thread_session.commit()
+            except Exception as e:
+                errors.append(str(e))
+                thread_session.rollback()
         except Exception as e:
-            thread_session.rollback()  # Important: rollback on error
-            errors.append(str(e))
+            errors.append(f"Thread error: {str(e)}")
         finally:
             thread_session.close()
 
-    # Create and start threads
-    threads = [threading.Thread(target=create_invoice) for _ in range(5)]
-    for t in threads:
+    threads = []
+    for _ in range(5):
+        t = threading.Thread(target=create_invoice)
+        threads.append(t)
         t.start()
+    
     for t in threads:
         t.join()
 
+    # Print all errors for debugging
+    for err in errors:
+        print(f"Thread error: {err}")
+        
     # Only one invoice should be created, others should raise duplicate invoice error
     assert len([r for r in results if r is not None]) == 1
-    assert len(errors) > 0, "Expected some errors when multiple threads try to create the same invoice"
-    assert any("already exists" in e.lower() or "duplicate" in e.lower() for e in errors)
+    assert len(errors) >= 4, "Expected at least 4 errors from concurrent threads"
+    assert any("already exists" in e or "duplicate" in e.lower() for e in errors), "Expected 'already exists' errors"
+    
+    # Clean up the database after the test
+    db_session.execute(text("DELETE FROM invoices"))
+    db_session.execute(text("DELETE FROM sale_items"))
+    db_session.execute(text("DELETE FROM sales"))
+    db_session.execute(text("DELETE FROM customers"))
+    db_session.execute(text("DELETE FROM products"))
+    db_session.commit()
