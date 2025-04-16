@@ -2,7 +2,8 @@ import sys
 from PySide6.QtWidgets import QApplication, QMessageBox, QDialog, QVBoxLayout, QPushButton
 from PySide6.QtCore import Qt
 
-class TestDialog(QDialog):
+# Convert TestDialog from a test class to a regular class to avoid pytest collection warning
+class DialogForTesting(QDialog):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Test Dialog")
@@ -45,7 +46,7 @@ def main():
     
     # First test without patching
     print("\n--- Testing without patches ---")
-    dialog = TestDialog()
+    dialog = DialogForTesting()
     if len(sys.argv) > 1 and sys.argv[1] == '--no-patch':
         # This will block until user interaction
         print("Running without patches (will block)")
@@ -59,7 +60,7 @@ def main():
         
         # Now test with patching
         try:
-            dialog = TestDialog()
+            dialog = DialogForTesting()
             print("Executing dialog (should not block)")
             result = dialog.exec()
             print(f"Dialog result: {result}")

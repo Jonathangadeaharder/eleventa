@@ -84,24 +84,67 @@ def test_form_population_edit_mode(dialog_edit_mode):
     assert dialog_edit_mode.inventory_checkbox.isChecked()
 
 def test_validation_empty_code(qtbot, dialog_add_mode):
-    dialog_add_mode.code_input.setText("")
-    dialog_add_mode.description_input.setText("Some Description")
-    dialog_add_mode.sale_price_input.setValue(5.0)
-    with qtbot.waitSignal(dialog_add_mode.validation_failed, timeout=1000):
+    # Connect to the validation_failed signal manually
+    validation_triggered = False
+    def on_validation_failed():
+        nonlocal validation_triggered
+        validation_triggered = True
+    
+    # Connect to the signal
+    dialog_add_mode.validation_failed.connect(on_validation_failed)
+    
+    try:
+        # Set up an invalid product (empty code)
+        dialog_add_mode.code_input.setText("")
+        dialog_add_mode.description_input.setText("Some Description")
+        dialog_add_mode.sale_price_input.setValue(5.0)
+        
+        # Attempt to accept the dialog (should trigger validation)
         dialog_add_mode.accept()
+        
+        # Process events to ensure signal handling happens
+        qtbot.wait(100)
+        
+        # Verify validation failed was triggered
+        assert validation_triggered, "Validation failed signal should have been triggered"
+    finally:
+        # Disconnect our signal handler
+        dialog_add_mode.validation_failed.disconnect(on_validation_failed)
 
 def test_validation_negative_price(qtbot, dialog_add_mode):
-    dialog_add_mode.code_input.setText("P002")
-    dialog_add_mode.description_input.setText("Some Description")
-    dialog_add_mode.sale_price_input.setRange(-999999.99, 999999.99)
-    dialog_add_mode.sale_price_input.setValue(-1.0)
-    with qtbot.waitSignal(dialog_add_mode.validation_failed, timeout=1000):
+    # Connect to the validation_failed signal manually
+    validation_triggered = False
+    def on_validation_failed():
+        nonlocal validation_triggered
+        validation_triggered = True
+    
+    # Connect to the signal
+    dialog_add_mode.validation_failed.connect(on_validation_failed)
+    
+    try:
+        # Set up an invalid product (negative price)
+        dialog_add_mode.code_input.setText("P002")
+        dialog_add_mode.description_input.setText("Some Description")
+        dialog_add_mode.sale_price_input.setRange(-999999.99, 999999.99)
+        dialog_add_mode.sale_price_input.setValue(-1.0)
+        
+        # Attempt to accept the dialog (should trigger validation)
         dialog_add_mode.accept()
+        
+        # Process events to ensure signal handling happens
+        qtbot.wait(100)
+        
+        # Verify validation failed was triggered
+        assert validation_triggered, "Validation failed signal should have been triggered"
+    finally:
+        # Disconnect our signal handler
+        dialog_add_mode.validation_failed.disconnect(on_validation_failed)
 
 def test_state_change_control_stock(qtbot, dialog_add_mode):
     # Ensure the dialog is visible to start with
     dialog_add_mode.show()
-    qtbot.waitForWindowShown(dialog_add_mode)
+    with qtbot.waitExposed(dialog_add_mode):
+        pass
     
     # First test: uncheck inventory control
     dialog_add_mode.inventory_checkbox.setChecked(False)

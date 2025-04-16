@@ -31,13 +31,19 @@ class Product:
     code: str
     description: str
     cost_price: float
-    sale_price: float
+    sell_price: float
     department_id: Optional[int] = None
-    department_name: Optional[str] = "-" # Usually joined/fetched separately
+    department: Optional['Department'] = None
     quantity_in_stock: float = 0.0
     min_stock: float = 0.0
     uses_inventory: bool = True
     unit: str = "U"
+
+# Add mock Department class for completeness
+@dataclass
+class Department:
+    id: Optional[int] = None
+    name: str = ""
 
 class ProductTableModel(QAbstractTableModel):
     """Model for displaying products in a QTableView."""
@@ -71,13 +77,19 @@ class ProductTableModel(QAbstractTableModel):
             elif column == 1:
                 return product.description
             elif column == 2:
-                return f"{product.sale_price:.2f}" if product.sale_price is not None else "N/A"
+                return f"{product.sell_price:.2f}" if product.sell_price is not None else "N/A"
             elif column == 3:
                 return f"{product.quantity_in_stock:.2f}" if product.uses_inventory else "N/A"
             elif column == 4:
                 return f"{product.min_stock:.2f}" if product.uses_inventory else "N/A"
             elif column == 5:
-                return product.department_name if product.department_name else "-"
+                # Check for department object first
+                if hasattr(product, 'department') and product.department is not None:
+                    return product.department.name
+                # Fall back to department_id if department_name doesn't exist
+                if hasattr(product, 'department_id') and product.department_id is not None:
+                    return f"Depto #{product.department_id}"
+                return "-"
             elif column == 6:
                 return f"{product.cost_price:.2f}" if product.cost_price is not None else "N/A"
 
