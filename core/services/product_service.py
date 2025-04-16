@@ -126,6 +126,15 @@ class ProductService:
                  
              return products
 
+    def get_product_by_code(self, code: str) -> Optional[Product]:
+        """Gets a product by its code."""
+        logger.debug(f"Getting product with code: {code}")
+        with session_scope() as session:
+            # Instantiate the repository with the session
+            prod_repo = self.product_repo_factory(session)
+            # Then call the method on the instantiated repository
+            return prod_repo.get_by_code(code)
+
     def _validate_department(self, session: Session, department: Department, is_update: bool = False):
         """Common validation for department add/update."""
         if not department.name:
@@ -180,5 +189,23 @@ class ProductService:
 
             logger.info(f"Deleting department with ID: {department_id}")
             dept_repo.delete(department_id)
+
+    def update_department(self, department_data: Department) -> Department:
+        """Updates an existing department after validation."""
+        if department_data.id is None:
+            raise ValueError("Department ID must be provided for update.")
+            
+        with session_scope() as session:
+            dept_repo = self.department_repo_factory(session)
+            existing_department = dept_repo.get_by_id(department_data.id)
+            if not existing_department:
+                raise ValueError(f"Departamento con ID {department_data.id} no encontrado")
+                
+            # Validate the incoming data, considering it's an update
+            self._validate_department(session, department_data, is_update=True)
+            
+            logger.info(f"Updating department with ID: {department_data.id}")
+            updated_department = dept_repo.update(department_data)
+            return updated_department
 
     # Additional helper methods if needed 

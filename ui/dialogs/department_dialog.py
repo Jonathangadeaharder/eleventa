@@ -6,18 +6,17 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Slot
 from typing import Optional
 
+# Import Department model
+from core.models.product import Department
+
 # Assuming ProductService provides department methods
 # from core.services.product_service import ProductService
 # For testing, let's create a mock service and department structure
 from dataclasses import dataclass
 
-@dataclass
-class Department:
-    id: int
-    name: str
-
 class MockProductService_Departments:
     def __init__(self):
+        # Use the imported Department class from core.models.product
         self._departments = [
             Department(id=1, name="Depto A"),
             Department(id=2, name="Bebidas"),
@@ -29,32 +28,36 @@ class MockProductService_Departments:
         print("[MockService] Getting all departments")
         return sorted(self._departments, key=lambda d: d.name)
 
-    def add_department(self, name: str) -> Department:
-        print(f"[MockService] Adding department: {name}")
-        if not name:
+    def add_department(self, department_data: Department) -> Department:
+        print(f"[MockService] Adding department: {department_data.name}")
+        if not department_data.name:
             raise ValueError("El nombre del departamento no puede estar vacío.")
         # Check for duplicates (case-insensitive)
-        if any(d.name.lower() == name.lower() for d in self._departments):
-            raise ValueError(f"El departamento '{name}' ya existe.")
-        new_dept = Department(id=self._next_id, name=name)
-        self._departments.append(new_dept)
-        self._next_id += 1
-        return new_dept
+        if any(d.name.lower() == department_data.name.lower() for d in self._departments):
+            raise ValueError(f"El departamento '{department_data.name}' ya existe.")
+        # Assign an ID if not provided
+        if department_data.id is None:
+            department_data.id = self._next_id
+            self._next_id += 1
+        self._departments.append(department_data)
+        return department_data
 
-    def update_department(self, department_id: int, name: str) -> Department:
-        print(f"[MockService] Updating department ID {department_id} to: {name}")
-        if not name:
+    def update_department(self, department_data: Department) -> Department:
+        print(f"[MockService] Updating department ID {department_data.id} to: {department_data.name}")
+        if not department_data.name:
             raise ValueError("El nombre del departamento no puede estar vacío.")
+        if department_data.id is None:
+            raise ValueError("Department ID must be provided for update.")
+            
         # Check for duplicates excluding self (case-insensitive)
-        if any(d.name.lower() == name.lower() and d.id != department_id for d in self._departments):
-            raise ValueError(f"Ya existe otro departamento con el nombre '{name}'.")
+        if any(d.name.lower() == department_data.name.lower() and d.id != department_data.id for d in self._departments):
+            raise ValueError(f"Ya existe otro departamento con el nombre '{department_data.name}'.")
 
-        for dept in self._departments:
-            if dept.id == department_id:
-                dept.name = name
-                return dept
+        for i, dept in enumerate(self._departments):
+            if dept.id == department_data.id:
+                self._departments[i] = department_data
+                return department_data
         raise ValueError("No se encontró el departamento a actualizar.")
-
 
     def delete_department(self, department_id: int):
         print(f"[MockService] Deleting department ID: {department_id}")
@@ -133,13 +136,19 @@ class DepartmentDialog(QDialog):
         """Fetches departments and populates the list widget."""
         self.dept_list_widget.clear()
         try:
+            print("Loading departments...")
             departments = self.product_service.get_all_departments()
+            print(f"Loaded {len(departments)} departments")
             for dept in departments:
+                print(f"Adding department to list: ID={dept.id}, Name={dept.name}, Type={type(dept)}")
                 item = QListWidgetItem(dept.name)
                 item.setData(Qt.ItemDataRole.UserRole, dept) # Store the whole object
                 self.dept_list_widget.addItem(item)
             self._update_button_states()
         except Exception as e:
+            print(f"ERROR loading departments: {e}")
+            import traceback
+            traceback.print_exc()
             QMessageBox.critical(self, "Error", f"No se pudieron cargar los departamentos: {e}")
 
 
@@ -212,7 +221,12 @@ class DepartmentDialog(QDialog):
 
         try:
             if self._current_department_id is None: # Adding new
-                new_dept = self.product_service.add_department(name)
+                # Create a Department object with None as id (will be assigned by the database)
+                # This is critical - if we provide an id when it should be auto-generated, it can cause issues
+                new_dept_data = Department(id=None, name=name)
+                print(f"Creating new department with name: {name}, type: {type(new_dept_data)}")
+                new_dept = self.product_service.add_department(new_dept_data)
+                print(f"Department created successfully: {new_dept.id}:{new_dept.name}")
                 self._load_departments() # Reload to show the new one
                 # Optionally select the newly added item
                 for i in range(self.dept_list_widget.count()):
@@ -223,7 +237,18 @@ class DepartmentDialog(QDialog):
                 QMessageBox.information(self, "Departamento Agregado", f"Departamento '{new_dept.name}' agregado correctamente.")
 
             else: # Updating existing
-                updated_dept = self.product_service.update_department(self._current_department_id, name)
+                # Create a Department object with ID for updating
+                updated_dept_data = Department(id=self._current_department_id, name=name)
+                print(f"Updating department {self._current_department_id} to name: {name}")
+                # Call update_department with just the Department object
+                updated_dept = self.product_service.update_department(updated_dept_data)
+                
+                # Handle the case where update_department might return None
+                if updated_dept is None:
+                    print("Warning: update_department returned None")
+                    updated_dept = updated_dept_data  # Use the input data as a fallback
+                
+                print(f"Department updated successfully: {updated_dept.id}:{updated_dept.name}")
                 # Update the item text directly instead of full reload if preferred
                 selected_item = self.dept_list_widget.currentItem()
                 if selected_item and selected_item.data(Qt.ItemDataRole.UserRole).id == updated_dept.id:
@@ -235,8 +260,12 @@ class DepartmentDialog(QDialog):
                 QMessageBox.information(self, "Departamento Actualizado", f"Departamento actualizado a '{updated_dept.name}'.")
 
         except ValueError as e: # Catch validation errors from service
+             print(f"Error saving department: {e}")
              QMessageBox.warning(self, "Error al Guardar", str(e))
         except Exception as e: # Catch unexpected errors
+             print(f"Unexpected error saving department: {e}")
+             import traceback
+             traceback.print_exc()
              QMessageBox.critical(self, "Error Inesperado", f"Ocurrió un error al guardar: {e}")
 
 

@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, 
     QDateEdit, QPushButton, QTableView, QTabWidget, QFrame,
     QSplitter, QGroupBox, QFormLayout, QGridLayout, QSpacerItem,
-    QSizePolicy
+    QSizePolicy, QMessageBox
 )
 from PySide6.QtCore import Qt, QDate, Slot, QDateTime
 from PySide6.QtCharts import QChart, QChartView, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
@@ -527,8 +527,14 @@ class ReportsView(QWidget):
         bar_series.attachAxis(axis_y)
         
         # Set Y-axis range with some padding
-        max_value = max([max(bar_set) for bar_set in bar_sets]) if bar_sets else 0
-        axis_y.setRange(0, max_value * 1.1)  # Add 10% padding
+        # Fix: QBarSet is not directly iterable, use loop to find max value
+        max_value = 0
+        for bar_set in bar_sets:
+            for i in range(bar_set.count()):
+                max_value = max(max_value, bar_set.at(i))
+        
+        # Add 10% padding to max value
+        axis_y.setRange(0, max_value * 1.1)
         
         # Customize the chart
         self.chart.legend().setVisible(True)

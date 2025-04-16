@@ -320,7 +320,7 @@ class SqliteDepartmentRepository(IDepartmentRepository):
         dept_orms = self.session.query(DepartmentOrm).all()
         return [_map_department_orm_to_model(dept_orm) for dept_orm in dept_orms]
     
-    def update(self, department: Department) -> None:
+    def update(self, department: Department) -> Department:
         """Update an existing department."""
         # Check if the department exists
         existing = self.session.query(DepartmentOrm).filter_by(id=department.id).first()
@@ -339,6 +339,9 @@ class SqliteDepartmentRepository(IDepartmentRepository):
         # Update in session
         self.session.add(existing)
         self.session.flush()
+        
+        # Return the updated department
+        return _map_department_orm_to_model(existing)
     
     def delete(self, department_id: int) -> None:
         """Delete a department by its ID."""
@@ -487,11 +490,18 @@ class SqliteProductRepository(IProductRepository):
         results = self.session.execute(stmt).scalars().all()
         return [_map_product_orm_to_model(prod_orm) for prod_orm in results]
 
-    def update_stock(self, product_id: int, new_quantity: float) -> None:
-        stmt = update(ProductOrm).where(ProductOrm.id == product_id).values(
-            quantity_in_stock=new_quantity,
-            last_updated=datetime.now()
-        )
+    def update_stock(self, product_id: int, new_quantity: float, cost_price: Optional[float] = None) -> None:
+        """Updates the stock quantity and optionally the cost price of a product."""
+        update_values = {
+            "quantity_in_stock": new_quantity,
+            "last_updated": datetime.now()
+        }
+        
+        # If cost_price is provided, update it too
+        if cost_price is not None:
+            update_values["cost_price"] = cost_price
+        
+        stmt = update(ProductOrm).where(ProductOrm.id == product_id).values(**update_values)
         self.session.execute(stmt)
         self.session.flush()
 

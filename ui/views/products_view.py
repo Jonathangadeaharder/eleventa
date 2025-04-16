@@ -2,7 +2,7 @@ import sys
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableView, QLineEdit,
     QLabel, QSpacerItem, QSizePolicy, QApplication, QMessageBox,
-    QAbstractItemView
+    QAbstractItemView, QHeaderView
 )
 from PySide6.QtCore import Qt, Slot, QTimer
 from PySide6.QtGui import QIcon  # Add QIcon import
@@ -193,11 +193,48 @@ class ProductsView(QWidget):
         self.table_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table_view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers) # Read-only
-        self.table_view.horizontalHeader().setStretchLastSection(True)
-        self.table_view.resizeColumnsToContents() # Initial resize
+        
+        # Improve row selection visibility with stronger highlight color
+        self.table_view.setStyleSheet("""
+            QTableView::item:selected {
+                background-color: #2979ff;
+                color: white;
+            }
+            QTableView::item:hover {
+                background-color: #e3f2fd;
+            }
+        """)
+        
+        # Set better column widths
+        self.table_view.horizontalHeader().setStretchLastSection(False)  # Don't stretch last section automatically
+        
+        # Configure column widths with proportions
+        self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        
+        # Set specific widths for each column
+        column_widths = {
+            0: 100,    # Código
+            1: 300,    # Descripción (give more space)
+            2: 100,    # Precio Venta
+            3: 80,     # Stock
+            4: 80,     # Mínimo
+            5: 100,    # Depto
+            6: 100     # Costo
+        }
+        
+        # Apply column widths
+        for col, width in column_widths.items():
+            self.table_view.setColumnWidth(col, width)
+        
+        # Make the description column stretch
+        self.table_view.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        
+        # Ensure alternating row colors for better readability
         self.table_view.setAlternatingRowColors(True)
-        # self.table_view.setSortingEnabled(True) # Optional: Enable sorting
-
+        
+        # Set a minimum size for the table
+        self.table_view.setMinimumSize(800, 400)
+        
         main_layout.addWidget(self.table_view)
 
     def _connect_signals(self):
@@ -214,13 +251,17 @@ class ProductsView(QWidget):
         selected_indexes = self.table_view.selectedIndexes()
         if not selected_indexes:
             return None
-        # Ensure we get the index from the correct column (e.g., 0)
-        row = selected_indexes[0].row()
-        # Retrieve the full object using the model's UserRole
-        model_index = self._model.index(row, 0) # Get index for first column
-        product = self._model.data(model_index, Qt.ItemDataRole.UserRole)
-        return product if isinstance(product, Product) else None
-
+            
+        # Get the unique row(s) from selected indices
+        selected_rows = set(index.row() for index in selected_indexes)
+        if not selected_rows:
+            return None
+            
+        # Use the first selected row
+        row = next(iter(selected_rows))
+        
+        # Get the product directly from the model
+        return self._model.get_product_at_row(row)
 
     @Slot()
     def refresh_products(self):
@@ -232,11 +273,13 @@ class ProductsView(QWidget):
             products = self.product_service.find_product(search_term)
             self._model.update_data(products)
             print(f"[ProductsView] Found {len(products)} products.")
+            
+            # Ensure the first row is selected if there are products
+            if products and len(products) > 0:
+                self.table_view.selectRow(0)
+                
         except Exception as e:
              QMessageBox.critical(self, "Error", f"No se pudieron cargar los productos: {e}")
-        # Optional: Resize columns after data load if needed
-        # self.table_view.resizeColumnsToContents()
-
 
     @Slot()
     def add_new_product(self):
@@ -271,25 +314,26 @@ class ProductsView(QWidget):
     def delete_selected_product(self):
         """Handles the 'Delete' button click."""
         selected_product = self._get_selected_product()
-        if selected_product:
-            print(f"[ProductsView] 'Delete Product' clicked for: {selected_product.code}. Asking confirmation...")
-            reply = QMessageBox.question(self, "Eliminar Producto",
-                                         f"¿Está seguro que desea eliminar el producto '{selected_product.description}' ({selected_product.code})?",
-                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                                         QMessageBox.StandardButton.No)
-            if reply == QMessageBox.StandardButton.Yes:
-                try:
-                    self.product_service.delete_product(selected_product.id)
-                    print(f"[ProductsView] Product ID {selected_product.id} deleted (mock call).")
-                    self.refresh_products()
-                    QMessageBox.information(self, "Eliminar Producto", "Producto eliminado correctamente.")
-                except ValueError as e: # Catch potential service errors (e.g., product has stock)
-                    QMessageBox.warning(self, "Eliminar Producto", f"No se pudo eliminar el producto: {e}")
-                except Exception as e: # Catch other unexpected errors
-                    QMessageBox.critical(self, "Error", f"Ocurrió un error inesperado: {e}")
-        else:
+        if not selected_product:
             QMessageBox.information(self, "Eliminar Producto", "Por favor, seleccione un producto de la lista.")
             print("[ProductsView] 'Delete Product' clicked, but no product selected.")
+            return
+            
+        print(f"[ProductsView] 'Delete Product' clicked for: {selected_product.code}. Asking confirmation...")
+        reply = QMessageBox.question(self, "Eliminar Producto",
+                                     f"¿Está seguro que desea eliminar el producto '{selected_product.description}' ({selected_product.code})?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                     QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                self.product_service.delete_product(selected_product.id)
+                print(f"[ProductsView] Product ID {selected_product.id} deleted (mock call).")
+                self.refresh_products()
+                QMessageBox.information(self, "Eliminar Producto", "Producto eliminado correctamente.")
+            except ValueError as e: # Catch potential service errors (e.g., product has stock)
+                QMessageBox.warning(self, "Eliminar Producto", f"No se pudo eliminar el producto: {e}")
+            except Exception as e: # Catch other unexpected errors
+                QMessageBox.critical(self, "Error", f"Ocurrió un error inesperado: {e}")
 
     @Slot()
     def manage_departments(self):

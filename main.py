@@ -1,6 +1,7 @@
 import sys
 from PySide6.QtWidgets import QApplication, QDialog # Added QDialog for result check
 from typing import Callable
+from contextlib import contextmanager  # Add contextmanager import
 
 # Core Components
 from core.services.product_service import ProductService
@@ -143,11 +144,30 @@ def main(test_mode=False, test_user=None, mock_services=None):
                 customer_repo=customer_repo    # Pass repository instance
             )
         
+        # Create a proper sale repository factory for ReportingService
+        @contextmanager
+        def sale_repo_factory():
+            session = SessionLocal()
+            try:
+                yield get_sale_repo(session)
+            finally:
+                session.close()
+                
         # Instantiate Reporting Service for advanced reports
-        reporting_service = ReportingService(get_sale_repo)
+        reporting_service = ReportingService(sale_repo_factory)
 
     # --- Application Setup ---
     app = QApplication(sys.argv)
+    
+    # Load custom style sheet
+    try:
+        style_file = open("ui/style.qss", "r")
+        style = style_file.read()
+        app.setStyleSheet(style)
+        style_file.close()
+        print("Loaded custom stylesheet")
+    except Exception as e:
+        print(f"Could not load stylesheet: {e}")
 
     # --- Login ---
     # In test mode with a test user, skip the login dialog

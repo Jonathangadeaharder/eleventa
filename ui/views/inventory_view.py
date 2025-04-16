@@ -227,16 +227,13 @@ class InventoryView(QWidget):
             department_id = self.department_filter.get_selected_value()
             search_text = self.search_input.text().strip()
             
-            # Get low stock products with optional filtering
-            low_stock_products = self.inventory_service.get_low_stock_products(
-                department_id=department_id,
-                search_text=search_text
-            )
+            # Get low stock products without department_id parameter
+            low_stock_products = self.inventory_service.get_low_stock_products()
             
             self.low_stock_model.update_data(low_stock_products)
             print(f"Low stock report refreshed with {len(low_stock_products)} items.") # Debug
         except Exception as e:
-            show_error_message("Error al Cargar Productos Bajos", f"No se pudo cargar el reporte de bajo stock: {e}")
+            show_error_message(self, "Error al Cargar Productos Bajos", f"No se pudo cargar el reporte de bajo stock: {e}")
             self.low_stock_model.update_data([])
 
     # --- Slots for Button Actions ---
@@ -291,7 +288,7 @@ class InventoryView(QWidget):
             return
         # Similar to add_inventory_item, get selection, show AdjustInventoryDialog
         print("Adjust Inventory Item clicked (Not Implemented)")
-        show_error_message("Función no implementada", "La función 'Ajustar Stock' no está implementada aún.")
+        show_error_message(self, "Función no implementada", "La función 'Ajustar Stock' no está implementada aún.")
     
     def showEvent(self, event):
         """Override showEvent to load filter data when the view becomes visible."""

@@ -101,7 +101,13 @@ class ProductTableModel(QAbstractTableModel):
         elif role == Qt.ItemDataRole.ForegroundRole:
             if product.uses_inventory and product.min_stock is not None and product.quantity_in_stock < product.min_stock:
                 return QColor("red") # Low stock highlighting
-            # Optional: Add highlighting for negative stock if allowed
+            # No need to return None here - will fallthrough to other conditions
+
+        elif role == Qt.ItemDataRole.BackgroundRole:
+            # Add subtle background color for alternating rows
+            if index.row() % 2 == 0:
+                return QBrush(QColor(248, 249, 250))  # Light gray for even rows
+            # Odd rows will use the default background from stylesheet
 
         elif role == Qt.ItemDataRole.UserRole: # Custom role to get the full product object
             return product

@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 import os
 from datetime import datetime
 
@@ -30,13 +30,13 @@ class SaleService:
 
     def __init__(
         self,
-        sale_repository: ISaleRepository,
-        product_repository: IProductRepository,
+        sale_repository_factory: Callable[[Session], ISaleRepository],
+        product_repository_factory: Callable[[Session], IProductRepository],
         inventory_service: InventoryService,
         customer_service: CustomerService
     ):
-        self.sale_repository = sale_repository
-        self.product_repository = product_repository
+        self.sale_repository_factory = sale_repository_factory
+        self.product_repository_factory = product_repository_factory
         self.inventory_service = inventory_service
         self.customer_service = customer_service
 
@@ -96,8 +96,9 @@ class SaleService:
             })
 
         with session_scope() as session:
-            product_repo_tx = self.product_repository
-            sale_repo_tx = self.sale_repository
+            # Instantiate repositories with the session
+            product_repo_tx = self.product_repository_factory(session)
+            sale_repo_tx = self.sale_repository_factory(session)
 
             customer: Optional[Customer] = None
             if customer_id:
@@ -166,7 +167,8 @@ class SaleService:
             The Sale object if found, None otherwise
         """
         with session_scope() as session:
-            sale_repo = self.sale_repository
+            # Instantiate repository with the session
+            sale_repo = self.sale_repository_factory(session)
             return sale_repo.get_by_id(sale_id)
             
     def generate_receipt_pdf(self, sale_id: int, filename: Optional[str] = None) -> str:

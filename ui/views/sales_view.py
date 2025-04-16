@@ -98,6 +98,7 @@ class SalesView(QWidget):
         self.current_user = current_user # Store current user
         self._customers: List[Customer] = [] # Cache for customer list
         self.selected_customer = None
+        self._current_total = Decimal("0.00")  # Initialize total amount
         self.setObjectName("sales_view")
 
         self.setWindowTitle("Ventas")
@@ -105,6 +106,7 @@ class SalesView(QWidget):
 
         self._init_ui()
         self._connect_signals()
+        self.update_total()  # Initialize the total amount
 
     def _init_ui(self):
         """Initialize the UI components."""
@@ -271,11 +273,22 @@ class SalesView(QWidget):
         
         actions_layout.addLayout(buttons_layout)
         
+        # Add finalizing and invoice buttons
+        finalizing_layout = QHBoxLayout()
+        finalizing_layout.setSpacing(8)
+        
         self.finalize_button = QPushButton("Finalizar Venta (F12)")
         style_primary_button(self.finalize_button)
         self.finalize_button.setIcon(QIcon(":/icons/icons/save.png"))
+        finalizing_layout.addWidget(self.finalize_button)
         
-        actions_layout.addWidget(self.finalize_button)
+        self.invoice_button = QPushButton("Facturar")
+        style_secondary_button(self.invoice_button)
+        self.invoice_button.setIcon(QIcon(":/icons/icons/invoice.png"))
+        self.invoice_button.setEnabled(False)  # Disabled by default until a sale is completed
+        finalizing_layout.addWidget(self.invoice_button)
+        
+        actions_layout.addLayout(finalizing_layout)
         
         bottom_layout.addLayout(actions_layout)
         
@@ -297,6 +310,7 @@ class SalesView(QWidget):
         self.remove_item_button.clicked.connect(self.remove_selected_item)
         self.cancel_button.clicked.connect(self.cancel_current_sale)
         self.finalize_button.clicked.connect(self.finalize_current_sale)
+        self.invoice_button.clicked.connect(self.generate_invoice_from_sale)
         
         # Connect model signals for automatic updates
         self.sale_item_model.modelReset.connect(self.update_total)
@@ -339,8 +353,8 @@ class SalesView(QWidget):
                 self.customer_label.setText("Cliente: Ninguno")
 
     def _get_selected_customer_id(self) -> Optional[int]:
-        """Gets the ID of the customer selected in the combo box."""
-        return self.customer_combo.currentData()
+        """Gets the ID of the selected customer."""
+        return self.selected_customer.id if self.selected_customer else None
 
     # --- Existing Slots / Methods (add_item, update_total, remove_item, cancel_current_sale) --- #
     @Slot()
@@ -352,16 +366,33 @@ class SalesView(QWidget):
             product = self.product_service.get_product_by_code(code)
             if product:
                 quantity = Decimal("1")
+                # Make sure sell_price is not None
+                if product.sell_price is None:
+                    show_error_message(self, "Error de Precio", f"El producto '{product.code}' no tiene un precio de venta definido.")
+                    self.code_entry.selectAll()
+                    self.code_entry.setFocus()
+                    return
+                
+                # Make sure to properly convert float price to Decimal
+                unit_price = Decimal(str(product.sell_price))
+                
                 sale_item = SaleItem(
                     product_id=product.id,
                     quantity=quantity,
-                    unit_price=Decimal(str(product.sell_price)),
+                    unit_price=unit_price,
                     product_code=product.code,
                     product_description=product.description
                 )
+                
+                # Log for debugging
+                print(f"Adding product: {product.code}, price: {product.sell_price}, as Decimal: {unit_price}")
+                
                 self.sale_item_model.add_item(sale_item)
                 self.code_entry.clear()
                 self.code_entry.setFocus()
+                
+                # Explicitly update the total
+                self.update_total()
             else:
                 show_error_message(self, "Producto No Encontrado", f"No se encontró un producto con el código: {code}")
                 self.code_entry.selectAll()
@@ -450,8 +481,8 @@ class SalesView(QWidget):
 
         # Final confirmation message, including payment type
         confirmation_message = f"¿Finalizar venta por $ {self._current_total:.2f} con pago '{payment_method}'?"
-        if customer_id:
-            customer_name = self.customer_combo.currentText()
+        if customer_id and self.selected_customer:
+            customer_name = self.selected_customer.name
             confirmation_message += f"\nCliente: {customer_name}"
 
         if not ask_confirmation(self, "Finalizar Venta", confirmation_message):
@@ -554,7 +585,8 @@ class SalesView(QWidget):
         """Clears the sale items, total, and customer selection."""
         self.sale_item_model.clear()
         self.code_entry.clear()
-        self.customer_combo.setCurrentIndex(0) # Reset customer selection
+        self.selected_customer = None
+        self.customer_label.setText("Cliente: Ninguno")
         self.code_entry.setFocus()
         self.invoice_button.setEnabled(False)  # Disable invoice button
         if hasattr(self, 'current_sale_id'):
