@@ -75,7 +75,7 @@ class SuppliersView(QWidget):
             self.supplier_table_model.update_data(suppliers)
             # self.supplier_table_view.resizeColumnsToContents() # Optional resize after data load
         except Exception as e:
-            show_error_message(self, f"Error al cargar proveedores:\n{e}")
+            show_error_message(self, "Error al cargar proveedores", str(e))
             print(f"Error refreshing suppliers: {e}") # Log full error
 
     @Slot()

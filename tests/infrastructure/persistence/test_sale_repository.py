@@ -655,8 +655,11 @@ class TestSaleRepository:
 
     def test_get_sales_by_customer(self, test_db_session):
         """Test get_sales_by_customer returns correct aggregation."""
+        import uuid
         sale_repo = _HelperSqliteSaleRepository(test_db_session)
-        # Add sales with different customer IDs
+        # Add sales with different customer UUIDs
+        customer_id1 = uuid.uuid4()
+        customer_id2 = uuid.uuid4()
         item = SaleItem(
             product_id=self.prod1.id,
             quantity=Decimal("1"),
@@ -664,17 +667,17 @@ class TestSaleRepository:
             product_code=self.prod1.code,
             product_description=self.prod1.description
         )
-        sale1 = Sale(items=[item], customer_id=1)
-        sale2 = Sale(items=[item], customer_id=2)
-        sale3 = Sale(items=[item], customer_id=1)
+        sale1 = Sale(items=[item], customer_id=customer_id1)
+        sale2 = Sale(items=[item], customer_id=customer_id2)
+        sale3 = Sale(items=[item], customer_id=customer_id1)
         sale_repo.add_sale(sale1)
         sale_repo.add_sale(sale2)
         sale_repo.add_sale(sale3)
         result = sale_repo.get_sales_by_customer(limit=10)
-        # Should aggregate by customer_id
+        # Should aggregate by customer_id (UUID)
         custs = {r["customer_id"]: r["total_sales"] for r in result}
-        assert abs(custs.get("1", 0) - 20.0) < 0.01
-        assert abs(custs.get("2", 0) - 10.0) < 0.01
+        assert abs(custs.get(customer_id1, 0) - 20.0) < 0.01
+        assert abs(custs.get(customer_id2, 0) - 10.0) < 0.01
 
     def test_get_top_selling_products(self, test_db_session):
         """Test get_top_selling_products returns correct aggregation."""

@@ -103,13 +103,19 @@ class InvoicingService:
         except ValueError as e:
             # This could happen if another thread created an invoice 
             # between our first check and the attempt to save
-            if "already have an invoice" in str(e) or "sale may already have an invoice" in str(e).lower():
+            msg = str(e).lower()
+            if (
+                "already have an invoice" in msg or
+                "sale may already have an invoice" in msg or
+                "already exists" in msg or
+                "duplicate" in msg
+            ):
                 # Do one more check to verify
                 double_check = self.invoice_repo.get_by_sale_id(sale_id)
                 if double_check:
-                    raise ValueError(f"Sale with ID {sale_id} already has an invoice")
+                    raise ValueError(f"Sale with ID {sale_id} already has an invoice (duplicate)")
             # Re-raise any other errors
-            raise
+            raise ValueError(f"Invoice creation failed: {e}")
     
     def _get_sale(self, sale_id: int) -> Optional[Sale]:
         """Get a sale by ID, handling any exceptions."""

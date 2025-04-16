@@ -121,7 +121,7 @@ def test_get_product_by_code_not_found(product_repo):
     retrieved_prod = product_repo.get_by_code("NONEXISTENTCODE")
     assert retrieved_prod is None
 
-def test_get_all_products(product_repo, sample_dept):
+def test_get_all_products(product_repo, sample_dept, test_db_session):
     """Test retrieving all products."""
     # Clear existing products first
     test_db_session.query(ProductOrm).delete()
@@ -134,7 +134,7 @@ def test_get_all_products(product_repo, sample_dept):
     retrieved_codes = sorted([p.code for p in all_prods])
     assert retrieved_codes == ["ALL01", "ALL02"]
 
-def test_update_product(product_repo, sample_dept):
+def test_update_product(product_repo, sample_dept, test_db_session):
     """Test updating various fields of an existing product."""
     prod_to_update = product_repo.add(Product(
         code="UPD01", description="Original Desc", cost_price=5.0, sell_price=10.0,
@@ -188,7 +188,7 @@ def test_delete_product(product_repo, sample_dept):
     except Exception as e:
         pytest.fail(f"Deleting non-existent product raised an error: {e}")
 
-def test_search_product(product_repo, sample_dept):
+def test_search_product(product_repo, sample_dept, test_db_session):
     """Test searching for products by code or description."""
     # Clear existing products
     test_db_session.query(ProductOrm).delete()
@@ -244,7 +244,7 @@ def test_update_stock(product_repo, sample_dept):
     except Exception as e:
         pytest.fail(f"update_stock on non-existent product raised an error: {e}")
 
-def test_get_low_stock(product_repo, sample_dept):
+def test_get_low_stock(product_repo, sample_dept, test_db_session):
     """Test retrieving products with low stock levels."""
     # Clear existing products
     test_db_session.query(ProductOrm).delete()

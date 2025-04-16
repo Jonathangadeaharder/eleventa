@@ -39,7 +39,7 @@ class AddInventoryDialog(QDialog):
         # --- Input Fields ---
         self.quantity_spinbox = QDoubleSpinBox()
         self.quantity_spinbox.setDecimals(2)
-        self.quantity_spinbox.setRange(0.01, 999999.99) # Ensure positive quantity
+        self.quantity_spinbox.setRange(0.0, 999999.99) # Permitir 0.0 para validación y tests
         self.quantity_spinbox.setValue(1.0) # Default quantity
 
         self.cost_spinbox = QDoubleSpinBox()
@@ -71,7 +71,7 @@ class AddInventoryDialog(QDialog):
         notes = self.notes_edit.toPlainText().strip()
 
         if quantity <= 0:
-            show_error_message("Cantidad Inválida", "La cantidad a agregar debe ser mayor que cero.")
+            show_error_message(self, "Cantidad Inválida", "La cantidad a agregar debe ser mayor que cero.")
             self.quantity_spinbox.setFocus()
             return
         

@@ -3,18 +3,19 @@ from unittest.mock import MagicMock
 from PySide6.QtWidgets import QApplication
 from ui.dialogs.department_dialog import DepartmentDialog
 from PySide6.QtCore import Qt
+from core.models.product import Department
 
 @pytest.fixture
 def mock_product_service():
     service = MagicMock()
     # Mock department list
     departments = [
-        MagicMock(id=1, name="Grocery"),
-        MagicMock(id=2, name="Electronics"),
+        Department(id=1, name="Grocery"),
+        Department(id=2, name="Electronics"),
     ]
     service.get_all_departments.return_value = departments
-    service.add_department.return_value = MagicMock(id=3, name="Toys")
-    service.update_department.return_value = MagicMock(id=1, name="Groceries")
+    service.add_department.return_value = Department(id=3, name="Toys")
+    service.update_department.return_value = Department(id=1, name="Groceries")
     service.delete_department.return_value = None
     return service
 
@@ -33,6 +34,7 @@ def test_load_departments(dialog, mock_product_service):
     assert "Electronics" in names
 
 def test_add_department(dialog, qtbot, mock_product_service):
+    qtbot.mouseClick(dialog.new_button, Qt.LeftButton)  # Poner en modo 'nuevo'
     dialog.name_input.setText("Toys")
     qtbot.mouseClick(dialog.save_button, Qt.LeftButton)
     mock_product_service.add_department.assert_called_once()

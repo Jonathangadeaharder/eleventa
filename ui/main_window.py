@@ -226,8 +226,11 @@ class MainWindow(QMainWindow):
 
 if __name__ == '__main__':
     class MockProductService:
-        def get_all_products(self): return []
+        def get_all_products(self, department_id=None):
+            return []
         def get_product_by_code(self, code): return None
+        def find_product(self, search_term=None):
+            return self.get_all_products()
 
     class MockInventoryService:
         def get_low_stock_products(self): return []
@@ -241,6 +244,10 @@ if __name__ == '__main__':
         def get_all_suppliers(self): return []
         def find_supplier(self, term): return []
         def get_all_purchase_orders(self): return []
+        def find_suppliers(self, term):
+            return self.find_supplier(term)
+        def find_purchase_orders(self, *args, **kwargs):
+            return []
 
     class MockSaleService:
         def get_all_sales(self): return []

@@ -138,37 +138,18 @@ class SQLiteCashDrawerRepository(ICashDrawerRepository):
         """Check if the drawer is currently open."""
         @self._session_wrapper
         def _is_drawer_open(session, drawer_id):
-            # Get the most recent entry of type START
-            start_type = CashDrawerEntryType.START.value
-            close_type = CashDrawerEntryType.CLOSE.value
-            
+            # Get the most recent entry of type START or CLOSE
+            relevant_types = [CashDrawerEntryType.START.value, CashDrawerEntryType.CLOSE.value]
             query = session.query(CashDrawerEntryOrm).filter(
-                CashDrawerEntryOrm.entry_type == start_type
+                CashDrawerEntryOrm.entry_type.in_(relevant_types)
             )
-            
-            # Apply drawer_id filter if specified
             if drawer_id is not None:
                 query = query.filter(CashDrawerEntryOrm.drawer_id == drawer_id)
-                
-            # Order by timestamp descending to get the most recent
-            start_entry = query.order_by(desc(CashDrawerEntryOrm.timestamp)).first()
-            
-            if not start_entry:
+            # Order by timestamp descending to get the most recent relevant entry
+            last_entry = query.order_by(desc(CashDrawerEntryOrm.timestamp)).first()
+            if not last_entry:
                 return False
-            
-            # Check if there's a CLOSE entry after the most recent START entry
-            close_query = session.query(CashDrawerEntryOrm).filter(
-                CashDrawerEntryOrm.entry_type == close_type,
-                CashDrawerEntryOrm.timestamp > start_entry.timestamp
-            )
-            
-            if drawer_id is not None:
-                close_query = close_query.filter(CashDrawerEntryOrm.drawer_id == drawer_id)
-            
-            close_entry = close_query.order_by(desc(CashDrawerEntryOrm.timestamp)).first()
-            
-            # The drawer is open if there's a START entry and no CLOSE entries after it
-            return close_entry is None
+            return last_entry.entry_type == CashDrawerEntryType.START.value
         return _is_drawer_open(drawer_id)
             
     def get_today_entries(self, drawer_id: Optional[int] = None) -> List[CashDrawerEntry]:

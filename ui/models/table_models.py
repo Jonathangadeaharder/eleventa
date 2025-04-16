@@ -71,13 +71,13 @@ class ProductTableModel(QAbstractTableModel):
             elif column == 1:
                 return product.description
             elif column == 2:
-                return f"{product.sell_price:.2f}" if product.sell_price is not None else "N/A"
+                return f"{product.sale_price:.2f}" if product.sale_price is not None else "N/A"
             elif column == 3:
                 return f"{product.quantity_in_stock:.2f}" if product.uses_inventory else "N/A"
             elif column == 4:
                 return f"{product.min_stock:.2f}" if product.uses_inventory else "N/A"
             elif column == 5:
-                return product.department.name if product.department else "-"
+                return product.department_name if product.department_name else "-"
             elif column == 6:
                 return f"{product.cost_price:.2f}" if product.cost_price is not None else "N/A"
 

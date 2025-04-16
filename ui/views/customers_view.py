@@ -30,7 +30,8 @@ class CustomersView(QWidget):
         self.add_button = QPushButton("&Nuevo Cliente (F5)") # Added shortcut hint
         self.modify_button = QPushButton("&Modificar Cliente (F6)") # Added shortcut hint
         self.delete_button = QPushButton("&Eliminar Cliente (Supr)") # Added shortcut hint
-        self.payment_button = QPushButton("Registrar &Pago") # Added Payment button
+        self.register_payment_button = QPushButton("Registrar &Pago") # Renombrado para coincidir con el test
+        self.edit_button = QPushButton("Editar")
 
         self.table_view = QTableView()
         self.table_model = CustomerTableModel(self)
@@ -57,7 +58,8 @@ class CustomersView(QWidget):
         toolbar_layout.addWidget(self.add_button)
         toolbar_layout.addWidget(self.modify_button)
         toolbar_layout.addWidget(self.delete_button)
-        toolbar_layout.addWidget(self.payment_button) # Add payment button to layout
+        toolbar_layout.addWidget(self.register_payment_button)
+        toolbar_layout.addWidget(self.edit_button)
 
         main_layout = QVBoxLayout(self)
         main_layout.addLayout(toolbar_layout)
@@ -69,7 +71,7 @@ class CustomersView(QWidget):
         self.add_button.clicked.connect(self.add_new_customer)
         self.modify_button.clicked.connect(self.modify_selected_customer)
         self.delete_button.clicked.connect(self.delete_selected_customer)
-        self.payment_button.clicked.connect(self.register_payment) # Connect payment button
+        self.register_payment_button.clicked.connect(self.register_payment) # Conectar el botón renombrado
         self.table_view.doubleClicked.connect(self.modify_selected_customer)
 
         # --- Shortcuts ---

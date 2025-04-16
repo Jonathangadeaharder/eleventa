@@ -117,11 +117,23 @@ class MockProductService(MockProductService_Departments): # Inherit department m
             # This case should technically be caught by get_product_by_id check
             raise ValueError("Product not found for deletion during filtering")
 
+    def get_all_products(self, department_id=None):
+        """Devuelve todos los productos, opcionalmente filtrados por department_id."""
+        dept_map = {d.id: d.name for d in self.get_all_departments()}
+        updated_products = []
+        for p in self._products:
+            dept_id = getattr(p, 'department_id', None)
+            p.department_name = dept_map.get(dept_id, "-")
+            updated_products.append(p)
+        if department_id is not None:
+            return [p for p in updated_products if p.department_id == department_id]
+        return updated_products
+
 
 class ProductsView(QWidget):
     """View for managing products."""
 
-    def __init__(self, product_service, parent=None):
+    def __init__(self, product_service, parent=None, enable_auto_refresh=True):
         super().__init__(parent)
         # Ensure the passed service has both product and department methods
         self.product_service = product_service
@@ -133,7 +145,9 @@ class ProductsView(QWidget):
         self._connect_signals()
 
         # Use QTimer for delayed initial load to ensure the event loop is running
-        QTimer.singleShot(0, self.refresh_products)
+        # Allow disabling for testing to prevent timer-related hanging
+        if enable_auto_refresh:
+            QTimer.singleShot(0, self.refresh_products)
 
 
     def _init_ui(self):

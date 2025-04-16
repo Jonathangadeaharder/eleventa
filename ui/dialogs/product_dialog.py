@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QComboBox, QCheckBox, QPushButton, QLabel, QDialogButtonBox, QMessageBox,
     QApplication, QWidget, QFrame, QGroupBox, QSpacerItem, QSizePolicy # Added QGroupBox, QSpacerItem, QSizePolicy
 )
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, Slot, Signal
 from PySide6.QtGui import QIcon
 from typing import Optional, Dict, Any
 
@@ -27,6 +27,7 @@ from ui.utils import show_error_message, style_text_input, style_dropdown, style
 
 class ProductDialog(QDialog):
     """Dialog for adding or modifying products."""
+    validation_failed = Signal(str)
 
     def __init__(self, product_service, product_to_edit: Optional[Product] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -34,7 +35,7 @@ class ProductDialog(QDialog):
         self.product_to_edit = product_to_edit
         self.is_edit_mode = product_to_edit is not None
 
-        self.setWindowTitle("Modificar Producto" if self.is_edit_mode else "Nuevo Producto")
+        self.setWindowTitle("Modificar Producto" if self.is_edit_mode else "Agregar Producto")
         self.setMinimumWidth(400)
 
         self._departments: list[Department] = [] # Cache departments
@@ -43,11 +44,18 @@ class ProductDialog(QDialog):
         self._connect_signals()
         self._load_departments()
 
+        # Make sure this is called after the UI is fully initialized
+        QApplication.processEvents()
+
         if self.is_edit_mode:
             self._populate_form()
         else:
-            # Default state for new product
-            self._toggle_inventory_fields(self.inventory_checkbox.isChecked())
+            # Set initial state for new product 
+            # Make sure checkbox state is properly set first
+            initial_inventory_enabled = True
+            self.inventory_checkbox.setChecked(initial_inventory_enabled)
+            self._toggle_inventory_fields(initial_inventory_enabled)
+            self.adjustSize()  # Make sure dialog adjusts to content
 
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -184,17 +192,38 @@ class ProductDialog(QDialog):
     @Slot(int)
     def _toggle_inventory_fields(self, state):
         """Enable/disable inventory-related fields based on checkbox state."""
-        # Use direct comparison with Qt.CheckState enum value
-        enable = state == Qt.CheckState.Checked.value
-        self.stock_label.setVisible(enable)
-        self.stock_input.setVisible(enable)
-        self.min_stock_label.setVisible(enable)
-        self.min_stock_input.setVisible(enable)
-        if not enable:
-            # No need to reset values if just hiding
-            pass
-            # self.stock_input.setValue(0.0)
-            # self.min_stock_input.setValue(0.0)
+        # Convert to boolean - the checkbox can pass either a bool or Qt.CheckState
+        show = bool(state)
+        if isinstance(state, int):
+            print(f"Toggle inventory fields - state type: {type(state)}, value: {state}")
+            show = (state == 2)  # Qt.CheckState.Checked
+        
+        print(f"Visibility will be set to: {show}")
+        
+        # Set visibility on all related widgets
+        self.stock_label.setVisible(show)
+        self.stock_input.setVisible(show)
+        self.min_stock_label.setVisible(show)
+        self.min_stock_input.setVisible(show)
+        
+        # Ensure inventory_form's parent layout is notified of the visibility change
+        for item in [self.stock_label, self.stock_input, self.min_stock_label, self.min_stock_input]:
+            item.setVisible(show)
+            # Force an explicit size policy update
+            if show:
+                item.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+            else:
+                item.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        
+        # Force parent layouts to update
+        self.layout().activate()
+        inventory_form = self.stock_label.parentWidget().layout()
+        if inventory_form:
+            inventory_form.activate()
+            
+        # Update window to ensure changes are applied
+        self.adjustSize()
+        QApplication.processEvents()
 
     def _load_departments(self):
         """Loads departments into the combo box."""
@@ -271,18 +300,22 @@ class ProductDialog(QDialog):
         if not code:
             QMessageBox.warning(self, "Entrada Inválida", "El código del producto es obligatorio.")
             self.code_input.setFocus()
+            self.validation_failed.emit("El código del producto es obligatorio.")
             return
         if not description:
             QMessageBox.warning(self, "Entrada Inválida", "La descripción del producto es obligatoria.")
             self.description_input.setFocus()
+            self.validation_failed.emit("La descripción del producto es obligatoria.")
             return
         if sell_price < 0:
              QMessageBox.warning(self, "Entrada Inválida", "El precio de venta no puede ser negativo.")
              self.sale_price_input.setFocus()
+             self.validation_failed.emit("El precio de venta no puede ser negativo.")
              return
         if cost_price < 0:
              QMessageBox.warning(self, "Entrada Inválida", "El precio de costo no puede ser negativo.")
              self.cost_price_input.setFocus()
+             self.validation_failed.emit("El precio de costo no puede ser negativo.")
              return
         # Add more validation as needed (e.g., code format)
 

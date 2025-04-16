@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QDate, Slot, QDateTime
 from PySide6.QtCharts import QChart, QChartView, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
+from PySide6.QtGui import QPainter
 
 from datetime import datetime, timedelta
 from ui.models.table_models import ReportTableModel

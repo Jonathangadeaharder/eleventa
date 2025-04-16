@@ -510,9 +510,8 @@ class SqliteInventoryRepository(IInventoryRepository):
     
     def add_movement(self, movement: InventoryMovement) -> InventoryMovement:
         """Add a new inventory movement record."""
-        # Create the ORM instance from the model
-        movement_orm = InventoryMovementOrm(
-            id=movement.id or str(uuid.uuid4()),  # Generate UUID if none provided
+        # Only set id if it is not None and is an integer
+        movement_kwargs = dict(
             product_id=movement.product_id,
             user_id=movement.user_id,
             timestamp=movement.timestamp or datetime.now(),
@@ -521,11 +520,15 @@ class SqliteInventoryRepository(IInventoryRepository):
             description=movement.description,
             related_id=movement.related_id
         )
-        
+        if movement.id is not None:
+            if isinstance(movement.id, int):
+                movement_kwargs['id'] = movement.id
+            else:
+                raise ValueError("InventoryMovement.id must be an integer or None.")
+        movement_orm = InventoryMovementOrm(**movement_kwargs)
         # Add to session
         self.session.add(movement_orm)
         self.session.flush()  # Get ID immediately
-        
         # Return the mapped model with the assigned ID
         return _map_movement_orm_to_model(movement_orm)
     

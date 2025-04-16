@@ -1,5 +1,7 @@
 import pytest
-from PySide6 import QtWidgets
+import patch_qt_tests  # Import patch to prevent Qt dialogs from blocking
+from PySide6 import QtWidgets, QtCore
+from PySide6.QtWidgets import QMessageBox
 from ui.dialogs.add_inventory_dialog import AddInventoryDialog
 from core.models.product import Product
 
@@ -66,19 +68,25 @@ def test_accept_valid_add_inventory(qtbot, dialog, inventory_service, product):
     assert args["user_id"] is None
 
 def test_validation_quantity_must_be_positive(qtbot, dialog):
+    dialog.quantity_spinbox.setRange(0.0, 999999.99)
     dialog.quantity_spinbox.setValue(0.0)
-    # Patch show_error_message to track call
     called = {}
-    def fake_show_error_message(title, msg):
+    def fake_show_error_message(parent, title, msg):
         called["called"] = True
         called["title"] = title
         called["msg"] = msg
-    import ui.utils
-    orig = ui.utils.show_error_message
-    ui.utils.show_error_message = fake_show_error_message
+    import ui.dialogs.add_inventory_dialog as add_inventory_dialog_mod
+    from PySide6.QtWidgets import QMessageBox
+    orig = add_inventory_dialog_mod.show_error_message
+    orig_warning = QMessageBox.warning
+    def fake_warning(*args, **kwargs):
+        return QMessageBox.Ok
+    QMessageBox.warning = fake_warning
+    add_inventory_dialog_mod.show_error_message = fake_show_error_message
     try:
-        dialog.accept()
-        assert called["called"]
-        assert "mayor que cero" in called["msg"]
+        AddInventoryDialog.accept(dialog)
+        assert called.get("called", False)
+        assert "mayor que cero" in called.get("msg", "")
     finally:
-        ui.utils.show_error_message = orig
+        add_inventory_dialog_mod.show_error_message = orig
+        QMessageBox.warning = orig_warning

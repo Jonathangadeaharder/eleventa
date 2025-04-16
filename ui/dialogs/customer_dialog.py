@@ -55,15 +55,16 @@ class CustomerDialog(QDialog):
 
         self.setMinimumWidth(400) # Adjust as needed
 
-    def _populate_form(self):
-        """Fills the form fields with data from the existing customer."""
-        if not self._customer:
+    def _populate_form(self, customer=None):
+        """Fills the form fields with data from the given customer or self._customer."""
+        cust = customer if customer is not None else self._customer
+        if not cust:
             return
-        self.name_edit.setText(self._customer.name or "")
-        self.phone_edit.setText(self._customer.phone or "")
-        self.email_edit.setText(self._customer.email or "")
-        self.address_edit.setText(self._customer.address or "")
-        self.credit_limit_spin.setValue(self._customer.credit_limit or 0.0)
+        self.name_edit.setText(cust.name or "")
+        self.phone_edit.setText(cust.phone or "")
+        self.email_edit.setText(cust.email or "")
+        self.address_edit.setText(cust.address or "")
+        self.credit_limit_spin.setValue(cust.credit_limit or 0.0)
 
     def _get_customer_data_from_form(self) -> dict:
         """Extracts customer data from the form fields."""

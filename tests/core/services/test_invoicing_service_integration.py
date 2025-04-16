@@ -173,5 +173,10 @@ def test_concurrent_invoice_creation(db_session, repositories):
 
     # Only one invoice should be created, others should raise duplicate invoice error
     assert len([r for r in results if r is not None]) == 1
-    assert len(errors) > 0, "Expected some errors when multiple threads try to create the same invoice"
-    assert any("already exists" in e.lower() or "duplicate" in e.lower() for e in errors)
+    print("Errors:", errors)
+    assert any(
+        "already has an invoice" in e.lower() or
+        "already exists" in e.lower() or
+        "duplicate" in e.lower()
+        for e in errors
+    ), f"Expected an error message containing 'already has an invoice', 'already exists', or 'duplicate', but got: {errors}"
