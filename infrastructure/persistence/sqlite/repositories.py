@@ -1295,7 +1295,6 @@ class SqliteCreditPaymentRepository(ICreditPaymentRepository):
         """Add a new credit payment record."""
         # Create ORM object from the model
         payment_orm = CreditPaymentOrm(
-            id=payment.id or str(uuid.uuid4()),  # Generate UUID if none provided
             customer_id=payment.customer_id,
             amount=float(payment.amount),  # Convert Decimal to float
             timestamp=payment.timestamp or datetime.now(),
@@ -1306,6 +1305,7 @@ class SqliteCreditPaymentRepository(ICreditPaymentRepository):
         # Add to session
         self.session.add(payment_orm)
         self.session.flush()  # Get ID immediately
+        self.session.refresh(payment_orm)  # Refresh to populate the auto-generated integer ID
         
         # Return the mapped model
         return _map_credit_payment_orm_to_model(payment_orm)

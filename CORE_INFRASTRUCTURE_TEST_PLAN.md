@@ -17,9 +17,10 @@
 ## 2. Repository Interfaces
 
 - [ ] Add unit tests for repository logic:
-  - [ ] Invoice queries and pagination
-  - [ ] Credit payments repository (add/get/update)
-  - [ ] Customer query methods (search, filter)
+  - [x] Invoice queries and pagination
+  - [x] Credit payments repository (add/get/update)
+  - [x] Customer query methods (search, filter)
+  - [x] Department repository (add/get/update/delete)
 
 ## 3. Persistence Utilities & Database
 
