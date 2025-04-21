@@ -83,6 +83,10 @@ class InvoicingService:
             iva_amount = Decimal('0')
             pre_tax_amount = subtotal
         
+        # Quantize amounts to 2 decimals
+        pre_tax_amount = pre_tax_amount.quantize(Decimal('0.01'))
+        iva_amount = iva_amount.quantize(Decimal('0.01'))
+        
         # Create invoice
         invoice = Invoice(
             sale_id=sale_id,

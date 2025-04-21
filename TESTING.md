@@ -100,6 +100,7 @@ The HTML report will be available in the `htmlcov/` directory.
 2. Follow the existing naming conventions
 3. Use pytest fixtures for setup/teardown
 4. For Qt tests, use qtbot for GUI interaction
+5. For business logic services requiring additional scenarios (e.g., concurrency and error handling), create `test_<service>_extra.py` files in `tests/core/services/` and use dummy repositories to simulate edge cases.
 
 ## CI/CD Integration
 
