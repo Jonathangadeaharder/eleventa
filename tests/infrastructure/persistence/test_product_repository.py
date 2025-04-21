@@ -281,6 +281,113 @@ def test_get_low_stock(product_repo, sample_dept, test_db_session):
     retrieved_ids = sorted([p.id for p in low_stock_prods])
     assert retrieved_ids == sorted([prod_low.id, prod_exact.id])
 
-    # Test with explicit threshold (implementation might vary)
-    # Assuming default implementation compares quantity_in_stock <= min_stock
     # If get_low_stock accepts a threshold, add tests for that. 
+    # Reset existing products for explicit threshold tests
+    test_db_session.query(ProductOrm).delete()
+    test_db_session.flush()
+    prod_ok = product_repo.add(Product(code="LOW01", description="OK Stock", department_id=sample_dept.id, uses_inventory=True, quantity_in_stock=10, min_stock=5))
+    prod_low = product_repo.add(Product(code="LOW02", description="Low Stock", department_id=sample_dept.id, uses_inventory=True, quantity_in_stock=4, min_stock=5))
+    prod_noninv = product_repo.add(Product(code="LOW03", description="No Inv", department_id=sample_dept.id, uses_inventory=False, quantity_in_stock=100, min_stock=5))
+
+    low_stock_prods = product_repo.get_low_stock()
+
+    assert len(low_stock_prods) == 1
+    assert low_stock_prods[0].id == prod_low.id
+
+
+def test_get_all_products_filtered_and_paginated(product_repo, sample_dept, test_db_session):
+    """Test retrieving products with filtering (department, active) and pagination."""
+    # Clean existing products first
+    test_db_session.query(ProductOrm).delete()
+
+    # Create another department for filtering
+    dept_repo = SqliteDepartmentRepository(test_db_session)
+    other_dept = dept_repo.add(Department(name="Other Dept"))
+
+    # Add products with different departments and active status
+    prod_a1 = product_repo.add(Product(code="FPA01", description="A1 Active", department_id=sample_dept.id, is_active=True))
+    prod_a2 = product_repo.add(Product(code="FPA02", description="A2 Inactive", department_id=sample_dept.id, is_active=False))
+    prod_b1 = product_repo.add(Product(code="FPB01", description="B1 Active Other", department_id=other_dept.id, is_active=True))
+    prod_b2 = product_repo.add(Product(code="FPB02", description="B2 Active Other", department_id=other_dept.id, is_active=True))
+    prod_b3 = product_repo.add(Product(code="FPB03", description="B3 Inactive Other", department_id=other_dept.id, is_active=False))
+
+    # Assume get_all or search supports filters and pagination
+    # filter_params = {"department_id": X, "is_active": Y}
+    
+    # Filter by sample_dept.id
+    results_dept1 = product_repo.get_all(filter_params={"department_id": sample_dept.id})
+    assert len(results_dept1) == 2
+    assert {p.code for p in results_dept1} == {"FPA01", "FPA02"}
+
+    # Filter by other_dept.id
+    results_dept2 = product_repo.get_all(filter_params={"department_id": other_dept.id})
+    assert len(results_dept2) == 3
+    assert {p.code for p in results_dept2} == {"FPB01", "FPB02", "FPB03"}
+
+    # Filter by is_active = True
+    results_active = product_repo.get_all(filter_params={"is_active": True})
+    assert len(results_active) == 3
+    assert {p.code for p in results_active} == {"FPA01", "FPB01", "FPB02"}
+
+    # Filter by is_active = False
+    results_inactive = product_repo.get_all(filter_params={"is_active": False})
+    assert len(results_inactive) == 2
+    assert {p.code for p in results_inactive} == {"FPA02", "FPB03"}
+
+    # Combined filter: other_dept and is_active = True
+    results_combined = product_repo.get_all(filter_params={"department_id": other_dept.id, "is_active": True})
+    assert len(results_combined) == 2
+    assert {p.code for p in results_combined} == {"FPB01", "FPB02"}
+
+    # Test pagination with filtering (active products)
+    # Get first page (limit 2)
+    page1_active = product_repo.get_all(filter_params={"is_active": True}, limit=2, offset=0)
+    assert len(page1_active) == 2
+
+    # Get second page (limit 2, offset 2)
+    page2_active = product_repo.get_all(filter_params={"is_active": True}, limit=2, offset=2)
+    assert len(page2_active) == 1 # Only 1 remaining active product
+
+    # Ensure pages don't overlap (simple id check)
+    page1_ids = {p.id for p in page1_active}
+    page2_ids = {p.id for p in page2_active}
+    assert not page1_ids.intersection(page2_ids)
+
+def test_get_all_products_sorting(product_repo, sample_dept, test_db_session):
+    """Test retrieving products with sorting by description and sell price."""
+    # Clean existing products first
+    test_db_session.query(ProductOrm).delete()
+
+    # Add products with varying descriptions and prices
+    prod_b = product_repo.add(Product(code="SORT01", description="Banana", sell_price=1.5, department_id=sample_dept.id))
+    prod_a = product_repo.add(Product(code="SORT02", description="Apple", sell_price=2.0, department_id=sample_dept.id))
+    prod_c = product_repo.add(Product(code="SORT03", description="Cherry", sell_price=1.0, department_id=sample_dept.id))
+    prod_d = product_repo.add(Product(code="SORT04", description="Apple Pie", sell_price=3.0, department_id=sample_dept.id, is_active=False))
+
+    # Assume get_all or search supports a sort_by parameter (e.g., 'description_asc', 'sell_price_desc')
+
+    # Sort by description ascending
+    sorted_desc_asc = product_repo.get_all(sort_by="description_asc")
+    assert len(sorted_desc_asc) == 4
+    assert [p.code for p in sorted_desc_asc] == ["SORT02", "SORT04", "SORT01", "SORT03"] # Apple, Apple Pie, Banana, Cherry
+
+    # Sort by description descending
+    sorted_desc_desc = product_repo.get_all(sort_by="description_desc")
+    assert len(sorted_desc_desc) == 4
+    assert [p.code for p in sorted_desc_desc] == ["SORT03", "SORT01", "SORT04", "SORT02"] # Cherry, Banana, Apple Pie, Apple
+
+    # Sort by sell_price ascending
+    sorted_price_asc = product_repo.get_all(sort_by="sell_price_asc")
+    assert len(sorted_price_asc) == 4
+    assert [p.code for p in sorted_price_asc] == ["SORT03", "SORT01", "SORT02", "SORT04"] # 1.0, 1.5, 2.0, 3.0
+
+    # Sort by sell_price descending
+    sorted_price_desc = product_repo.get_all(sort_by="sell_price_desc")
+    assert len(sorted_price_desc) == 4
+    assert [p.code for p in sorted_price_desc] == ["SORT04", "SORT02", "SORT01", "SORT03"] # 3.0, 2.0, 1.5, 1.0
+
+    # Test combined filtering and sorting
+    # Get active products, sorted by price descending
+    filtered_sorted = product_repo.get_all(filter_params={"is_active": True}, sort_by="sell_price_desc")
+    assert len(filtered_sorted) == 3 # prod_d (Apple Pie) is inactive
+    assert [p.code for p in filtered_sorted] == ["SORT02", "SORT01", "SORT03"] # 2.0, 1.5, 1.0 

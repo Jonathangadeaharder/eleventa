@@ -111,3 +111,52 @@ class TestSQLiteCashDrawerRepository:
         today_entries = repo.get_today_entries()
         assert any(e.entry_type == CashDrawerEntryType.IN for e in today_entries)
         assert all(e.timestamp.date() == today.date() for e in today_entries)
+
+    def test_get_entries_by_type(self, test_db_session):
+        repo = SQLiteCashDrawerRepository(test_db_session)
+        # Add various entry types
+        repo.add_entry(self.create_entry(CashDrawerEntryType.START, "100"))
+        repo.add_entry(self.create_entry(CashDrawerEntryType.SALE, "50"))
+        repo.add_entry(self.create_entry(CashDrawerEntryType.SALE, "25"))
+        repo.add_entry(self.create_entry(CashDrawerEntryType.OUT, "10"))
+
+        # Test retrieving by SALE type
+        sale_entries = repo.get_entries_by_type(CashDrawerEntryType.SALE.value)
+        assert len(sale_entries) == 2
+        assert all(e.entry_type == CashDrawerEntryType.SALE for e in sale_entries)
+
+        # Test retrieving by OUT type
+        out_entries = repo.get_entries_by_type(CashDrawerEntryType.OUT.value)
+        assert len(out_entries) == 1
+        assert out_entries[0].entry_type == CashDrawerEntryType.OUT
+        assert out_entries[0].amount == Decimal("10.00")
+
+        # Test retrieving a type with no entries
+        close_entries = repo.get_entries_by_type(CashDrawerEntryType.CLOSE.value)
+        assert len(close_entries) == 0
+
+    def test_get_last_start_entry(self, test_db_session):
+        repo = SQLiteCashDrawerRepository(test_db_session)
+        now = datetime.now()
+        start1 = self.create_entry(CashDrawerEntryType.START, "100", ts=now - timedelta(hours=1))
+        start2 = self.create_entry(CashDrawerEntryType.START, "150", ts=now) # Most recent
+        other = self.create_entry(CashDrawerEntryType.SALE, "50", ts=now + timedelta(hours=1))
+        repo.add_entry(start1)
+        repo.add_entry(start2)
+        repo.add_entry(other)
+
+        # Get last start entry
+        last_start = repo.get_last_start_entry()
+        assert last_start is not None
+        assert last_start.id == start2.id
+        assert last_start.entry_type == CashDrawerEntryType.START
+        assert last_start.amount == Decimal("150.00")
+
+    def test_get_last_start_entry_none(self, test_db_session):
+        repo = SQLiteCashDrawerRepository(test_db_session)
+        # Add only non-start entries
+        repo.add_entry(self.create_entry(CashDrawerEntryType.SALE, "50"))
+        repo.add_entry(self.create_entry(CashDrawerEntryType.OUT, "10"))
+
+        last_start = repo.get_last_start_entry()
+        assert last_start is None

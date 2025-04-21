@@ -38,8 +38,9 @@ class TestSqliteCustomerRepository(unittest.TestCase):
         self.transaction.rollback() # Rollback changes made during the test
         self.session.close()
 
-    def _add_sample_customer(self, name="Test Customer", cuit="12345678") -> Customer:
-        customer = Customer(name=name, cuit=cuit, email=f"{name.lower().replace(' ', '.')}@test.com")
+    def _add_sample_customer(self, name="Test Customer", cuit="12345678", **kwargs) -> Customer:
+        email = kwargs.pop("email", f"{name.lower().replace(' ', '.')}@test.com")
+        customer = Customer(name=name, cuit=cuit, email=email, **kwargs)
         return self.repository.add(customer)
 
     def test_add_customer(self):
@@ -72,6 +73,23 @@ class TestSqliteCustomerRepository(unittest.TestCase):
         
         # Since the repository already rolled back, our transaction is now closed
         # We need to start a new one for the test to continue
+        self.transaction = self.session.begin_nested()
+
+    def test_add_customer_duplicate_email(self):
+        """Test adding a customer with a duplicate email raises ValueError."""
+        # Add a customer with a specific email
+        email_to_test = "unique.email@example.com"
+        customer1 = Customer(name="First User", cuit="10101010", email=email_to_test)
+        self.repository.add(customer1)
+        
+        # Create another customer with a different CUIT but the same email
+        duplicate_customer = Customer(name="Second User", cuit="20202020", email=email_to_test)
+        
+        # Expect a ValueError (or potentially IntegrityError wrapped as ValueError)
+        with self.assertRaises(ValueError):
+            self.repository.add(duplicate_customer)
+        
+        # Re-establish transaction similar to duplicate CUIT test
         self.transaction = self.session.begin_nested()
 
     def test_get_customer_by_id(self):
@@ -190,6 +208,73 @@ class TestSqliteCustomerRepository(unittest.TestCase):
 
         results_no_match = self.repository.search_by_name("xyz")
         self.assertEqual(len(results_no_match), 0)
+
+    def test_get_all_customers_pagination(self):
+        """Test retrieving customers with pagination."""
+        # Add more customers than the limit
+        self._add_sample_customer(name="Customer P1", cuit="p1")
+        self._add_sample_customer(name="Customer P2", cuit="p2")
+        self._add_sample_customer(name="Customer P3", cuit="p3")
+        self._add_sample_customer(name="Customer P4", cuit="p4")
+
+        # Assume get_all supports limit and offset
+        # Get first page (limit 2)
+        page1 = self.repository.get_all(limit=2, offset=0)
+        self.assertEqual(len(page1), 2)
+
+        # Get second page (limit 2, offset 2)
+        page2 = self.repository.get_all(limit=2, offset=2)
+        self.assertEqual(len(page2), 2)
+
+        # Ensure pages have different customers (simple check based on IDs)
+        page1_ids = {c.id for c in page1}
+        page2_ids = {c.id for c in page2}
+        self.assertFalse(page1_ids.intersection(page2_ids))
+
+        # Get page beyond results
+        page3 = self.repository.get_all(limit=2, offset=4)
+        self.assertEqual(len(page3), 0)
+
+    def test_search_customers_filtering_and_sorting(self):
+        """Test searching customers with filtering and sorting."""
+        # Add customers with varying properties
+        cust_a = self._add_sample_customer(name="Alice Active", cuit="f1", is_active=True)
+        cust_b = self._add_sample_customer(name="Bob Inactive", cuit="f2", is_active=False)
+        cust_c = self._add_sample_customer(name="Charlie Active", cuit="f3", is_active=True)
+
+        # Assume a search method exists: search(filters={}, sort_by=None, limit=None, offset=None)
+        
+        # Filter by is_active=True
+        active_customers = self.repository.search(filters={"is_active": True})
+        self.assertEqual(len(active_customers), 2)
+        active_names = {c.name for c in active_customers}
+        self.assertIn("Alice Active", active_names)
+        self.assertIn("Charlie Active", active_names)
+
+        # Filter by is_active=False
+        inactive_customers = self.repository.search(filters={"is_active": False})
+        self.assertEqual(len(inactive_customers), 1)
+        self.assertEqual(inactive_customers[0].name, "Bob Inactive")
+
+        # Sort by name ascending
+        sorted_asc = self.repository.search(sort_by="name_asc") # Assuming 'name_asc' convention
+        self.assertEqual(len(sorted_asc), 3)
+        self.assertEqual(sorted_asc[0].name, "Alice Active")
+        self.assertEqual(sorted_asc[1].name, "Bob Inactive")
+        self.assertEqual(sorted_asc[2].name, "Charlie Active")
+
+        # Sort by name descending
+        sorted_desc = self.repository.search(sort_by="name_desc") # Assuming 'name_desc' convention
+        self.assertEqual(len(sorted_desc), 3)
+        self.assertEqual(sorted_desc[0].name, "Charlie Active")
+        self.assertEqual(sorted_desc[1].name, "Bob Inactive")
+        self.assertEqual(sorted_desc[2].name, "Alice Active")
+
+        # Combined filter and sort
+        active_sorted_desc = self.repository.search(filters={"is_active": True}, sort_by="name_desc")
+        self.assertEqual(len(active_sorted_desc), 2)
+        self.assertEqual(active_sorted_desc[0].name, "Charlie Active")
+        self.assertEqual(active_sorted_desc[1].name, "Alice Active")
 
 
 if __name__ == '__main__':

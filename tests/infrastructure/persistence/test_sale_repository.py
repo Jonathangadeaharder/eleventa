@@ -761,12 +761,86 @@ class TestSaleRepository:
         # Should return revenue, cost, profit, margin
         assert "revenue" in result and "cost" in result and "profit" in result and "margin" in result
 
-        assert abs(result["revenue"] - 40.0) < 0.01
+        assert abs(result["revenue"] - 40.00) < 0.01
         # Cost: (2*5.0) + (1*8.0) = 10 + 8 = 18
         assert abs(result["cost"] - 18.0) < 0.01
         assert abs(result["profit"] - 22.0) < 0.01
         # Margin: profit / revenue
         assert abs(result["margin"] - (22.0 / 40.0)) < 0.01
+
+    def test_get_sale_by_id(self, test_db_session):
+        """Test retrieving a single sale by its ID."""
+        repo = _HelperSqliteSaleRepository(test_db_session)
+        
+        # Create a sale to test retrieval (ensures at least one sale exists)
+        item = SaleItem(product_id=self.prod1.id, quantity=Decimal("1"), unit_price=Decimal("10.00"), product_code=self.prod1.code, product_description=self.prod1.description)
+        test_sale = Sale(items=[item], timestamp=datetime.now())
+        repo.add_sale(test_sale)
+
+        # Retrieve using the repository method
+        retrieved_sale = repo.get_by_id(test_sale.id)
+
+        assert retrieved_sale is not None
+        assert retrieved_sale.id == test_sale.id
+        assert retrieved_sale.timestamp == test_sale.timestamp
+        assert retrieved_sale.payment_type == test_sale.payment_type
+        assert len(retrieved_sale.items) == len(test_sale.items)
+        
+        # Compare item details (e.g., product codes)
+        retrieved_item_codes = sorted([item.product_code for item in retrieved_sale.items])
+        test_item_codes = sorted([item.product_code for item in test_sale.items])
+        assert retrieved_item_codes == test_item_codes
+
+        # Test retrieving non-existent ID
+        non_existent_sale = repo.get_by_id(999999)
+        assert non_existent_sale is None
+
+    def test_get_sales_by_period_filtering(self, test_db_session):
+        """Test retrieving sales within a specific date/time range."""
+        repo = _HelperSqliteSaleRepository(test_db_session)
+        
+        # Define a period that should capture some, but not all, sales from setup
+        start_period = datetime(2023, 10, 26, 10, 0, 0)
+        end_period = datetime(2023, 10, 26, 14, 0, 0)
+
+        # Create sample sales for filtering test
+        item_in = SaleItem(
+            product_id=self.prod1.id,
+            quantity=Decimal("1"),
+            unit_price=Decimal("10.00"),
+            product_code=self.prod1.code,
+            product_description=self.prod1.description
+        )
+        sale_in = Sale(items=[item_in], timestamp=start_period)
+        repo.add_sale(sale_in)
+        # Sale outside period
+        item_out = SaleItem(
+            product_id=self.prod2.id,
+            quantity=Decimal("1"),
+            unit_price=Decimal("20.00"),
+            product_code=self.prod2.code,
+            product_description=self.prod2.description
+        )
+        sale_out = Sale(items=[item_out], timestamp=datetime(2023, 10, 26, 15, 0, 0))
+        repo.add_sale(sale_out)
+
+        # Retrieve sales within the period
+        sales_in_period = repo.get_sales_by_period(start_period, end_period)
+
+        # Assert that we got some sales, but less than the total setup
+        all_sales_count = test_db_session.query(SaleOrm).count()
+        assert len(sales_in_period) > 0
+        assert len(sales_in_period) < all_sales_count
+
+        # Verify all retrieved sales fall within the period
+        for sale in sales_in_period:
+            assert start_period <= sale.timestamp <= end_period
+        
+        # Test a period with no sales
+        empty_start = datetime(2020, 1, 1, 0, 0, 0)
+        empty_end = datetime(2020, 1, 1, 23, 59, 59)
+        sales_in_empty_period = repo.get_sales_by_period(empty_start, empty_end)
+        assert len(sales_in_empty_period) == 0
 
 if __name__ == '__main__':
     unittest.main()

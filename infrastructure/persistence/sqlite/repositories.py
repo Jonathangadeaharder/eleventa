@@ -424,9 +424,31 @@ class SqliteProductRepository(IProductRepository):
             # Log exception but return None for missing product instead of raising error
             return None
 
-    def get_all(self) -> List[Product]:
-        # Use joinedload to eager load departments for all products
-        stmt = select(ProductOrm).options(joinedload(ProductOrm.department)).where(ProductOrm.is_active == True).order_by(ProductOrm.description)
+    def get_all(self, filter_params: Optional[Dict[str, Any]] = None, sort_by: Optional[str] = None, limit: Optional[int] = None, offset: Optional[int] = None) -> List[Product]:
+        """Retrieve products with optional filtering, sorting, and pagination."""
+        stmt = select(ProductOrm).options(joinedload(ProductOrm.department))
+        # Filters
+        if filter_params:
+            for field, value in filter_params.items():
+                stmt = stmt.where(getattr(ProductOrm, field) == value)
+        # Sorting
+        if sort_by:
+            parts = sort_by.rsplit('_', 1)
+            if len(parts) == 2:
+                field_name, direction = parts
+                column = getattr(ProductOrm, field_name, None)
+                if column is not None:
+                    if direction.lower() == 'asc':
+                        stmt = stmt.order_by(column.asc())
+                    elif direction.lower() == 'desc':
+                        stmt = stmt.order_by(column.desc())
+        else:
+            stmt = stmt.order_by(ProductOrm.description)
+        # Pagination
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        if offset is not None:
+            stmt = stmt.offset(offset)
         results = self.session.execute(stmt).scalars().all()
         return [_map_product_orm_to_model(prod_orm) for prod_orm in results]
 
@@ -471,11 +493,12 @@ class SqliteProductRepository(IProductRepository):
             raise ValueError(f"Error updating product {product.id}: Possible duplicate data (e.g., code). {e}")
 
     def delete(self, product_id: int) -> None:
+        """Delete a product by its ID."""
         prod_orm = self.session.get(ProductOrm, product_id)
-        if prod_orm:
-            # Check inventory dependency in service layer
-            self.session.delete(prod_orm)
-            self.session.flush()
+        if not prod_orm:
+            return
+        self.session.delete(prod_orm)
+        self.session.flush()
 
     def search(self, term: str) -> List[Product]:
         search_pattern = f"%{term.lower()}%"
@@ -491,11 +514,18 @@ class SqliteProductRepository(IProductRepository):
         return [_map_product_orm_to_model(prod_orm) for prod_orm in results]
 
     def get_low_stock(self, threshold: Optional[float] = None) -> List[Product]:
+        """Retrieves products that are low in stock."""
         stmt = select(ProductOrm).options(joinedload(ProductOrm.department)).where(
             ProductOrm.is_active == True,
             ProductOrm.uses_inventory == True,
+            ProductOrm.min_stock.isnot(None),
             ProductOrm.quantity_in_stock <= ProductOrm.min_stock
-        ).order_by(ProductOrm.description)
+        )
+        # Apply explicit threshold if provided
+        if threshold is not None:
+            stmt = stmt.where(ProductOrm.quantity_in_stock <= threshold)
+        stmt = stmt.order_by(ProductOrm.description)
+
         results = self.session.execute(stmt).scalars().all()
         return [_map_product_orm_to_model(prod_orm) for prod_orm in results]
 
@@ -719,7 +749,7 @@ class SqliteSaleRepository(ISaleRepository):
             func.sum(SaleItemOrm.quantity * SaleItemOrm.unit_price).label('total_sales'),
             func.count(func.distinct(SaleOrm.id)).label('num_sales')
         ).join(
-            SaleOrm, SaleOrm.id == SaleItemOrm.sale_id
+            SaleItemOrm, SaleOrm.id == SaleItemOrm.sale_id
         ).filter(
             SaleOrm.date_time >= start_time,
             SaleOrm.date_time <= end_time
@@ -1100,6 +1130,15 @@ class SqliteCustomerRepository(ICustomerRepository):
                 if existing:
                     raise ValueError(f"Customer with CUIT {customer.cuit} already exists")
 
+            # Check for duplicate email
+            if customer.email:
+                existing_email = self.session.execute(
+                    text("SELECT id FROM customers WHERE email = :email"),
+                    {"email": customer.email}
+                ).scalar_one_or_none()
+                if existing_email:
+                    raise ValueError(f"Customer with email {customer.email} already exists")
+
             # Create a new CustomerOrm object and set attributes individually
             customer_orm = CustomerOrm()
             # Assign customer.id directly (should be uuid.UUID)
@@ -1139,8 +1178,13 @@ class SqliteCustomerRepository(ICustomerRepository):
         cust_orm = self.session.get(CustomerOrm, customer_id)
         return _map_customer_orm_to_model(cust_orm)
 
-    def get_all(self) -> List[Customer]:
+    def get_all(self, limit: Optional[int] = None, offset: Optional[int] = None) -> List[Customer]:
+        """Retrieve all active customers with optional pagination."""
         stmt = select(CustomerOrm).where(CustomerOrm.is_active == True).order_by(CustomerOrm.name)
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        if offset is not None:
+            stmt = stmt.offset(offset)
         results = self.session.execute(stmt).scalars().all()
         return [_map_customer_orm_to_model(cust_orm) for cust_orm in results]
 
@@ -1183,17 +1227,32 @@ class SqliteCustomerRepository(ICustomerRepository):
         self.session.flush()
         return True # Successfully deleted
 
-    def search(self, search_term: str) -> List[Customer]:
-        search_pattern = f"%{search_term.lower()}%"
-        stmt = select(CustomerOrm).where(
-            CustomerOrm.is_active == True,
-            or_(
-                func.lower(CustomerOrm.name).like(search_pattern),
-                func.lower(CustomerOrm.email).like(search_pattern),
-                func.lower(CustomerOrm.phone).like(search_pattern),
-                func.lower(CustomerOrm.cuit).like(search_pattern)
-            )
-        ).order_by(CustomerOrm.name)
+    def search(self, filters: Optional[Dict[str, Any]] = None, sort_by: Optional[str] = None, limit: Optional[int] = None, offset: Optional[int] = None) -> List[Customer]:
+        """Search customers with filtering, sorting, and pagination."""
+        stmt = select(CustomerOrm)
+        # Apply filters
+        if filters:
+            for field, value in filters.items():
+                stmt = stmt.where(getattr(CustomerOrm, field) == value)
+        # Apply sorting
+        if sort_by:
+            parts = sort_by.rsplit('_', 1)
+            if len(parts) == 2:
+                field_name, direction = parts
+                column = getattr(CustomerOrm, field_name, None)
+                if column is not None:
+                    if direction.lower() == 'asc':
+                        stmt = stmt.order_by(column.asc())
+                    elif direction.lower() == 'desc':
+                        stmt = stmt.order_by(column.desc())
+        else:
+            # Default order by name
+            stmt = stmt.order_by(CustomerOrm.name)
+        # Apply pagination
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        if offset is not None:
+            stmt = stmt.offset(offset)
         results = self.session.execute(stmt).scalars().all()
         return [_map_customer_orm_to_model(cust_orm) for cust_orm in results]
 
@@ -1214,7 +1273,7 @@ class SqliteCustomerRepository(ICustomerRepository):
         return _map_customer_orm_to_model(cust_orm)
 
     def update_balance(self, customer_id: int, new_balance: float) -> bool:
-        # Use SQLAlchemy update for targeted update
+        """Update the credit balance of a customer."""
         stmt = update(CustomerOrm).where(CustomerOrm.id == customer_id).values(credit_balance=new_balance)
         result = self.session.execute(stmt)
         self.session.flush()
@@ -1633,6 +1692,7 @@ class SqliteInvoiceRepository(IInvoiceRepository):
             
             # Return the mapped domain model with the newly assigned ID
             invoice.id = invoice_orm.id
+            
             return invoice
             
         except Exception as e:

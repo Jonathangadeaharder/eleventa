@@ -20,6 +20,18 @@ omit =
     */shibokensupport/*
     */signature_bootstrap.py
     */test_*.py
+    # Utility scripts
+    run_unified_tests.py
+    copy_files_to_clipboard.py
+    download_icons.py
+    python-file-contents-collector.py
+    setup.py
+    # Alembic migrations
+    alembic/*
+    alembic/versions/*
+    # Configuration files
+    conftest.py
+    config.py
 
 [paths]
 source =
