@@ -18,12 +18,12 @@ class TestReceiptGeneration(unittest.TestCase):
         self.mock_inventory_service = MagicMock()
         self.mock_customer_service = MagicMock()
         
-        # Create the service with mocked dependencies
+        # Create the service with mocked dependencies (factories for repositories)
         self.sale_service = SaleService(
-            sale_repository=self.mock_sale_repo,
-            product_repository=self.mock_product_repo,
-            inventory_service=self.mock_inventory_service,
-            customer_service=self.mock_customer_service
+            lambda session=None: self.mock_sale_repo,  # sale_repository_factory
+            lambda session=None: self.mock_product_repo,  # product_repository_factory
+            self.mock_inventory_service,
+            self.mock_customer_service
         )
         
         # Sample sale data

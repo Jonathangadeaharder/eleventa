@@ -1,2 +1,0 @@
-# This is a binary SQLite database file. It cannot be read as text.
-# This text file serves as documentation for the binary database file eleventa_clone.db 

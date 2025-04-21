@@ -29,7 +29,7 @@ class CustomerService:
             raise ValueError("Invalid email format")
         # Add other validation rules here (e.g., phone format, duplicate checks if not handled by DB)
 
-    def add_customer(self, name: str, phone: str | None = None, email: str | None = None, address: str | None = None, credit_limit: float = 0.0, credit_balance: float = 0.0) -> Customer:
+    def add_customer(self, name: str, phone: str | None = None, email: str | None = None, address: str | None = None, credit_limit: Decimal = Decimal('0.00'), credit_balance: Decimal = Decimal('0.00')) -> Customer:
         self._validate_customer_data(name, email)
         with session_scope() as session:
             repo = self._customer_repo_factory(session)
@@ -47,7 +47,7 @@ class CustomerService:
             logger.info(f"Added customer: {added.name} (ID: {added.id})")
             return added
 
-    def update_customer(self, customer_id: int, name: str, phone: str | None = None, email: str | None = None, address: str | None = None, credit_limit: float = 0.0) -> Customer:
+    def update_customer(self, customer_id: int, name: str, phone: str | None = None, email: str | None = None, address: str | None = None, credit_limit: Decimal = Decimal('0.00')) -> Customer:
         self._validate_customer_data(name, email)
         with session_scope() as session:
             repo = self._customer_repo_factory(session)
@@ -55,8 +55,8 @@ class CustomerService:
             if not customer_to_update:
                 raise ValueError(f"Customer with ID {customer_id} not found")
 
-            # Keep original balance
-            original_balance = customer_to_update.credit_balance
+            # Keep original balance (ensure it's Decimal)
+            original_balance = customer_to_update.credit_balance if isinstance(customer_to_update.credit_balance, Decimal) else Decimal(str(customer_to_update.credit_balance))
 
             # Update fields (excluding credit_balance)
             customer_to_update.name = name
@@ -69,9 +69,17 @@ class CustomerService:
 
             # Restore original balance in the returned object as repo.update might overwrite it
             # The actual balance in DB should be unchanged if repo.update doesn't touch it
-            updated_customer_obj.credit_balance = original_balance
-            logger.info(f"Updated customer info: {updated_customer_obj.name} (ID: {updated_customer_obj.id})")
-            return updated_customer_obj
+            if updated_customer_obj:
+                 updated_customer_obj.credit_balance = original_balance
+                 logger.info(f"Updated customer info: {updated_customer_obj.name} (ID: {updated_customer_obj.id})")
+                 return updated_customer_obj
+            else:
+                 # Should ideally not happen if get_by_id worked, but handle case
+                 logger.error(f"Failed to update customer {customer_id} in repository.")
+                 # Return the original object perhaps, or raise error?
+                 # For now, return the object we tried to update, with original balance restored
+                 customer_to_update.credit_balance = original_balance
+                 return customer_to_update
 
     def delete_customer(self, customer_id: int) -> bool:
         with session_scope() as session:
@@ -82,9 +90,10 @@ class CustomerService:
                 logger.warning(f"Attempted to delete non-existent customer ID: {customer_id}")
                 return False
 
-            # Constraint check
-            if customer_to_delete.credit_balance is not None and abs(customer_to_delete.credit_balance) > 0.001:
-                raise ValueError(f"Cannot delete customer {customer_to_delete.name} with an outstanding balance ({customer_to_delete.credit_balance:.2f})")
+            # Constraint check (ensure balance is Decimal)
+            balance = customer_to_delete.credit_balance if isinstance(customer_to_delete.credit_balance, Decimal) else Decimal(str(customer_to_delete.credit_balance))
+            if balance is not None and abs(balance) > Decimal('0.001'):
+                raise ValueError(f"Cannot delete customer {customer_to_delete.name} with an outstanding balance ({balance:.2f})")
 
             deleted = repo.delete(customer_id)
             if deleted:
@@ -124,8 +133,9 @@ class CustomerService:
             current_balance = Decimal(str(customer.credit_balance))
             new_balance = current_balance + amount # Payment increases balance (reduces debt)
 
-            # Update balance using the repo
-            updated = cust_repo.update_balance(customer_id, float(new_balance))
+            # Update balance using the repo (assuming repo method accepts Decimal or converts)
+            # If repo.update_balance expects float, conversion needed here
+            updated = cust_repo.update_balance(customer_id, new_balance)
             if not updated:
                 raise Exception(f"Failed to update balance for customer ID {customer_id}")
 
@@ -155,7 +165,8 @@ class CustomerService:
         current_balance = Decimal(str(customer.credit_balance))
         new_balance = current_balance - amount # Debt increases, balance decreases
 
-        updated = cust_repo.update_balance(customer_id, float(new_balance))
+        # Update balance using the repo (assuming repo method accepts Decimal or converts)
+        updated = cust_repo.update_balance(customer_id, new_balance)
         if not updated:
              raise Exception(f"Failed to update balance for customer ID {customer_id} within transaction.")
         logger.info(f"Increased debt for customer {customer_id} by {amount}. New balance: {new_balance:.2f}")

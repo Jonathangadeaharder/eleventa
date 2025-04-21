@@ -3,6 +3,7 @@ import pytest
 from decimal import Decimal
 from datetime import datetime
 import uuid
+from typing import Optional
 
 # Import domain models
 from core.models.sale import Sale, SaleItem
@@ -103,6 +104,23 @@ class _HelperSqliteSaleRepository(ISaleRepository):
             # Map the sale
             return self._map_sale_orm_to_model(sale_orm, sale_items)
         except Exception as e:
+            return None
+    
+    def get_by_id(self, sale_id: int) -> Optional[Sale]:
+        """Get a single sale by its ID, including its items."""
+        try:
+            sale_orm = self._session.query(SaleOrm).filter(SaleOrm.id == sale_id).first()
+            if not sale_orm:
+                return None
+
+            # Get associated items eagerly (adjust if lazy loading is default and preferred)
+            items_orm = self._session.query(SaleItemOrm).filter(SaleItemOrm.sale_id == sale_id).all()
+            sale_items = [self._map_sale_item_orm_to_model(item) for item in items_orm]
+
+            return self._map_sale_orm_to_model(sale_orm, sale_items)
+        except Exception as e:
+            # Log the error appropriately
+            # logger.error(f"Error retrieving sale with ID {sale_id}: {e}")
             return None
     
     def _map_sale_item_orm_to_model(self, item_orm):

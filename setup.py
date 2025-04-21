@@ -14,6 +14,7 @@ setup(
             "pytest-qt>=4.0.0",
             "pytest-mock>=3.0.0",
             "pytest-timeout>=2.0.0",
+            "pytest-cov",
         ],
     },
 ) 

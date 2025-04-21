@@ -1,3 +1,8 @@
+"""
+Tests for table model UI components.
+Focus: Data access, row/column logic, and Qt model integration.
+"""
+
 import pytest
 from decimal import Decimal
 from ui.models.table_models import SaleItemTableModel, CustomerTableModel
@@ -14,7 +19,7 @@ def make_item(product_id, code, desc, qty, price):
         product_description=desc
     )
 
-def test_add_items_and_total():
+def test_add_items_and_total(qtbot):
     model = SaleItemTableModel()
     item1 = make_item(1, "A001", "Apple", "2", "1.50")
     item2 = make_item(2, "B002", "Banana", "3", "2.00")
@@ -28,7 +33,7 @@ def test_add_items_and_total():
     total = sum(i.subtotal for i in items)
     assert total == expected_total
 
-def test_add_duplicate_product_no_merge():
+def test_add_duplicate_product_no_merge(qtbot):
     model = SaleItemTableModel()
     item1 = make_item(1, "A001", "Apple", "1", "1.50")
     item2 = make_item(1, "A001", "Apple", "2", "1.50")
@@ -52,7 +57,7 @@ def make_customer(name, phone=None, email=None, address=None, credit_limit=0.0, 
         credit_balance=credit_balance
     )
 
-def test_customer_table_model_data_and_update():
+def test_customer_table_model_data_and_update(qtbot):
     # Create two customers
     cust1 = make_customer("Alice", "123", "alice@example.com", "Street 1", 100.0, 50.0)
     cust2 = make_customer("Bob", None, None, None, 200.0, -10.0)

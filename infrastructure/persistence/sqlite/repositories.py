@@ -430,6 +430,15 @@ class SqliteProductRepository(IProductRepository):
         results = self.session.execute(stmt).scalars().all()
         return [_map_product_orm_to_model(prod_orm) for prod_orm in results]
 
+    def get_by_department_id(self, department_id: int) -> List[Product]:
+        """Retrieves all products belonging to a specific department."""
+        stmt = select(ProductOrm).options(joinedload(ProductOrm.department)).where(
+            ProductOrm.department_id == department_id,
+            ProductOrm.is_active == True # Optionally filter by active products
+        ).order_by(ProductOrm.description)
+        results = self.session.execute(stmt).scalars().all()
+        return [_map_product_orm_to_model(prod_orm) for prod_orm in results]
+
     def update(self, product: Product) -> None:
         if not product.id:
             raise ValueError("Cannot update product without an ID.")

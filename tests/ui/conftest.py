@@ -9,7 +9,8 @@ from PySide6.QtCore import QTimer, QObject, QEventLoop, QCoreApplication
 # Store original implementations to restore if needed
 _orig_methods = {}
 
-@pytest.fixture(scope="session", autouse=True) # Re-enable global patch
+# Re-enable global patching (disabling it didn't solve the core crash)
+@pytest.fixture(scope="session", autouse=True) 
 def patch_qt_dialogs():
     """
     Globally patch all Qt dialog classes to prevent them from blocking during tests.
@@ -52,4 +53,4 @@ def ensure_no_hanging_tests(request):
     """Set a timeout for each test to prevent hanging indefinitely."""
     marker = request.node.get_closest_marker("timeout")
     if not marker:
-        request.node.add_marker(pytest.mark.timeout(10)) 
+        request.node.add_marker(pytest.mark.timeout(10))

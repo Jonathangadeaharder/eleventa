@@ -207,12 +207,14 @@ class CashDrawerView(QWidget):
             
     def _handle_open_drawer(self):
         """Handle opening or closing the cash drawer."""
+        print("_handle_open_drawer called")
         summary = self.cash_drawer_service.get_drawer_summary(self.current_drawer_id)
         is_open = summary.get('is_open', False)
         
         if is_open:
             # Drawer is open, ask if user wants to close it
             # For now, just show message - in real app would implement proper closing flow
+            print("Drawer is open, showing information message")
             QMessageBox.information(
                 self, 
                 "Cierre de Caja", 
@@ -221,30 +223,19 @@ class CashDrawerView(QWidget):
             )
         else:
             # Drawer is closed, open it
-            dialog = OpenDrawerDialog(self)
+            # Use the correct dialog class name (alias) and parent
+            print("Drawer is closed, opening dialog")
+            dialog = OpenDrawerDialog(self.cash_drawer_service, self.user_id, self)
             if dialog.exec():
-                try:
-                    initial_amount = Decimal(dialog.amount_edit.text())
-                    description = dialog.description_edit.text()
-                    
-                    # Open the drawer
-                    self.cash_drawer_service.open_drawer(
-                        initial_amount=initial_amount,
-                        description=description,
-                        user_id=self.user_id,
-                        drawer_id=self.current_drawer_id
-                    )
-                    
-                    # Refresh the display
+                print("Dialog executed successfully")
+                # The dialog now handles the service call and message boxes internally
+                # We just need to refresh the view if it succeeded
+                if dialog.entry: # Check if the dialog successfully created an entry
+                    print("Dialog entry created, refreshing data")
                     self._refresh_data()
-                    
-                    QMessageBox.information(
-                        self, 
-                        "Caja Abierta", 
-                        f"Caja abierta exitosamente con un saldo inicial de {locale.currency(float(initial_amount), grouping=True)}"
-                    )
-                except ValueError as e:
-                    QMessageBox.warning(self, "Error", f"Error al abrir caja: {str(e)}")
+                # No need for try/except here as the dialog handles its own errors
+            else:
+                print("Dialog execution failed")
                     
     def _handle_add_cash(self):
         """Handle adding cash to the drawer."""
@@ -253,31 +244,14 @@ class CashDrawerView(QWidget):
         if not summary.get('is_open', False):
             QMessageBox.warning(self, "Error", "La caja debe estar abierta para agregar efectivo.")
             return
-            
-        dialog = CashMovementDialog("Agregar Efectivo", "Agregar", self)
+
+        # Use the correct dialog class name (alias), pass service/user_id, and parent
+        dialog = CashMovementDialog(self.cash_drawer_service, self.user_id, is_adding=True, parent=self)
         if dialog.exec():
-            try:
-                amount = Decimal(dialog.amount_edit.text())
-                description = dialog.description_edit.text()
-                
-                # Add cash to the drawer
-                self.cash_drawer_service.add_cash(
-                    amount=amount,
-                    description=description,
-                    user_id=self.user_id,
-                    drawer_id=self.current_drawer_id
-                )
-                
-                # Refresh the display
+            # The dialog now handles the service call and message boxes internally
+            # We just need to refresh the view if it succeeded
+            if dialog.entry: # Check if the dialog successfully created an entry
                 self._refresh_data()
-                
-                QMessageBox.information(
-                    self, 
-                    "Efectivo Agregado", 
-                    f"Se agregaron {locale.currency(float(amount), grouping=True)} a la caja."
-                )
-            except ValueError as e:
-                QMessageBox.warning(self, "Error", f"Error al agregar efectivo: {str(e)}")
                 
     def _handle_remove_cash(self):
         """Handle removing cash from the drawer."""
@@ -286,41 +260,14 @@ class CashDrawerView(QWidget):
         if not summary.get('is_open', False):
             QMessageBox.warning(self, "Error", "La caja debe estar abierta para retirar efectivo.")
             return
-            
-        dialog = CashMovementDialog("Retirar Efectivo", "Retirar", self)
+
+        # Use the correct dialog class name (alias), pass service/user_id, and parent
+        dialog = CashMovementDialog(self.cash_drawer_service, self.user_id, is_adding=False, parent=self)
         if dialog.exec():
-            try:
-                amount = Decimal(dialog.amount_edit.text())
-                description = dialog.description_edit.text()
-                
-                # Check if there's enough cash in the drawer
-                current_balance = summary.get('current_balance', Decimal('0.00'))
-                if amount > current_balance:
-                    QMessageBox.warning(
-                        self, 
-                        "Error", 
-                        f"No hay suficiente efectivo en la caja. Saldo actual: {locale.currency(float(current_balance), grouping=True)}"
-                    )
-                    return
-                
-                # Remove cash from the drawer
-                self.cash_drawer_service.remove_cash(
-                    amount=amount,
-                    description=description,
-                    user_id=self.user_id,
-                    drawer_id=self.current_drawer_id
-                )
-                
-                # Refresh the display
+             # The dialog now handles the service call and message boxes internally
+             # We just need to refresh the view if it succeeded
+            if dialog.entry: # Check if the dialog successfully created an entry
                 self._refresh_data()
-                
-                QMessageBox.information(
-                    self, 
-                    "Efectivo Retirado", 
-                    f"Se retiraron {locale.currency(float(amount), grouping=True)} de la caja."
-                )
-            except ValueError as e:
-                QMessageBox.warning(self, "Error", f"Error al retirar efectivo: {str(e)}")
                 
     def _print_report(self):
         """Print a cash drawer report."""

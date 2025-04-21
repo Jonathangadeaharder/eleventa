@@ -1,0 +1,21 @@
+---
+description:
+Overview of the Eleventa project structure and architecture
+globs:
+[*.py
+*.md
+README*
+]
+alwaysApply:
+true
+---
+---
+description:
+globs:
+alwaysApply: true
+---
+
+# Your rule content
+
+- You can @ files here
+- You can use markdown but dont have to

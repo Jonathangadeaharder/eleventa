@@ -1,5 +1,6 @@
 from typing import List, Optional, Callable, Any # Added Callable, Any
 from sqlalchemy.orm import Session # Needed for type hinting session passed in decrease_stock
+from decimal import Decimal # Added Decimal
 
 # Adjust imports based on project structure
 from core.interfaces.repository_interfaces import IInventoryRepository, IProductRepository
@@ -20,8 +21,8 @@ class InventoryService:
     def add_inventory(
         self,
         product_id: int,
-        quantity: float,
-        new_cost_price: Optional[float] = None,
+        quantity: Decimal,
+        new_cost_price: Optional[Decimal] = None,
         notes: Optional[str] = None,
         user_id: Optional[int] = None
     ) -> Product:
@@ -40,7 +41,9 @@ class InventoryService:
             if not product.uses_inventory:
                 raise ValueError(f"Product {product.code} does not use inventory control.")
 
-            new_quantity = product.quantity_in_stock + quantity
+            # Ensure quantity_in_stock is Decimal before adding
+            current_stock = product.quantity_in_stock if isinstance(product.quantity_in_stock, Decimal) else Decimal(str(product.quantity_in_stock))
+            new_quantity = current_stock + quantity
 
             # Update product stock (and cost if provided)
             prod_repo.update_stock(product_id, new_quantity, new_cost_price) # Use instantiated repo
@@ -65,7 +68,7 @@ class InventoryService:
     def adjust_inventory(
         self,
         product_id: int,
-        quantity: float,
+        quantity: Decimal,
         reason: str,
         user_id: Optional[int] = None
     ) -> Product:
@@ -84,7 +87,9 @@ class InventoryService:
             if not product.uses_inventory:
                 raise ValueError(f"Product {product.code} does not use inventory control.")
 
-            new_quantity = product.quantity_in_stock + quantity
+            # Ensure quantity_in_stock is Decimal before adding
+            current_stock = product.quantity_in_stock if isinstance(product.quantity_in_stock, Decimal) else Decimal(str(product.quantity_in_stock))
+            new_quantity = current_stock + quantity
 
             allow_negative_stock = False
             if new_quantity < 0 and not allow_negative_stock:
@@ -114,7 +119,7 @@ class InventoryService:
         self,
         session: Session, # Expects an active session
         product_id: int,
-        quantity: float,
+        quantity: Decimal,
         sale_id: int,
         user_id: Optional[int] = None
     ) -> None:
@@ -131,12 +136,16 @@ class InventoryService:
             raise ValueError(f"Product with ID {product_id} not found for sale item.")
         if not product.uses_inventory:
             raise ValueError(f"Product {product.code} does not use inventory control but was included in sale {sale_id}.")
-        
-        # Ensure quantity_in_stock is a number before comparison
-        current_stock = 0.0
-        if hasattr(product, 'quantity_in_stock') and isinstance(product.quantity_in_stock, (int, float)):
-            current_stock = product.quantity_in_stock
-            
+
+        # Ensure quantity_in_stock is Decimal before comparison/subtraction
+        current_stock = Decimal('0.0') # Initialize as Decimal
+        if hasattr(product, 'quantity_in_stock') and product.quantity_in_stock is not None:
+            try:
+                current_stock = Decimal(str(product.quantity_in_stock))
+            except Exception:
+                 # Handle case where conversion fails, though should ideally be Decimal already
+                 raise ValueError(f"Invalid stock quantity format for product {product.code}")
+
         new_quantity = current_stock - quantity
 
         allow_negative_stock_sales = False

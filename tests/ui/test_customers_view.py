@@ -1,3 +1,8 @@
+"""
+Tests for the CustomersView UI component.
+Focus: View loading, customer dialog field population, and data extraction.
+"""
+
 import pytest
 from PySide6.QtWidgets import QApplication
 from ui.views.customers_view import CustomersView
@@ -22,6 +27,7 @@ class DummyCustomerService(CustomerService):
         pass
 
 def test_customers_view_loads_and_has_buttons(app, qtbot):
+    """Should load CustomersView and verify presence of buttons."""
     service = DummyCustomerService()
     view = CustomersView(service)
     qtbot.addWidget(view)
@@ -37,6 +43,7 @@ def test_customers_view_loads_and_has_buttons(app, qtbot):
     view.refresh_customers()
 
 def test_customer_dialog_fields_populate_and_extract(app, qtbot):
+    """Should populate customer dialog fields and extract data correctly."""
     service = DummyCustomerService()
     dialog = CustomerDialog(service)
     qtbot.addWidget(dialog)

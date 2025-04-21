@@ -1,5 +1,5 @@
-from PyQt5.QtCore import Qt, QAbstractTableModel, QModelIndex, QVariant
-from PyQt5.QtGui import QBrush, QColor
+from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex
+from PySide6.QtGui import QBrush, QColor
 from datetime import datetime
 import locale
 from decimal import Decimal
@@ -26,15 +26,16 @@ class CashDrawerTableModel(QAbstractTableModel):
         """Return the number of columns."""
         return len(self._headers)
         
-    def data(self, index, role=Qt.DisplayRole):
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         """Return the data at the given index."""
         if not index.isValid() or not (0 <= index.row() < len(self._entries)):
-            return QVariant()
+            # In PySide6, return None for invalid/unhandled roles
+            return None 
             
         entry = self._entries[index.row()]
         column = index.column()
         
-        if role == Qt.DisplayRole:
+        if role == Qt.ItemDataRole.DisplayRole:
             # Format the data for display
             if column == 0:  # ID
                 return str(entry.id) if entry.id else ""
@@ -50,7 +51,8 @@ class CashDrawerTableModel(QAbstractTableModel):
                     CashDrawerEntryType.IN: "Entrada",
                     CashDrawerEntryType.OUT: "Salida",
                     CashDrawerEntryType.SALE: "Venta",
-                    CashDrawerEntryType.REFUND: "Devolución"
+                    CashDrawerEntryType.RETURN: "Retorno",
+                    CashDrawerEntryType.CLOSE: "Cierre"
                 }
                 return type_map.get(entry.entry_type, str(entry.entry_type))
                 
@@ -63,16 +65,17 @@ class CashDrawerTableModel(QAbstractTableModel):
                 return entry.description
                 
             elif column == 5:  # User
-                return entry.user_name if hasattr(entry, 'user_name') else str(entry.user_id)
+                # Use getattr for safer access
+                return getattr(entry, 'user_name', str(entry.user_id))
                 
-        elif role == Qt.TextAlignmentRole:
+        elif role == Qt.ItemDataRole.TextAlignmentRole:
             if column in (0, 1, 2, 5):  # ID, Timestamp, Type, User
-                return int(Qt.AlignLeft | Qt.AlignVCenter)
+                return Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
             elif column == 3:  # Amount
-                return int(Qt.AlignRight | Qt.AlignVCenter)
-            return int(Qt.AlignLeft | Qt.AlignVCenter)
+                return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            return Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
                 
-        elif role == Qt.BackgroundRole:
+        elif role == Qt.ItemDataRole.BackgroundRole:
             # Color rows based on entry type
             if entry.entry_type == CashDrawerEntryType.START:
                 return QBrush(QColor(230, 255, 230))  # Light green
@@ -81,13 +84,17 @@ class CashDrawerTableModel(QAbstractTableModel):
             elif entry.entry_type == CashDrawerEntryType.OUT:
                 return QBrush(QColor(255, 230, 230))  # Light red
                 
-        return QVariant()
+        # Return None for unhandled roles/cases
+        return None
         
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
+    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         """Return the header data."""
-        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self._headers[section]
-        return QVariant()
+        if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
+            # Check bounds
+            if 0 <= section < len(self._headers):
+                return self._headers[section]
+        # Return None for other cases
+        return None
         
     def setEntries(self, entries):
         """Update the entries in the model."""

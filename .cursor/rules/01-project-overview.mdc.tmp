@@ -1,0 +1,6 @@
+---
+description: Overview of the Eleventa project structure and architecture
+globs: [\
+*.py\, \*.md\, \README*\]
+alwaysApply: true
+---

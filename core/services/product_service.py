@@ -135,6 +135,13 @@ class ProductService:
             # Then call the method on the instantiated repository
             return prod_repo.get_by_code(code)
 
+    def get_product_by_id(self, product_id: int) -> Optional[Product]:
+        """Gets a product by its ID."""
+        logger.debug(f"Getting product with ID: {product_id}")
+        with session_scope() as session:
+            prod_repo = self.product_repo_factory(session)
+            return prod_repo.get_by_id(product_id)
+
     def _validate_department(self, session: Session, department: Department, is_update: bool = False):
         """Common validation for department add/update."""
         if not department.name:
@@ -182,10 +189,11 @@ class ProductService:
                  logger.warning(f"Attempted to delete non-existent department with ID: {department_id}")
                  return
 
-            # Check if department is in use
-            products_in_dept = prod_repo.search(f"department_id:{department_id}")
+            # Check if department is in use using the dedicated method
+            products_in_dept = prod_repo.get_by_department_id(department_id)
             if products_in_dept:
-                 raise ValueError(f"Departamento '{department.name}' no puede ser eliminado, está en uso por productos.")
+                 # Use a more specific error message if needed, or keep the current one
+                 raise ValueError(f"Departamento '{department.name}' no puede ser eliminado, está en uso por {len(products_in_dept)} producto(s).")
 
             logger.info(f"Deleting department with ID: {department_id}")
             dept_repo.delete(department_id)
@@ -208,4 +216,4 @@ class ProductService:
             updated_department = dept_repo.update(department_data)
             return updated_department
 
-    # Additional helper methods if needed 
+    # Additional helper methods if needed

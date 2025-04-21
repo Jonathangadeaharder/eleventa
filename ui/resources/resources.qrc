@@ -19,5 +19,6 @@
         <file>icons/print.png</file>
         <file>icons/cancel.png</file>
         <file>icons/save.png</file>
+        <file>icons/login.png</file>
     </qresource>
 </RCC> 

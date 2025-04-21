@@ -1,0 +1,29 @@
+[run]
+source = .
+parallel = True
+data_file = .coverage
+
+[report]
+# Exclude patterns
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise NotImplementedError
+    pass
+    raise ImportError
+
+# Files to omit from reporting
+omit =
+    */site-packages/*
+    */dist-packages/*
+    */pyscript*
+    */shibokensupport/*
+    */signature_bootstrap.py
+    */test_*.py
+
+[paths]
+source =
+    .
+
+[html]
+directory = htmlcov

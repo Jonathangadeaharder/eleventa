@@ -208,12 +208,6 @@ class SaleItemTableModel(QAbstractTableModel):
         """Returns a copy of all items currently in the model."""
         return list(self._items) # Return a copy
 
-    def clear(self):
-        """Removes all items from the model."""
-        self.beginResetModel()
-        self._items = []
-        self.endResetModel()
-
     def get_item_at_row(self, row: int) -> Optional[SaleItem]:
          """Gets the SaleItem object at a specific model row."""
          if 0 <= row < len(self._items):
@@ -506,11 +500,11 @@ class CashDrawerTableModel(QAbstractTableModel):
     def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.DisplayRole):
         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
             return self._headers[section]
-        return QVariant()
+        return None
         
     def data(self, index: QModelIndex, role=Qt.DisplayRole):
         if not index.isValid() or not (0 <= index.row() < len(self._entries)):
-            return QVariant()
+            return None
             
         entry = self._entries[index.row()]
         col = index.column()
@@ -549,7 +543,7 @@ class CashDrawerTableModel(QAbstractTableModel):
                 return Qt.AlignCenter
             return Qt.AlignLeft | Qt.AlignVCenter
                 
-        return QVariant()
+        return None
         
     def update_entries(self, entries: List[CashDrawerEntry]):
         """Update the model with new entries."""

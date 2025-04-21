@@ -7,7 +7,17 @@ for login, permission management, and sessions.
 import pytest
 from unittest.mock import MagicMock, patch
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QLineEdit, QPushButton, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton, QMessageBox
+
+# Import resources FIRST to ensure they are loaded before UI elements
+try:
+    # Import the actual compiled resource file (usually resources.py or similar)
+    import ui.resources.resources
+except ImportError:
+    print("Warning: Could not import Qt resources (ui.resources.resources). Icons might be missing.")
+    # If tests fail due to missing icons, ensure resources.py is generated via pyside6-rcc and importable
+
+from ui.dialogs.login_dialog import LoginDialog  # Import the actual dialog
 
 
 class TestLoginWorkflows:
@@ -371,86 +381,81 @@ class TestSessionManagement:
 
 class TestUIAuthentication:
     """Tests for UI authentication integration."""
-    
+
     def test_login_dialog_with_auth_service(self, qtbot):
-        """Test that login dialog integrates with auth service."""
-        # Create mock auth service
-        mock_auth_service = MagicMock()
-        
-        # Configure auth service behavior
-        def login_side_effect(username, password):
+        """Test that the actual login dialog integrates with the user service."""
+        # Import Qt resources safely
+        try:
+            import ui.resources.resources
+        except ImportError:
+            print("Warning: Could not import Qt resources. Icons might be missing.")
+            
+        # Create mock user service (matching the actual dialog's dependency)
+        mock_user_service = MagicMock()
+        mock_logged_in_user = MagicMock() # Mock user object for successful login
+        mock_logged_in_user.username = "admin"
+
+        # Configure user service behavior (authenticate method)
+        def authenticate_side_effect(username, password):
             if username == "admin" and password == "correct":
-                return True, "Login successful"
-            return False, "Invalid credentials"
-            
-        mock_auth_service.login.side_effect = login_side_effect
-        
-        # Patch QMessageBox.warning to prevent actual dialog
-        with patch('PySide6.QtWidgets.QMessageBox.warning', return_value=None) as mock_warning:
-            # Create a simple login dialog
-            class LoginDialog(QDialog):
-                def __init__(self, auth_service):
-                    super().__init__()
-                    self.auth_service = auth_service
-                    self.login_successful = False
-                    
-                    # Create dialog elements
-                    self.username_input = QLineEdit()
-                    self.username_input.setObjectName("username_input")
-                    
-                    self.password_input = QLineEdit()
-                    self.password_input.setObjectName("password_input")
-                    self.password_input.setEchoMode(QLineEdit.Password)
-                    
-                    self.login_button = QPushButton("Login")
-                    self.login_button.setObjectName("login_button")
-                    self.login_button.clicked.connect(self.attempt_login)
-                    
-                    self.cancel_button = QPushButton("Cancel")
-                    self.cancel_button.setObjectName("cancel_button")
-                    self.cancel_button.clicked.connect(self.reject)
-                
-                def attempt_login(self):
-                    username = self.username_input.text()
-                    password = self.password_input.text()
-                    
-                    success, message = self.auth_service.login(username, password)
-                    
-                    if success:
-                        self.login_successful = True
-                        self.accept()
-                    else:
-                        QMessageBox.warning(self, "Login Failed", message)
-            
-            # Create dialog with mock auth service
-            dialog = LoginDialog(auth_service=mock_auth_service)
-            qtbot.addWidget(dialog)
-            
-            # Test unsuccessful login
-            qtbot.keyClicks(dialog.username_input, "admin")
-            qtbot.keyClicks(dialog.password_input, "wrong")
-            qtbot.mouseClick(dialog.login_button, Qt.LeftButton)
-            
-            # Verify auth service was called with credentials
-            mock_auth_service.login.assert_called_with("admin", "wrong")
-            
-            # Verify dialog state (should still be showing, login not successful)
-            assert dialog.login_successful is False
-            
-            # Verify the warning was shown with the correct message
-            mock_warning.assert_called_once()
-            
-            # Clear inputs and try successful login
-            dialog.username_input.clear()
-            dialog.password_input.clear()
-            
-            qtbot.keyClicks(dialog.username_input, "admin")
-            qtbot.keyClicks(dialog.password_input, "correct")
-            qtbot.mouseClick(dialog.login_button, Qt.LeftButton)
-            
-            # Verify auth service was called with correct credentials
-            mock_auth_service.login.assert_called_with("admin", "correct")
-            
-            # Verify dialog state (should be accepted, login successful)
-            assert dialog.login_successful is True
-            assert dialog.result() == QDialog.Accepted 
+                return mock_logged_in_user # Return user object on success
+            return None # Return None on failure (invalid credentials)
+
+        # The actual dialog checks for 'authenticate' first
+        mock_user_service.authenticate.side_effect = authenticate_side_effect
+        # Add authenticate_user attribute just in case, pointing to the same mock
+        mock_user_service.authenticate_user = mock_user_service.authenticate
+
+        # Patch QIcon to prevent crashes with missing resources
+        with patch('PySide6.QtGui.QIcon', return_value=MagicMock()) as mock_icon:
+            # Patch QMessageBox.warning to prevent actual dialog pop-up during test
+            with patch('PySide6.QtWidgets.QMessageBox.warning', return_value=QMessageBox.Ok) as mock_warning:
+                # Create the *actual* LoginDialog with the mock service
+                dialog = LoginDialog(user_service=mock_user_service)
+                qtbot.addWidget(dialog) # Register dialog with qtbot for interaction/cleanup
+                dialog.show()
+                qtbot.waitExposed(dialog) # Ensure dialog is visible before interaction
+
+                # --- Test unsuccessful login ---
+                qtbot.keyClicks(dialog.username_input, "admin")
+                qtbot.keyClicks(dialog.password_input, "wrong")
+                qtbot.mouseClick(dialog.login_button, Qt.LeftButton) # Use mouseClick for buttons
+                QApplication.processEvents() # Allow Qt event loop to process signals/slots
+
+                # Verify user service was called with the entered credentials
+                mock_user_service.authenticate.assert_called_with("admin", "wrong")
+
+                # Verify dialog state (should still be showing, no user logged in)
+                assert dialog.isVisible() # Dialog should still be open
+                assert dialog.logged_in_user is None # Check the actual dialog's attribute
+
+                # Verify the warning message was shown (dialog calls this on failure)
+                mock_warning.assert_called_once()
+                # Optional: Check the arguments passed to the warning
+                args, kwargs = mock_warning.call_args
+                # Ensure the exact message string (including the period) is the third argument
+                assert len(args) >= 3
+                assert args[2] == "Usuario o contraseña incorrectos." # Check message content with period
+
+                # --- Test successful login ---
+                # Reset the warning mock for the next part of the test
+                mock_warning.reset_mock()
+
+                # Clear inputs before trying again
+                dialog.username_input.clear()
+                dialog.password_input.clear()
+
+                qtbot.keyClicks(dialog.username_input, "admin")
+                qtbot.keyClicks(dialog.password_input, "correct")
+                qtbot.mouseClick(dialog.login_button, Qt.LeftButton)
+                QApplication.processEvents()
+
+                # Verify user service was called with correct credentials
+                mock_user_service.authenticate.assert_called_with("admin", "correct")
+
+                # Verify dialog state (should be accepted, user logged in)
+                assert dialog.logged_in_user == mock_logged_in_user # Check user object
+                assert dialog.result() == QDialog.Accepted # Dialog should have been accepted
+
+                # Verify no warning was shown on successful login
+                mock_warning.assert_not_called()

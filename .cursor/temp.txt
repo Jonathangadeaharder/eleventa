@@ -1,0 +1,5 @@
+---
+description: "Overview of user interface components and architecture"
+globs: ["ui/**/*.py", "ui/**/*.qss"]
+alwaysApply: true
+---

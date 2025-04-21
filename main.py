@@ -1,36 +1,38 @@
-import sys
-from PySide6.QtWidgets import QApplication, QDialog # Added QDialog for result check
+from contextlib import contextmanager
 from typing import Callable
-from contextlib import contextmanager  # Add contextmanager import
+import sys
+import os
 
-# Core Components
-from core.services.product_service import ProductService
-from core.services.inventory_service import InventoryService
-from core.services.sale_service import SaleService
+from PySide6.QtWidgets import QApplication, QDialog
+
 from core.services.customer_service import CustomerService
-from core.services.purchase_service import PurchaseService
-from core.services.user_service import UserService
 from core.services.corte_service import CorteService
+from core.services.inventory_service import InventoryService
 from core.services.invoicing_service import InvoicingService
-from core.services.reporting_service import ReportingService # Add ReportingService
+from core.services.purchase_service import PurchaseService
+from core.services.product_service import ProductService
+from core.services.reporting_service import ReportingService
+from core.services.sale_service import SaleService
+from core.services.user_service import UserService
+
 from core.interfaces.repository_interfaces import (
     IProductRepository, IDepartmentRepository, IInventoryRepository, ISaleRepository,
     ICustomerRepository, ICreditPaymentRepository, IUserRepository,
     IPurchaseOrderRepository, ISupplierRepository, ICashDrawerRepository,
     IInvoiceRepository
 )
-from infrastructure.persistence.sqlite.repositories import (
-    SqliteProductRepository, SqliteDepartmentRepository, SqliteInventoryRepository, SqliteSaleRepository,
-    SqliteCustomerRepository, SqliteCreditPaymentRepository, SqliteSupplierRepository, SqlitePurchaseOrderRepository,
-    SqliteUserRepository, SqliteCashDrawerRepository, SqliteInvoiceRepository
-)
 from infrastructure.persistence.sqlite.database import init_db, SessionLocal
+from infrastructure.persistence.sqlite.repositories import (
+    SqliteProductRepository, SqliteDepartmentRepository, SqliteInventoryRepository,
+    SqliteSaleRepository, SqliteCustomerRepository, SqliteCreditPaymentRepository,
+    SqliteSupplierRepository, SqlitePurchaseOrderRepository, SqliteUserRepository,
+    SqliteCashDrawerRepository, SqliteInvoiceRepository
+)
 from infrastructure.persistence.utils import session_scope
 
-# UI
-from ui.main_window import MainWindow
+import ui.resources.resources # Import compiled resources
+import ui.main_window
 from ui.dialogs.login_dialog import LoginDialog
-# from config import Config # To be uncommented later
 
 def main(test_mode=False, test_user=None, mock_services=None):
     """
@@ -45,6 +47,10 @@ def main(test_mode=False, test_user=None, mock_services=None):
         In test mode, returns a tuple of (app, main_window) for testing
         In normal mode, the function doesn't return (calls sys.exit)
     """
+    # Fix for "This plugin does not support propagateSizeHints()" warning on Windows
+    if sys.platform == 'win32':
+        os.environ['QT_QPA_PLATFORM'] = 'windows:darkmode=0'
+    
     # Initialize database and session provider
     init_db() # Make sure tables are created
 
@@ -157,17 +163,20 @@ def main(test_mode=False, test_user=None, mock_services=None):
         reporting_service = ReportingService(sale_repo_factory)
 
     # --- Application Setup ---
-    app = QApplication(sys.argv)
-    
-    # Load custom style sheet
-    try:
-        style_file = open("ui/style.qss", "r")
-        style = style_file.read()
-        app.setStyleSheet(style)
-        style_file.close()
-        print("Loaded custom stylesheet")
-    except Exception as e:
-        print(f"Could not load stylesheet: {e}")
+    # In test mode, skip creating a real QApplication
+    if test_mode:
+        app = object()
+    else:
+        app = QApplication(sys.argv)
+        # Load custom style sheet
+        try:
+            style_file = open("ui/style.qss", "r")
+            style = style_file.read()
+            app.setStyleSheet(style)
+            style_file.close()
+            print("Loaded custom stylesheet")
+        except Exception as e:
+            print(f"Could not load stylesheet: {e}")
 
     # --- Login ---
     # In test mode with a test user, skip the login dialog
@@ -193,7 +202,7 @@ def main(test_mode=False, test_user=None, mock_services=None):
                 return None, None # For tests to handle user cancellation
 
     # Pass services and logged in user to the main window
-    main_window = MainWindow(
+    main_window = ui.main_window.MainWindow(
         logged_in_user=logged_in_user, # Added
         product_service=product_service,
         inventory_service=inventory_service,

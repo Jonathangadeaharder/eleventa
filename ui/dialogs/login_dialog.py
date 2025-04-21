@@ -1,12 +1,12 @@
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QLineEdit, QPushButton, QLabel, QMessageBox, QDialogButtonBox,
-    QHBoxLayout, QFrame, QSpacerItem, QSizePolicy
+    QDialog, QVBoxLayout, QLineEdit, QPushButton, QLabel, QMessageBox,
+    QHBoxLayout, QSpacerItem, QSizePolicy
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from ui.utils import (
     style_text_input, style_primary_button, style_secondary_button, 
-    apply_standard_form_style, style_heading_label
+    style_heading_label
 )
 
 class LoginDialog(QDialog):
@@ -20,11 +20,11 @@ class LoginDialog(QDialog):
 
         self.setWindowTitle("Iniciar Sesión")
         self.setModal(True) # Make sure user interacts with this first
-        self.setFixedSize(400, 240)  # Set fixed size for login dialog
+        self.setFixedSize(400, 280)  # Increased height to prevent cutoff
 
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(15)
+        main_layout.setContentsMargins(25, 15, 25, 20)  # Reduced top margin
+        main_layout.setSpacing(10)  # Reduced spacing
 
         # Add heading
         heading = QLabel("Bienvenido a Eleventa")
@@ -38,45 +38,47 @@ class LoginDialog(QDialog):
         main_layout.addWidget(description)
         
         # Add some space
-        main_layout.addSpacing(10)
+        main_layout.addSpacing(15)
         
-        # Form container with border
-        form_container = QFrame()
-        form_container.setFrameShape(QFrame.Shape.StyledPanel)
-        form_container.setFrameShadow(QFrame.Shadow.Sunken)
-        form_container.setStyleSheet("QFrame { background-color: #f8f8f8; border-radius: 6px; }")
-        
-        form_layout = QVBoxLayout(form_container)
-        form_layout.setContentsMargins(15, 15, 15, 15)
-        form_layout.setSpacing(10)
-
-        self.username_label = QLabel("Usuario:")
+        # Username input
         self.username_input = QLineEdit()
+        self.username_input.setObjectName("username_input")
+        self.username_input.setPlaceholderText("Usuario")
         style_text_input(self.username_input)
+        self.username_input.setMinimumHeight(32)
+        main_layout.addWidget(self.username_input)
         
-        self.password_label = QLabel("Contraseña:")
+        # Add some space
+        main_layout.addSpacing(8)
+        
+        # Password input
         self.password_input = QLineEdit()
+        self.password_input.setObjectName("password_input")
+        self.password_input.setPlaceholderText("Contraseña")
         self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
         style_text_input(self.password_input)
-
-        form_layout.addWidget(self.username_label)
-        form_layout.addWidget(self.username_input)
-        form_layout.addWidget(self.password_label)
-        form_layout.addWidget(self.password_input)
+        self.password_input.setMinimumHeight(32)
+        main_layout.addWidget(self.password_input)
         
-        main_layout.addWidget(form_container)
+        # Add some space
+        main_layout.addSpacing(15)
         
         # Buttons in horizontal layout
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
         
         self.cancel_button = QPushButton("Cancelar")
+        self.cancel_button.setObjectName("cancel_button")
         style_secondary_button(self.cancel_button)
-        self.cancel_button.setIcon(QIcon(":/icons/icons/cancel.png"))
+        self.cancel_button.setIcon(QIcon(":/icons/icons/cancel.png")) # Restore icon
+        self.cancel_button.setIconSize(self.cancel_button.iconSize() * 0.8) # Restore icon size
         
         self.login_button = QPushButton("Ingresar")
+        self.login_button.setObjectName("login_button")
         style_primary_button(self.login_button)
-        self.login_button.setIcon(QIcon(":/icons/icons/save.png"))
+        self.login_button.setIcon(QIcon(":/icons/icons/login.png")) # Restore icon
+        self.login_button.setIconSize(self.login_button.iconSize() * 0.8) # Restore icon size
+        self.login_button.clicked.connect(self.handle_login)
         
         button_layout.addWidget(self.cancel_button)
         button_layout.addWidget(self.login_button)
@@ -84,13 +86,27 @@ class LoginDialog(QDialog):
         main_layout.addLayout(button_layout)
 
         # Connect signals
-        self.login_button.clicked.connect(self.handle_login)
         self.cancel_button.clicked.connect(self.reject)
         self.username_input.returnPressed.connect(self.password_input.setFocus)
         self.password_input.returnPressed.connect(self.handle_login)
 
         # Set focus
         self.username_input.setFocus()
+        
+        # Apply overall style to dialog
+        self.setStyleSheet("""
+            QDialog {
+                background-color: white;
+            }
+            QLineEdit {
+                padding-left: 8px;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #2c6ba5;
+            }
+        """)
 
     def handle_login(self):
         """
@@ -101,23 +117,32 @@ class LoginDialog(QDialog):
 
         if not username or not password:
             QMessageBox.warning(self, "Error de Ingreso", "Por favor ingrese usuario y contraseña.")
+            self.setProperty("error_shown", True)
             return
 
         try:
-            # Assuming authenticate_user returns the User object on success, None otherwise
-            user = self.user_service.authenticate_user(username, password)
+            # Prefer authenticate; fallback to authenticate_user for backwards compatibility
+            if hasattr(self.user_service, "authenticate"):
+                user = self.user_service.authenticate(username, password)
+            elif hasattr(self.user_service, "authenticate_user"):
+                user = self.user_service.authenticate_user(username, password)
+            else:
+                raise AttributeError("User service has no authenticate methods")
             if user:
                 self.logged_in_user = user
+                self.setProperty("error_shown", False)
                 self.accept() # Close the dialog successfully
             else:
                 QMessageBox.warning(self, "Error de Ingreso", "Usuario o contraseña incorrectos.")
                 # Optionally clear password field
                 self.password_input.clear()
+                self.setProperty("error_shown", True)
         except Exception as e:
             # Catch potential errors during authentication (e.g., DB issues)
             QMessageBox.critical(self, "Error", f"Ocurrió un error durante la autenticación: {e}")
             # Log the error properly in a real application
             print(f"Authentication error: {e}")
+            self.setProperty("error_shown", True)
 
     def get_logged_in_user(self):
         """

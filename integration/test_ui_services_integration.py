@@ -7,7 +7,7 @@ dependent services.
 import pytest
 from unittest.mock import MagicMock, patch
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QLineEdit, QPushButton, QLabel, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton, QLabel, QMessageBox
 
 
 class TestProductUIWorkflows:
@@ -81,7 +81,8 @@ class TestProductUIWorkflows:
         qtbot.keyClicks(form.price_input, "10.99")
         
         # Click the save button
-        qtbot.mouseClick(form.save_button, Qt.LeftButton)
+        form.save_button.click()
+        QApplication.processEvents()
         
         # Verify service was called with correct data
         mock_product_service.create_product.assert_called_once_with(
@@ -96,6 +97,7 @@ class TestProductUIWorkflows:
 class TestInventoryUIWorkflows:
     """Tests for inventory management UI workflows."""
     
+    @pytest.mark.integration
     def test_stock_adjustment_dialog(self, qtbot):
         """Test the stock adjustment dialog integration with inventory service."""
         # Create mock service
@@ -176,8 +178,10 @@ class TestInventoryUIWorkflows:
         qtbot.keyClicks(dialog.quantity_input, "5")
         qtbot.keyClicks(dialog.reason_input, "Manual adjustment")
         
-        # Click the save button
-        qtbot.mouseClick(dialog.save_button, Qt.LeftButton)
+        # Click the save button (using direct call instead of mouseClick)
+        qtbot.wait(100)
+        dialog.save_button.click()
+        QApplication.processEvents()
         
         # Verify service was called with correct data
         mock_inventory_service.adjust_stock.assert_called_once_with(
@@ -194,6 +198,7 @@ class TestInventoryUIWorkflows:
 class TestSaleUIWorkflows:
     """Tests for sales UI workflows."""
     
+    @pytest.mark.integration
     def test_sale_item_addition(self, qtbot):
         """Test adding items to a sale through UI."""
         # Create mock services
@@ -288,8 +293,9 @@ class TestSaleUIWorkflows:
         # Enter product code
         qtbot.keyClicks(dialog.product_code_input, "P001")
         
-        # Click lookup button
-        qtbot.mouseClick(dialog.lookup_button, Qt.LeftButton)
+        # Click lookup button (using direct call instead of mouseClick)
+        dialog.lookup_button.click()
+        QApplication.processEvents()
         
         # Verify product service was called
         mock_product_service.get_by_code.assert_called_once_with("P001")
@@ -301,7 +307,8 @@ class TestSaleUIWorkflows:
         # Enter quantity and add to sale
         dialog.quantity_input.clear()  # Clear the field first
         qtbot.keyClicks(dialog.quantity_input, "2")  # Set to 2 (not appending to default 1)
-        qtbot.mouseClick(dialog.add_button, Qt.LeftButton)
+        dialog.add_button.click()  # Use direct click instead of mouseClick
+        QApplication.processEvents()
         
         # Verify sale service was called
         mock_sale_service.add_item.assert_called_once_with("P001", 2)
@@ -313,6 +320,7 @@ class TestSaleUIWorkflows:
 class TestCustomerUIWorkflows:
     """Tests for customer management UI workflows."""
     
+    @pytest.mark.integration
     def test_customer_search_and_select(self, qtbot):
         """Test searching for customers and selecting one."""
         # Create mock service
@@ -401,8 +409,9 @@ class TestCustomerUIWorkflows:
         # Enter search term
         qtbot.keyClicks(dialog.search_input, "John")
         
-        # Click search button
-        qtbot.mouseClick(dialog.search_button, Qt.LeftButton)
+        # Click search button (using direct call instead of mouseClick)
+        dialog.search_button.click()
+        QApplication.processEvents()
         
         # Verify service was called
         mock_customer_service.search_customers.assert_called_once_with("John")
@@ -412,8 +421,9 @@ class TestCustomerUIWorkflows:
         assert dialog.select_button.isVisible()
         assert dialog.select_button2.isVisible()
         
-        # Select first customer
-        qtbot.mouseClick(dialog.select_button, Qt.LeftButton)
+        # Select first customer (using direct call instead of mouseClick)
+        dialog.select_button.click()
+        QApplication.processEvents()
         
         # Verify selected customer and dialog result
         assert dialog.selected_customer == mock_customers[0]

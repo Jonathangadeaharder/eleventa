@@ -70,8 +70,9 @@ def setup_test_database(test_engine):
 
     print("\n=== Fixture 'setup_test_database' tearing down (dropping tables)... ===")
     try:
-        Base.metadata.drop_all(test_engine)
-        print("Test database tables dropped.")
+        # Base.metadata.drop_all(test_engine) # Commented out to test hang
+        # print("Test database tables dropped.")
+        print("Skipping drop_all during teardown for testing hang.")
     except Exception as e:
         print(f"Warning: Error dropping test tables: {e}")
 

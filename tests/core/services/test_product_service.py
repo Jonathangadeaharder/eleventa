@@ -255,13 +255,13 @@ def test_delete_department_success(product_service, mock_dept_repo, mock_product
     """Test successful deletion of an unused department."""
     dept_id_to_delete = 10
     mock_dept_repo.get_by_id.return_value = Department(id=dept_id_to_delete, name="ToDelete")
-    # Mock product search to return empty list, indicating department is not in use
-    mock_product_repo.search.return_value = [] # TODO: Refine this check later
+    # Mock the new method to return an empty list, indicating department is not in use
+    mock_product_repo.get_by_department_id.return_value = []
 
     product_service.delete_department(dept_id_to_delete)
 
-    # TODO: Add assertion for checking products using the department
-    # mock_product_repo.search.assert_called_once_with(???) # How to check usage?
+    # Assert the check for products using the department was made correctly via the new method
+    mock_product_repo.get_by_department_id.assert_called_once_with(dept_id_to_delete)
     mock_dept_repo.delete.assert_called_once_with(dept_id_to_delete)
 
 def test_delete_department_in_use_fails(product_service, mock_dept_repo, mock_product_repo):
@@ -269,12 +269,16 @@ def test_delete_department_in_use_fails(product_service, mock_dept_repo, mock_pr
     dept_id_to_delete = 11
     dept_name = "InUseDept"
     mock_dept_repo.get_by_id.return_value = Department(id=dept_id_to_delete, name=dept_name)
-    # Simulate that products use this department
-    mock_product_repo.search.return_value = [Product(id=301, code="P301", description="Using Dept", department_id=dept_id_to_delete)]
+    # Simulate that products use this department via the new method
+    mock_product_repo.get_by_department_id.return_value = [Product(id=301, code="P301", description="Using Dept", department_id=dept_id_to_delete)]
 
-    with pytest.raises(ValueError, match=f"Departamento '{dept_name}' no puede ser eliminado, está en uso"):
+    # Update the expected error message to match the service's new message and fix escape sequence warning
+    expected_error_msg = f"Departamento '{dept_name}' no puede ser eliminado, está en uso por 1 producto\\(s\\)."
+    with pytest.raises(ValueError, match=expected_error_msg):
         product_service.delete_department(dept_id_to_delete)
 
+    # Assert the check for products was made via the new method
+    mock_product_repo.get_by_department_id.assert_called_once_with(dept_id_to_delete)
     mock_dept_repo.delete.assert_not_called()
 
 def test_get_all_departments(product_service, mock_dept_repo):
@@ -282,68 +286,148 @@ def test_get_all_departments(product_service, mock_dept_repo):
     product_service.get_all_departments()
     mock_dept_repo.get_all.assert_called_once()
 
-# TODO: Add tests for update_department if implemented in service
+def test_update_department_success(product_service, mock_dept_repo):
+    """Test successful update of a department."""
+    dept_update_data = Department(id=5, name="Updated Dept Name")
+    existing_dept = Department(id=5, name="Old Name")
 
-import tempfile
-import os
-import shutil
+    mock_dept_repo.get_by_id.return_value = existing_dept
+    mock_dept_repo.get_by_name.return_value = None # New name is unique
+    mock_dept_repo.update.return_value = dept_update_data # Simulate update returning the object
+
+    updated_dept = product_service.update_department(dept_update_data)
+
+    mock_dept_repo.get_by_id.assert_called_once_with(5)
+    mock_dept_repo.get_by_name.assert_called_once_with("Updated Dept Name")
+    mock_dept_repo.update.assert_called_once_with(dept_update_data)
+    assert updated_dept is not None
+    assert updated_dept.name == "Updated Dept Name"
+
+def test_update_department_validation_fails(product_service, mock_dept_repo):
+    """Test validation failure for empty department name during update."""
+    dept_update_data = Department(id=5, name="")
+    existing_dept = Department(id=5, name="Old Name")
+    mock_dept_repo.get_by_id.return_value = existing_dept # Department exists
+
+    with pytest.raises(ValueError, match="Nombre de departamento es requerido"):
+        product_service.update_department(dept_update_data)
+
+    mock_dept_repo.update.assert_not_called()
+
+def test_update_department_duplicate_name_fails(product_service, mock_dept_repo):
+    """Test validation failure when updating name to one that already exists."""
+    dept_update_data = Department(id=5, name="Existing Name")
+    existing_dept_to_update = Department(id=5, name="Old Name")
+    conflicting_dept = Department(id=6, name="Existing Name") # Another dept has the target name
+
+    mock_dept_repo.get_by_id.return_value = existing_dept_to_update
+    mock_dept_repo.get_by_name.return_value = conflicting_dept # Simulate name conflict
+
+    with pytest.raises(ValueError, match="Departamento 'Existing Name' ya existe"):
+        product_service.update_department(dept_update_data)
+
+    mock_dept_repo.get_by_name.assert_called_once_with("Existing Name")
+    mock_dept_repo.update.assert_not_called()
+
+def test_update_department_nonexistent_fails(product_service, mock_dept_repo):
+    """Test failure when trying to update a department that does not exist."""
+    dept_update_data = Department(id=999, name="Nonexistent Dept")
+    mock_dept_repo.get_by_id.return_value = None # Simulate department not found
+
+    with pytest.raises(ValueError, match="Departamento con ID 999 no encontrado"):
+        product_service.update_department(dept_update_data)
+
+    mock_dept_repo.update.assert_not_called()
+
+
+# --- Integration Test ---
+
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-def test_product_service_integration(tmp_path):
-    """Integration test: ProductService with real repositories and SQLite DB."""
-    # Setup: Use a temporary SQLite file DB
-    db_path = tmp_path / "test_integration.db"
-    db_url = f"sqlite:///{db_path}"
-    # Patch DATABASE_URL before importing DB setup
-    import sys
-    import importlib
+# Import necessary components for integration test
+from infrastructure.persistence.sqlite.database import Base, init_db # Assuming init_db creates tables
+from infrastructure.persistence.sqlite.repositories import SqliteDepartmentRepository, SqliteProductRepository
+from infrastructure.persistence.utils import session_scope_provider # Import the provider instance
+from core.models.product import Department, Product # Import models
 
-    # Patch config.DATABASE_URL
-    config_module = importlib.import_module("config")
-    old_db_url = config_module.DATABASE_URL
-    config_module.DATABASE_URL = db_url
+@pytest.fixture(scope="function") # Use function scope for isolation
+def test_db_session_factory():
+    """Fixture to set up an in-memory SQLite DB and configure session_scope."""
+    # Use in-memory SQLite database for testing
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    # Create tables
+    Base.metadata.create_all(bind=engine) # Use Base.metadata if init_db isn't suitable
 
-    # Re-import and re-initialize DB
-    db_module = importlib.import_module("infrastructure.persistence.sqlite.database")
-    db_module.engine.dispose()
-    db_module.engine = db_module.create_engine(db_url, connect_args={"check_same_thread": False})
-    db_module.SessionLocal.configure(bind=db_module.engine)
-    db_module.init_db()
+    # Create a session factory bound to this engine
+    TestSessionFactory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-    # Import repository implementations
-    from infrastructure.persistence.sqlite.repositories import SqliteDepartmentRepository, SqliteProductRepository
-    from core.services.product_service import ProductService
-    from core.models.product import Department, Product
-    from infrastructure.persistence.utils import session_scope # Import session_scope
+    # Store the original factory (if any)
+    original_factory = session_scope_provider.get_session_factory()
+    # Set the provider to use our test session factory
+    session_scope_provider.set_session_factory(TestSessionFactory)
 
-    # Factories for real repositories - THESE NEED THE SESSION
-    def product_repo_factory(session): # Accept session
-        return SqliteProductRepository(session) # Pass session
-    def department_repo_factory(session): # Accept session
-        return SqliteDepartmentRepository(session) # Pass session
+    yield TestSessionFactory # Provide the factory if needed, though session_scope uses it internally
 
-    # Service instance
+    # Teardown: Restore the original session factory and clean up
+    session_scope_provider.set_session_factory(original_factory)
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+
+
+def test_product_service_integration(test_db_session_factory): # Depend on the fixture
+    """Integration test: ProductService with real repositories and in-memory SQLite DB."""
+
+    # Factories for real repositories - THESE NOW WORK WITH THE TEST SESSION SCOPE
+    def product_repo_factory(session):
+        return SqliteProductRepository(session)
+    def department_repo_factory(session):
+        return SqliteDepartmentRepository(session)
+
+    # Service instance - uses the factories which get sessions from the overridden provider
     service = ProductService(product_repo_factory, department_repo_factory)
 
+    # --- Test Logic (same as before, but now uses the test DB via session_scope) ---
+
     # Add a department
-    dept = Department(name="IntegrationDept")
-    added_dept = service.add_department(dept)
+    dept_data = Department(name="IntegrationDept")
+    added_dept = service.add_department(dept_data)
     assert added_dept.id is not None
+    assert added_dept.name == "IntegrationDept"
 
     # Add a product in that department
-    product = Product(code="INTEG01", description="Integration Product", department_id=added_dept.id, sell_price=10.0, cost_price=5.0)
-    added_product = service.add_product(product)
+    product_data = Product(
+        code="INTEG01",
+        description="Integration Product",
+        department_id=added_dept.id,
+        sell_price=10.0,
+        cost_price=5.0
+    )
+    added_product = service.add_product(product_data)
     assert added_product.id is not None
+    assert added_product.code == "INTEG01"
+    assert added_product.department_id == added_dept.id
 
-    # Attempt to delete department in use (should fail)
-    with pytest.raises(ValueError):
+    # Verify product and department exist using the service (which uses session_scope)
+    retrieved_dept = service.get_all_departments()[0]
+    assert retrieved_dept.id == added_dept.id
+    retrieved_product = service.get_product_by_id(added_product.id)
+    assert retrieved_product.id == added_product.id
+
+    # Attempt to delete department in use (should fail) - Use the updated error message format and fix escape sequence warning
+    expected_error_msg = f"Departamento '{added_dept.name}' no puede ser eliminado, está en uso por 1 producto\\(s\\)."
+    with pytest.raises(ValueError, match=expected_error_msg):
         service.delete_department(added_dept.id)
 
     # Delete the product
     service.delete_product(added_product.id)
 
+    # Verify product is deleted
+    assert service.get_product_by_id(added_product.id) is None
+
     # Now delete the department (should succeed)
     service.delete_department(added_dept.id)
 
-    # Cleanup: Restore DATABASE_URL
-    config_module.DATABASE_URL = old_db_url
+    # Verify department is deleted
+    assert not service.get_all_departments() # List should be empty

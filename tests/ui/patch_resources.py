@@ -17,9 +17,9 @@ def _patched_icon_init(self, *args, **kwargs):
     try:
         _orig_icon_init(self, *args, **kwargs)
     except Exception as e:
-        # Just create an empty icon if resource loading fails
-        _orig_icon_init(self)
-        print(f"[PATCH] Resource loading failed, using empty icon: {e}", file=sys.stderr)
+        # If resource loading fails, explicitly create a default QIcon
+        print(f"[PATCH] Resource loading failed, creating default icon: {e}", file=sys.stderr)
+        QIcon.__init__(self) # Explicitly call the (potentially patched) __init__
 
 def patch_resources():
     """
@@ -36,4 +36,4 @@ def restore_resources():
     QIcon.__init__ = _orig_icon_init
 
 # Apply patches automatically when imported
-patch_resources() 
+# patch_resources() # Commented out to see if tests pass without it 
