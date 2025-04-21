@@ -4,8 +4,6 @@ Focus: Department creation/editing, validation, and dialog interaction.
 """
 
 import pytest
-# Skip the entire module due to persistent Qt crashes during qtbot.mouseClick
-pytest.skip("Skipping entire module due to persistent Qt crashes during qtbot.mouseClick", allow_module_level=True)
 
 from unittest.mock import MagicMock
 from PySide6.QtWidgets import QApplication, QMessageBox
@@ -43,7 +41,6 @@ def test_load_departments(dialog, mock_product_service):
     assert "Grocery" in names
     assert "Electronics" in names
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crash (access violation) during qtbot.mouseClick")
 def test_add_department(dialog, qtbot, mock_product_service):
     """Should add a new department and refresh the list."""
     qtbot.mouseClick(dialog.new_button, Qt.LeftButton)  # Poner en modo 'nuevo'
@@ -55,7 +52,6 @@ def test_add_department(dialog, qtbot, mock_product_service):
     names = [dialog.dept_list_widget.item(i).text() for i in range(dialog.dept_list_widget.count())]
     assert "Toys" in names or mock_product_service.add_department.called
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crash (access violation) during qtbot.mouseClick")
 def test_edit_department(dialog, qtbot, mock_product_service):
     """Should edit an existing department and call update on the service."""
     # Select first department

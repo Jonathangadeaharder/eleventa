@@ -4,7 +4,6 @@ Focus: Field validation, dialog interaction, and integration with the inventory 
 """
 
 import pytest
-import patch_qt_tests  # Import patch to prevent Qt dialogs from blocking
 from PySide6 import QtWidgets, QtCore
 from PySide6.QtWidgets import QMessageBox
 from ui.dialogs.add_inventory_dialog import AddInventoryDialog
@@ -60,7 +59,6 @@ def test_fields_present_and_defaults(dialog, product):
     assert dialog.cost_spinbox.value() == product.cost_price
     assert dialog.notes_edit.toPlainText() == ""
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crash (access violation) during qtbot.mouseClick")
 def test_accept_valid_add_inventory(qtbot, dialog, inventory_service, product):
     """Should accept valid inventory addition and call service with correct args."""
     dialog.quantity_spinbox.setValue(2.5)

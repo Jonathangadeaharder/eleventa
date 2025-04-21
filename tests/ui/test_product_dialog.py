@@ -4,11 +4,10 @@ Focus: Adding/editing products, validation, and form population.
 """
 
 import pytest
-import patch_qt_tests  # Import patch to prevent Qt dialogs from blocking
 from PySide6 import QtWidgets
 from PySide6.QtWidgets import QGroupBox, QMessageBox
 from ui.dialogs.product_dialog import ProductDialog
-from core.models.product import Product
+from core.models.product import Product, Department
 from unittest.mock import patch, MagicMock
 from PySide6.QtWidgets import QApplication
 
@@ -17,8 +16,8 @@ class MockProductService:
         self.added_product = None
         self.updated_product = None
         self.departments = [
-            {"id": 1, "name": "Beverages"},
-            {"id": 2, "name": "Snacks"},
+            Department(id=1, name="Beverages"),
+            Department(id=2, name="Snacks"),
         ]
 
     def get_departments(self):
@@ -45,6 +44,10 @@ class MockProductService:
             type("Department", (), {"id": 1, "name": "Beverages"})(),
             type("Department", (), {"id": 2, "name": "Snacks"})(),
         ]
+
+    def get_all_departments(self):
+        """Support for ProductDialog._load_departments"""
+        return self.departments
 
 @pytest.fixture
 def product_service():
@@ -76,7 +79,6 @@ def dialog_edit_mode(qtbot, product_service):
     yield dlg
     dlg.close()
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crashes")
 def test_form_population_add_mode(qtbot, dialog_add_mode):
     """Should verify form population in add mode."""
     assert dialog_add_mode.windowTitle() == "Agregar Producto"
@@ -84,7 +86,6 @@ def test_form_population_add_mode(qtbot, dialog_add_mode):
     assert dialog_add_mode.description_input.text() == ""
     assert dialog_add_mode.sale_price_input.value() == 0.0
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crashes")
 def test_form_population_edit_mode(qtbot, dialog_edit_mode):
     """Should verify form population in edit mode."""
     assert dialog_edit_mode.windowTitle() == "Modificar Producto"
@@ -96,7 +97,6 @@ def test_form_population_edit_mode(qtbot, dialog_edit_mode):
     assert dialog_edit_mode.min_stock_input.value() == 5
     assert dialog_edit_mode.inventory_checkbox.isChecked()
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crashes")
 def test_validation_empty_code(qtbot, dialog_add_mode):
     """Should trigger validation failed signal if code is empty."""
     validation_triggered = False
@@ -114,7 +114,6 @@ def test_validation_empty_code(qtbot, dialog_add_mode):
     finally:
         dialog_add_mode.validation_failed.disconnect(on_validation_failed)
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crashes")
 def test_validation_negative_price(qtbot, dialog_add_mode):
     """Should trigger validation failed signal if price is negative."""
     validation_triggered = False
@@ -133,7 +132,6 @@ def test_validation_negative_price(qtbot, dialog_add_mode):
     finally:
         dialog_add_mode.validation_failed.disconnect(on_validation_failed)
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crashes")
 def test_state_change_control_stock(qtbot, dialog_add_mode):
     """Should update field visibility when inventory control changes."""
     dialog_add_mode.show()
@@ -152,7 +150,6 @@ def test_state_change_control_stock(qtbot, dialog_add_mode):
     assert dialog_add_mode.stock_input.isVisible()
     assert dialog_add_mode.min_stock_input.isVisible()
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crashes")
 def test_service_call_add_product(qtbot, dialog_add_mode, product_service):
     """Should call add_product with correct data when adding a product."""
     dialog_add_mode.code_input.setText("P003")
@@ -174,7 +171,6 @@ def test_service_call_add_product(qtbot, dialog_add_mode, product_service):
     assert product_service.added_product.min_stock == 2
     assert product_service.added_product.is_active is True
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crashes")
 def test_service_call_update_product(qtbot, dialog_edit_mode, product_service):
     """Should call update_product with correct data when editing a product."""
     dialog_edit_mode.description_input.setText("Updated Product")

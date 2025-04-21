@@ -6,7 +6,6 @@ Focus: Dialog instantiation, user input, and authentication logic.
 import pytest
 from unittest.mock import MagicMock, patch
 from PySide6.QtWidgets import QApplication, QMessageBox, QDialog
-from PySide6.QtTest import QTest
 from PySide6.QtCore import Qt
 import sys
 
@@ -19,15 +18,15 @@ from ui.dialogs.login_dialog import LoginDialog
 
 # Fixtures replace setUp/tearDown
 @pytest.fixture
-def login_dialog():
+def login_dialog(qtbot):
     """Provide a LoginDialog instance with a mocked user service for testing."""
     mock_user_service = MagicMock()
     dialog = LoginDialog(mock_user_service)
+    qtbot.add_widget(dialog)
     yield dialog, mock_user_service
     dialog.close()
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crashes")
-def test_login_with_valid_credentials_succeeds(login_dialog):
+def test_login_with_valid_credentials_succeeds(login_dialog, qtbot):
     """Test that login succeeds when valid credentials are provided."""
     dialog, mock_user_service = login_dialog
     
@@ -37,14 +36,13 @@ def test_login_with_valid_credentials_succeeds(login_dialog):
 
     dialog.username_input.setText("testuser")
     dialog.password_input.setText("password123")
-    QTest.mouseClick(dialog.login_button, Qt.LeftButton)
+    qtbot.mouseClick(dialog.login_button, Qt.LeftButton)
 
     # Pytest-style assertions
     assert dialog.result() == QDialog.Accepted
     assert dialog.logged_in_user == mock_user
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crashes")
-def test_login_with_invalid_credentials_shows_warning(login_dialog):
+def test_login_with_invalid_credentials_shows_warning(login_dialog, qtbot):
     """Test that login shows warning when invalid credentials are provided."""
     dialog, mock_user_service = login_dialog
     
@@ -55,7 +53,7 @@ def test_login_with_invalid_credentials_shows_warning(login_dialog):
     dialog.password_input.setText("wrongpass")
     
     with patch.object(QMessageBox, 'warning') as mock_warning:
-        QTest.mouseClick(dialog.login_button, Qt.LeftButton)
+        qtbot.mouseClick(dialog.login_button, Qt.LeftButton)
         
         # Pytest-style assertions
         assert dialog.result() == 0  # Not accepted
@@ -64,8 +62,7 @@ def test_login_with_invalid_credentials_shows_warning(login_dialog):
         # Password field should be cleared
         assert dialog.password_input.text() == ""
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crashes")
-def test_login_with_empty_fields_shows_warning(login_dialog):
+def test_login_with_empty_fields_shows_warning(login_dialog, qtbot):
     """Test that login shows warning when empty fields are submitted."""
     dialog, _ = login_dialog
     
@@ -73,14 +70,13 @@ def test_login_with_empty_fields_shows_warning(login_dialog):
     dialog.password_input.setText("")
     
     with patch.object(QMessageBox, 'warning') as mock_warning:
-        QTest.mouseClick(dialog.login_button, Qt.LeftButton)
+        qtbot.mouseClick(dialog.login_button, Qt.LeftButton)
         
         mock_warning.assert_called_once()
         assert dialog.result() == 0
         assert dialog.logged_in_user is None
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crashes")
-def test_login_when_authentication_fails_shows_critical_error(login_dialog):
+def test_login_when_authentication_fails_shows_critical_error(login_dialog, qtbot):
     """Test that login shows critical error when authentication throws exception."""
     dialog, mock_user_service = login_dialog
     
@@ -91,7 +87,7 @@ def test_login_when_authentication_fails_shows_critical_error(login_dialog):
     dialog.password_input.setText("password123")
     
     with patch.object(QMessageBox, 'critical') as mock_critical:
-        QTest.mouseClick(dialog.login_button, Qt.LeftButton)
+        qtbot.mouseClick(dialog.login_button, Qt.LeftButton)
         
         mock_critical.assert_called_once()
         assert dialog.result() == 0
