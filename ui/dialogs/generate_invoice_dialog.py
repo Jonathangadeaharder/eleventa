@@ -160,8 +160,6 @@ class GenerateInvoiceDialog(QDialog):
         
         # Update customer info if available
         if sale.customer_id:
-            # Get the customer service from the invoicing service
-            # This assumes the invoicing service has a customer_repo attribute
             customer_repo = self.invoicing_service.customer_repo
             customer = customer_repo.get_by_id(sale.customer_id)
             if customer:
@@ -184,14 +182,10 @@ class GenerateInvoiceDialog(QDialog):
         """Generate an invoice for the selected sale."""
         try:
             if not hasattr(self, 'current_sale_id'):
-                show_error_message("Por favor seleccione una venta primero.")
+                show_error_message(self, "Error", "Por favor seleccione una venta primero.")
                 return
-                
-            # Generate the invoice
             invoice = self.invoicing_service.create_invoice_from_sale(self.current_sale_id)
-            
-            # Close the dialog with success
+            show_info_message(self, "Factura generada", f"Factura generada correctamente.\nNúmero de factura: {invoice.invoice_number}")
             self.accept()
-            
         except Exception as e:
-            show_error_message(f"Error al generar la factura: {str(e)}")
+            show_error_message(self, "Error", f"Error al generar la factura: {str(e)}")

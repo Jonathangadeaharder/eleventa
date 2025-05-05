@@ -187,7 +187,6 @@ def test_get_drawer_summary(cash_drawer_service, cash_drawer_repo_mock):
     
     today_entries = [
         CashDrawerEntry(
-            id=1, 
             entry_type=CashDrawerEntryType.START, 
             amount=Decimal('1000.0'), 
             user_id=1, 
@@ -196,7 +195,6 @@ def test_get_drawer_summary(cash_drawer_service, cash_drawer_repo_mock):
             drawer_id=1
         ),
         CashDrawerEntry(
-            id=2, 
             entry_type=CashDrawerEntryType.IN, 
             amount=Decimal('200.0'), 
             user_id=1, 
@@ -205,7 +203,6 @@ def test_get_drawer_summary(cash_drawer_service, cash_drawer_repo_mock):
             drawer_id=1
         ),
         CashDrawerEntry(
-            id=3, 
             entry_type=CashDrawerEntryType.OUT, 
             amount=Decimal('-100.0'), 
             user_id=1, 

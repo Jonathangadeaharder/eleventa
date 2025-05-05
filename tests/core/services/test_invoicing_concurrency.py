@@ -57,9 +57,9 @@ def repositories(db_session):
 @pytest.fixture
 def invoicing_service(repositories):
     return InvoicingService(
-        repositories["invoice_repo"],
-        repositories["sale_repo"],
-        repositories["customer_repo"],
+        lambda session: repositories["invoice_repo"],
+        lambda session: repositories["sale_repo"],
+        lambda session: repositories["customer_repo"],
     )
 
 def create_customer_and_sale(db_session, sale_repo, customer_repo):
@@ -129,8 +129,9 @@ def test_concurrent_invoice_creation(db_session, repositories):
     fetched_sale = repositories["sale_repo"].get_by_id(sale.id)
     assert fetched_sale is not None, "Failed to retrieve the sale in the main thread"
     
-    results = []
+    successful_invoices = []
     errors = []
+    thread_lock = threading.Lock()
 
     def create_invoice():
         # Each thread needs its own session
@@ -142,35 +143,42 @@ def test_concurrent_invoice_creation(db_session, repositories):
                 "customer_repo": SqliteCustomerRepository(thread_session),
             }
             thread_service = InvoicingService(
-                thread_repos["invoice_repo"],
-                thread_repos["sale_repo"],
-                thread_repos["customer_repo"],
+                lambda session: thread_repos["invoice_repo"],
+                lambda session: thread_repos["sale_repo"],
+                lambda session: thread_repos["customer_repo"],
             )
             
             # Try to find the sale in this thread
             thread_sale = thread_repos["sale_repo"].get_by_id(sale.id)
             if thread_sale is None:
-                errors.append(f"Thread could not find sale with ID {sale.id}")
+                with thread_lock:
+                    errors.append(f"Thread could not find sale with ID {sale.id}")
                 return
                 
             try:
                 inv = thread_service.create_invoice_from_sale(sale.id)
                 if inv:
-                    results.append(inv)
+                    with thread_lock:
+                        successful_invoices.append(inv)
                     thread_session.commit()
             except Exception as e:
-                errors.append(str(e))
+                with thread_lock:
+                    errors.append(str(e))
                 thread_session.rollback()
         except Exception as e:
-            errors.append(f"Thread error: {str(e)}")
+            with thread_lock:
+                errors.append(f"Thread error: {str(e)}")
         finally:
             thread_session.close()
 
+    # Run threads with a slight delay to ensure they run concurrently but not exactly simultaneously
+    # This helps to reliably create the race condition
     threads = []
-    for _ in range(5):
+    for i in range(5):
         t = threading.Thread(target=create_invoice)
         threads.append(t)
         t.start()
+        time.sleep(0.01)  # Small delay to ensure threads overlap but don't start simultaneously
     
     for t in threads:
         t.join()
@@ -178,11 +186,43 @@ def test_concurrent_invoice_creation(db_session, repositories):
     # Print all errors for debugging
     for err in errors:
         print(f"Thread error: {err}")
-        
+    
     # Only one invoice should be created, others should raise duplicate invoice error
-    assert len([r for r in results if r is not None]) == 1
-    assert len(errors) >= 4, "Expected at least 4 errors from concurrent threads"
-    assert any("already exists" in e or "duplicate" in e.lower() for e in errors), "Expected 'already exists' errors"
+    assert len(successful_invoices) == 1, f"Expected exactly 1 successful invoice, got {len(successful_invoices)}"
+    
+    # Verify that we have the expected number of errors
+    # We expect 4 errors because we started 5 threads, and only one should succeed
+    assert len(errors) >= 4, f"Expected at least 4 errors from concurrent threads, got {len(errors)}"
+    
+    # Check that all errors are related to duplicate invoices
+    # We'll verify using more flexible pattern matching
+    invoice_error_patterns = [
+        "already has an invoice",
+        "duplicate",
+        "invoice for sale",
+        "already exists",
+        "sale may already have an invoice"
+    ]
+    
+    error_match_count = 0
+    for error in errors:
+        error_text = error.lower()
+        if any(pattern in error_text for pattern in invoice_error_patterns):
+            error_match_count += 1
+    
+    # At least one error should match our expected patterns
+    assert error_match_count > 0, "No errors matched the expected duplicate invoice patterns"
+    
+    # Verify in the database that there is exactly 1 invoice for this sale
+    with SessionFactory() as verify_session:
+        invoice_repo = SqliteInvoiceRepository(verify_session)
+        invoice = invoice_repo.get_by_sale_id(sale.id)
+        assert invoice is not None, "No invoice found in the database"
+        
+        # Count all invoices to make sure we only have one
+        all_invoices = invoice_repo.get_all()
+        invoice_count = len([inv for inv in all_invoices if inv.sale_id == sale.id])
+        assert invoice_count == 1, f"Expected exactly 1 invoice in database, found {invoice_count}"
     
     # Clean up the database after the test
     db_session.execute(text("DELETE FROM invoices"))

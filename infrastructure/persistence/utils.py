@@ -57,7 +57,7 @@ class SessionScopeProvider:
 session_scope_provider = SessionScopeProvider()
 
 @contextmanager
-def session_scope(session=None) -> Generator[Any, None, None]:
+def session_scope(*, session=None) -> Generator[Any, None, None]:
     """
     Provide a transactional scope around a series of operations.
     
@@ -96,4 +96,4 @@ def session_scope(session=None) -> Generator[Any, None, None]:
     finally:
         # Only close if we're managing the session
         if managing_session:
-            session.close() 
+            session.close()

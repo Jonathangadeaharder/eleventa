@@ -15,17 +15,22 @@ from unittest.mock import MagicMock, patch
 
 # Testing frameworks
 import pytest
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QMessageBox
+
+# Import Qt support module first - this sets up the environment
+from tests.ui.qt_support import (
+    Qt, QApplication, QMessageBox, QT_IMPORTS_AVAILABLE
+)
+
+# Skip all tests if Qt imports aren't available
+pytestmark = [
+    pytest.mark.skipif(not QT_IMPORTS_AVAILABLE, reason="PySide6 imports not available"),
+    pytest.mark.timeout(5)  # Set timeout to prevent hanging tests
+]
 
 # Application components
 from ui.views.cash_drawer_view import CashDrawerView
 from core.services.cash_drawer_service import CashDrawerService
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
-
-# Set timeout to prevent hanging tests
-pytestmark = pytest.mark.timeout(5)
-
 
 # --- Helper Functions ---
 
@@ -42,7 +47,6 @@ def create_drawer_summary(is_open=False):
         'total_out': Decimal('0.00')
     }
 
-
 # --- Fixtures ---
 
 @pytest.fixture
@@ -52,22 +56,17 @@ def mock_cash_drawer_service():
     mock_service.get_drawer_summary.return_value = create_drawer_summary()
     return mock_service
 
-
-@pytest.fixture(scope='module')
-def qt_application():
-    """Provides a QApplication fixture that persists for the module."""
-    app = QApplication.instance()
-    if app is None:
-        # Create application if it doesn't exist
-        app = QApplication(sys.argv)
-    return app
-
-
 # --- Tests ---
 
+# Simple test to check if the module loads properly
+def test_module_loads():
+    """Simple test to ensure module loads properly."""
+    assert True
+
+@pytest.mark.skipif(not QT_IMPORTS_AVAILABLE, reason="PySide6 imports not available")
 @patch('ui.views.cash_drawer_view.OpenDrawerDialog', MagicMock())
 @patch('ui.views.cash_drawer_view.CashMovementDialog', MagicMock())
-def test_cash_drawer_view_basic(qt_application, mock_cash_drawer_service):
+def test_cash_drawer_view_basic(qtbot, mock_cash_drawer_service):
     """
     Basic test to verify CashDrawerView can be instantiated and works.
     
@@ -80,9 +79,10 @@ def test_cash_drawer_view_basic(qt_application, mock_cash_drawer_service):
     view = CashDrawerView(cash_drawer_service=mock_cash_drawer_service, user_id=1)
     
     try:
-        # Show and process events
+        # Register with qtbot and show
+        qtbot.addWidget(view)
         view.show()
-        QApplication.processEvents()
+        qtbot.wait(100)  # Allow time for processing events
         
         # Basic assertions
         assert view is not None
@@ -97,4 +97,4 @@ def test_cash_drawer_view_basic(qt_application, mock_cash_drawer_service):
         # Clean up
         view.close()
         view.deleteLater()
-        QApplication.processEvents() 
+        qtbot.wait(50)  # Process cleanup events 

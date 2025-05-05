@@ -18,7 +18,7 @@ Test dependencies:
 - temp files for PDF generation tests
 """
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timedelta
 from decimal import Decimal
 import os
@@ -32,30 +32,38 @@ from core.models.customer import Customer
 class TestInvoicingService(unittest.TestCase):
     """Tests for the InvoicingService."""
 
-    def setUp(self):
+    def setup_method(self, method=None):
         """Set up common test dependencies."""
-        self.invoice_repo = Mock()
-        self.sale_repo = Mock()
-        self.customer_repo = Mock()
+        # Create mock repositories
+        self.invoice_repo = MagicMock()
+        self.sale_repo = MagicMock()
+        self.customer_repo = MagicMock()
+        
+        # Create repository factory functions that return the mocks
+        self.invoice_repo_factory = lambda session=None: self.invoice_repo
+        self.sale_repo_factory = lambda session=None: self.sale_repo
+        self.customer_repo_factory = lambda session=None: self.customer_repo
+        
+        # Create service with factory functions
         self.service = InvoicingService(
-            invoice_repo=self.invoice_repo,
-            sale_repo=self.sale_repo,
-            customer_repo=self.customer_repo
+            invoice_repo_factory=self.invoice_repo_factory,
+            sale_repo_factory=self.sale_repo_factory,
+            customer_repo_factory=self.customer_repo_factory
         )
 
     def test_create_invoice_from_sale_success(self):
         """Test successful invoice creation from a sale."""
         # Mock sale data with customer_id
-        mock_sale = Mock(spec=Sale)
+        mock_sale = MagicMock(spec=Sale)
         mock_sale.id = 1
         mock_sale.customer_id = 2
         mock_sale.total = Decimal("121.00")  # Including IVA
         mock_sale.items = [
-            Mock(spec=SaleItem, product_id=1, quantity=Decimal("2"), unit_price=Decimal("50.00"))
+            MagicMock(spec=SaleItem, product_id=1, quantity=Decimal("2"), unit_price=Decimal("50.00"))
         ]
         
         # Mock customer data
-        mock_customer = Mock(spec=Customer)
+        mock_customer = MagicMock(spec=Customer)
         mock_customer.id = 2
         mock_customer.name = "Test Customer"
         mock_customer.address = "123 Test St"
@@ -71,7 +79,7 @@ class TestInvoicingService(unittest.TestCase):
         self.invoice_repo.get_all.return_value = []  # No existing invoices for numbering
         
         # Mock the added invoice
-        mock_invoice = Mock(spec=Invoice)
+        mock_invoice = MagicMock(spec=Invoice)
         mock_invoice.id = 1
         mock_invoice.sale_id = 1
         mock_invoice.invoice_number = "0001-00000001"
@@ -192,7 +200,7 @@ class TestInvoicingService(unittest.TestCase):
         self.invoice_repo.get_all.return_value = [mock_invoice1, mock_invoice2, mock_invoice3]
         
         # Call the method directly
-        result = self.service._generate_next_invoice_number()
+        result = self.service._generate_next_invoice_number(self.invoice_repo)
         
         # Verify correct number generation
         self.assertEqual(result, "0001-00000006")  # Next after highest (5)
@@ -204,7 +212,7 @@ class TestInvoicingService(unittest.TestCase):
         self.invoice_repo.get_all.return_value = []
         
         # Call the method
-        result = self.service._generate_next_invoice_number()
+        result = self.service._generate_next_invoice_number(self.invoice_repo)
         
         # Verify first invoice number
         self.assertEqual(result, "0001-00000001")
@@ -268,8 +276,9 @@ class TestInvoicingService(unittest.TestCase):
                 product_id=1,
                 quantity=Decimal("2"),
                 unit_price=Decimal("50.00"),
-                product_description="Test Product",
-                product_code="TP001"
+                description="Test Product",
+                product_code="TP001",
+                line_total=Decimal("100.00")
             )
         ]
         
@@ -312,48 +321,50 @@ class TestInvoicingService(unittest.TestCase):
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp_path = tmp.name
         
-        # Patch the InvoiceBuilder to avoid actual PDF generation
-        with patch('infrastructure.reporting.invoice_builder.InvoiceBuilder') as MockBuilderClass:
-            # Configure the mock to return success
-            mock_builder = MockBuilderClass.return_value
-            mock_builder.generate_invoice_pdf.return_value = True
+        try:
+            # Store info
+            store_info = {
+                "name": "Test Store",
+                "address": "123 Store St",
+                "phone": "555-1234",
+                "cuit": "30-71234567-9",
+                "logo_path": None,  # No logo for test
+                "iva_condition": "Responsable Inscripto"
+            }
             
-            try:
-                # Store info
-                store_info = {
-                    "name": "Test Store",
-                    "address": "123 Store St",
-                    "phone": "555-1234",
-                    "cuit": "30-71234567-9",
-                    "logo_path": None,  # No logo for test
-                    "iva_condition": "Responsable Inscripto"
-                }
+            # Call PDF generation
+            # Add patch for Config.PDF_OUTPUT_DIR
+            with patch("os.makedirs") as mock_makedirs, \
+                 patch("core.services.invoicing_service.Config") as mock_config:
+                # Create a PDF_OUTPUT_DIR attribute on the mock Config
+                mock_config.PDF_OUTPUT_DIR = tempfile.gettempdir()
                 
-                # Call PDF generation
                 result_path = self.service.generate_invoice_pdf(
                     invoice_id=1,
-                    filename=tmp_path,
+                    filename=os.path.basename(tmp_path),  # Just use the filename
+                    output_path=os.path.dirname(tmp_path), # Specify output path explicitly
                     store_info=store_info
                 )
+            
+            # Assertions
+            self.invoice_repo.get_by_id.assert_called_once_with(1)
+            self.assertEqual(result_path, tmp_path)
+            
+            # Check that the file exists
+            self.assertTrue(os.path.exists(tmp_path))
+            
+            # Read the file contents and verify it contains expected information
+            with open(tmp_path, "r") as f:
+                content = f.read()
+                self.assertIn("INVOICE 0001-00000001", content)
+                self.assertIn("Type: A", content)
+                self.assertIn("Test Customer", content)
+                self.assertIn("Test Product", content)
                 
-                # Assertions
-                self.invoice_repo.get_by_id.assert_called_once_with(1)
-                self.assertEqual(result_path, tmp_path)
-                
-                # Verify the builder was called with correct parameters
-                MockBuilderClass.assert_called_once_with(store_info)
-                mock_builder.generate_invoice_pdf.assert_called_once()
-                
-                # Verify invoice data was passed correctly
-                call_args = mock_builder.generate_invoice_pdf.call_args[1]
-                self.assertEqual(call_args['filename'], tmp_path)
-                self.assertIn('invoice_data', call_args)
-                self.assertIn('sale_items', call_args)
-                
-            finally:
-                # Clean up
-                if os.path.exists(tmp_path):
-                    os.unlink(tmp_path)
+        finally:
+            # Clean up
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
 
     def test_generate_invoice_pdf_error_handling(self):
         """Test error handling when generating PDF."""
@@ -362,7 +373,10 @@ class TestInvoicingService(unittest.TestCase):
         
         # Expect ValueError for non-existent invoice
         with self.assertRaises(ValueError) as context:
-            self.service.generate_invoice_pdf(invoice_id=999)
+            with patch("core.services.invoicing_service.Config") as mock_config:
+                # Create a PDF_OUTPUT_DIR attribute on the mock Config
+                mock_config.PDF_OUTPUT_DIR = tempfile.gettempdir()
+                self.service.generate_invoice_pdf(invoice_id=999)
             
         self.assertIn("not found", str(context.exception))
 

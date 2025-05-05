@@ -1,168 +1,125 @@
-import unittest
-import os
 import pytest
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 # Assume these paths might need adjustment depending on execution context
 from infrastructure.persistence.sqlite.database import Base
-from infrastructure.persistence.sqlite.models_mapping import ProductOrm, InventoryMovementOrm, DepartmentOrm # Added InventoryMovementOrm
+from infrastructure.persistence.sqlite.models_mapping import ProductOrm, InventoryMovementOrm, DepartmentOrm
 # Import repository classes directly
 from infrastructure.persistence.sqlite.repositories import SqliteProductRepository, SqliteInventoryRepository
 from core.interfaces.repository_interfaces import IInventoryRepository
 from core.models.product import Product
 from core.models.inventory import InventoryMovement
 
-# Use an in-memory SQLite database for testing repositories
-DATABASE_URL = "sqlite:///:memory:"
+@pytest.fixture
+def test_product_ids(test_db_session):
+    """Create test products and return their IDs."""
+    product_repo = SqliteProductRepository(test_db_session)
+    
+    # Add a product to associate movements with
+    test_product = Product(
+        code="TESTPROD",
+        description="Test Product",
+        cost_price=10.0,
+        sell_price=20.0,
+        uses_inventory=True
+    )
+    test_product_2 = Product(
+        code="TESTPROD2",
+        description="Test Product 2",
+        cost_price=5.0,
+        sell_price=15.0,
+        uses_inventory=True
+    )
+    added_product = product_repo.add(test_product)
+    added_product_2 = product_repo.add(test_product_2)
+    test_db_session.commit()
+    
+    return {'product1': added_product.id, 'product2': added_product_2.id}
 
-class TestSqliteInventoryRepository(unittest.TestCase):
+@pytest.fixture
+def clean_movements(test_db_session):
+    """Clear all inventory movements before test."""
+    test_db_session.query(InventoryMovementOrm).delete()
+    test_db_session.commit()
 
-    engine = None
-    SessionLocal = None
-    test_product_id = None
-    test_product_id_2 = None
-    session = None
+def test_add_movement(test_db_session, test_product_ids, clean_movements):
+    """Verify an inventory movement is added correctly."""
+    repo = SqliteInventoryRepository(test_db_session)
+    movement_data = InventoryMovement(
+        product_id=test_product_ids['product1'],
+        quantity=10.0,
+        movement_type="PURCHASE",
+        description="Initial stock",
+        user_id=1,
+        related_id=101
+    )
+    added_movement = repo.add_movement(movement_data)
+    test_db_session.commit()
 
-    @classmethod
-    def setUpClass(cls):
-        """Set up the in-memory database and create tables."""
-        cls.engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-        Base.metadata.create_all(bind=cls.engine)
-        cls.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=cls.engine)
-        
-        # Create a session for this test class
-        cls.session = cls.SessionLocal()
+    assert added_movement.id is not None
+    assert added_movement.product_id == test_product_ids['product1']
+    assert added_movement.quantity == 10.0
+    assert added_movement.movement_type == "PURCHASE"
+    assert added_movement.description == "Initial stock"
+    assert added_movement.user_id == 1
+    assert added_movement.related_id == 101
+    assert isinstance(added_movement.timestamp, datetime)
 
-        # Add a product to associate movements with
-        product_repo = SqliteProductRepository(cls.session)  # Pass session
-        test_product = Product(
-            code="TESTPROD",
-            description="Test Product",
-            cost_price=10.0,
-            sell_price=20.0,
-            uses_inventory=True
-        )
-        test_product_2 = Product(
-            code="TESTPROD2",
-            description="Test Product 2",
-            cost_price=5.0,
-            sell_price=15.0,
-            uses_inventory=True
-        )
-        added_product = product_repo.add(test_product)
-        added_product_2 = product_repo.add(test_product_2)
-        cls.test_product_id = added_product.id
-        cls.test_product_id_2 = added_product_2.id
-        cls.session.commit()  # Commit the changes
-        
-        if not cls.test_product_id or not cls.test_product_id_2:
-            raise Exception("Failed to set up test products.")
+    # Verify in DB
+    db_movement = test_db_session.query(InventoryMovementOrm).filter_by(id=added_movement.id).first()
+    assert db_movement is not None
+    assert db_movement.quantity == 10.0
+    assert db_movement.movement_type == "PURCHASE"
 
+def test_get_movements_for_product(test_db_session, test_product_ids, clean_movements):
+    """Verify retrieving movements only for a specific product."""
+    repo = SqliteInventoryRepository(test_db_session)
+    now = datetime.now()
+    
+    # Create movements for testing
+    m1 = InventoryMovement(product_id=test_product_ids['product1'], quantity=5.0, movement_type="ADJUST", timestamp=now - timedelta(hours=2))
+    m2 = InventoryMovement(product_id=test_product_ids['product1'], quantity=-2.0, movement_type="SALE", timestamp=now - timedelta(hours=1), related_id=50)
+    m3 = InventoryMovement(product_id=test_product_ids['product2'], quantity=20.0, movement_type="PURCHASE", timestamp=now) # Different product
 
-    @classmethod
-    def tearDownClass(cls):
-        """Clean up the database."""
-        if cls.session:
-            cls.session.close()
-        Base.metadata.drop_all(bind=cls.engine)
+    # Add movements
+    repo.add_movement(m1)
+    repo.add_movement(m2)
+    repo.add_movement(m3)
+    test_db_session.commit()
 
-    def setUp(self):
-        """Ensure each test starts with a clean state if needed."""
-        # Clean movements before each test
-        self.__class__.session.query(InventoryMovementOrm).delete()
-        self.__class__.session.commit()
+    # Retrieve movements for the first product only
+    retrieved_movements = repo.get_movements_for_product(test_product_ids['product1'])
 
-    def test_add_movement(self):
-        """Verify an inventory movement is added correctly."""
-        repo = SqliteInventoryRepository(self.__class__.session)  # Pass session
-        movement_data = InventoryMovement(
-            product_id=self.test_product_id,
-            quantity=10.0,
-            movement_type="PURCHASE",
-            description="Initial stock",
-            user_id=1,
-            related_id=101
-        )
-        added_movement = repo.add_movement(movement_data)
-        self.__class__.session.commit()  # Commit changes
+    # Verify we get exactly 2 movements for the first product
+    assert len(retrieved_movements) == 2
+    
+    # Sort them by timestamp for predictable testing
+    retrieved_movements.sort(key=lambda x: x.timestamp)
+    
+    assert retrieved_movements[0].movement_type == "ADJUST"
+    assert retrieved_movements[0].quantity == 5.0
+    assert retrieved_movements[1].movement_type == "SALE"
+    assert retrieved_movements[1].quantity == -2.0
+    assert retrieved_movements[1].related_id == 50
+    # Check if sorted by timestamp
+    assert retrieved_movements[0].timestamp < retrieved_movements[1].timestamp
 
-        self.assertIsNotNone(added_movement.id)
-        self.assertEqual(added_movement.product_id, self.test_product_id)
-        self.assertEqual(added_movement.quantity, 10.0)
-        self.assertEqual(added_movement.movement_type, "PURCHASE")
-        self.assertEqual(added_movement.description, "Initial stock")
-        self.assertEqual(added_movement.user_id, 1)
-        self.assertEqual(added_movement.related_id, 101)
-        self.assertIsInstance(added_movement.timestamp, datetime)
+def test_get_all_movements(test_db_session, test_product_ids, clean_movements):
+    """Verify retrieving all movements."""
+    repo = SqliteInventoryRepository(test_db_session)
+    now = datetime.now()
 
-        # Verify in DB
-        db_movement = self.__class__.session.query(InventoryMovementOrm).filter_by(id=added_movement.id).first()
-        self.assertIsNotNone(db_movement)
-        self.assertEqual(db_movement.quantity, 10.0)
-        self.assertEqual(db_movement.movement_type, "PURCHASE")
+    m1 = InventoryMovement(product_id=test_product_ids['product1'], quantity=1.0, movement_type="INIT", timestamp=now - timedelta(days=1))
+    m2 = InventoryMovement(product_id=test_product_ids['product2'], quantity=5.0, movement_type="PURCHASE", timestamp=now)
 
-    def test_get_movements_for_product(self):
-        """Verify retrieving movements only for a specific product."""
-        repo = SqliteInventoryRepository(self.__class__.session)  # Pass session
-        now = datetime.now()
-        
-        # Clear existing movements first to ensure clean test environment
-        self.__class__.session.query(InventoryMovementOrm).delete()
-        self.__class__.session.commit()
-        
-        # Create movements for testing
-        m1 = InventoryMovement(product_id=self.test_product_id, quantity=5.0, movement_type="ADJUST", timestamp=now - timedelta(hours=2))
-        m2 = InventoryMovement(product_id=self.test_product_id, quantity=-2.0, movement_type="SALE", timestamp=now - timedelta(hours=1), related_id=50)
-        m3 = InventoryMovement(product_id=self.test_product_id_2, quantity=20.0, movement_type="PURCHASE", timestamp=now) # Different product
+    repo.add_movement(m1)
+    repo.add_movement(m2)
+    test_db_session.commit()
 
-        # Add movements
-        repo.add_movement(m1)
-        repo.add_movement(m2)
-        repo.add_movement(m3)
-        self.__class__.session.commit()  # Commit changes
+    all_movements = repo.get_all_movements()
 
-        # Retrieve movements for the first product only
-        retrieved_movements = repo.get_movements_for_product(self.test_product_id)
-
-        # Verify we get exactly 2 movements for the first product
-        self.assertEqual(len(retrieved_movements), 2)
-        
-        # Sort them by timestamp for predictable testing
-        retrieved_movements.sort(key=lambda x: x.timestamp)
-        
-        self.assertEqual(retrieved_movements[0].movement_type, "ADJUST")
-        self.assertEqual(retrieved_movements[0].quantity, 5.0)
-        self.assertEqual(retrieved_movements[1].movement_type, "SALE")
-        self.assertEqual(retrieved_movements[1].quantity, -2.0)
-        self.assertEqual(retrieved_movements[1].related_id, 50)
-        # Check if sorted by timestamp
-        self.assertTrue(retrieved_movements[0].timestamp < retrieved_movements[1].timestamp)
-
-
-    def test_get_all_movements(self):
-        """Verify retrieving all movements."""
-        repo = SqliteInventoryRepository(self.__class__.session)  # Pass session
-        now = datetime.now()
-        # Clear existing movements first for a clean test
-        self.__class__.session.query(InventoryMovementOrm).delete()
-        self.__class__.session.commit()
-
-        m1 = InventoryMovement(product_id=self.test_product_id, quantity=1.0, movement_type="INIT", timestamp=now - timedelta(days=1))
-        m2 = InventoryMovement(product_id=self.test_product_id_2, quantity=5.0, movement_type="PURCHASE", timestamp=now)
-
-        repo.add_movement(m1)
-        repo.add_movement(m2)
-        self.__class__.session.commit()  # Commit changes
-
-        all_movements = repo.get_all_movements()
-
-        self.assertEqual(len(all_movements), 2)
-        # Check if product IDs are correct in the results
-        product_ids = {m.product_id for m in all_movements}
-        self.assertIn(self.test_product_id, product_ids)
-        self.assertIn(self.test_product_id_2, product_ids)
-
-if __name__ == '__main__':
-    unittest.main() 
+    assert len(all_movements) == 2
+    # Check if product IDs are correct in the results
+    product_ids = {m.product_id for m in all_movements}
+    assert test_product_ids['product1'] in product_ids
+    assert test_product_ids['product2'] in product_ids 

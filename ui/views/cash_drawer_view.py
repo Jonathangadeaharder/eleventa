@@ -7,24 +7,39 @@ from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QFont, QColor
 from decimal import Decimal
 import locale
+from infrastructure.reporting.receipt_builder import format_currency
 
 from core.services.cash_drawer_service import CashDrawerService
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
 from ui.models.table_models import CashDrawerTableModel
 from ui.dialogs.cash_drawer_dialogs import OpenDrawerDialog, CashMovementDialog
 
+# Utility function to parse currency input
+
+def parse_currency_input(value: str) -> Decimal:
+    """Parse a currency string (with optional commas) to Decimal."""
+    value = value.replace(",", "").strip()
+    if not value:
+        raise ValueError("Empty input")
+    try:
+        return Decimal(value).quantize(Decimal('0.01'))
+    except Exception:
+        raise ValueError(f"Invalid currency input: {value}")
+
+# Utility function to calculate cash difference
+
+def calculate_difference(expected: Decimal, actual: Decimal) -> Decimal:
+    """Calculate the difference between expected and actual cash amounts."""
+    return (expected - actual).quantize(Decimal('0.01'))
+
 class CashDrawerView(QWidget):
     """View for managing cash drawer operations."""
     
     def __init__(self, cash_drawer_service: CashDrawerService, user_id: int, parent=None):
         super().__init__(parent)
-        self.cash_drawer_service = cash_drawer_service
+        self.service = cash_drawer_service
         self.user_id = user_id
-        self.current_drawer_id = None  # For multi-drawer support in the future
-        
-        # Configure locale for currency formatting
-        locale.setlocale(locale.LC_ALL, '')
-        
+        self.current_drawer_id = None
         self._init_ui()
         self._connect_signals()
         self._refresh_data()
@@ -134,7 +149,7 @@ class CashDrawerView(QWidget):
     def _refresh_data(self):
         """Refresh all data displayed in the view."""
         # Get drawer summary
-        summary = self.cash_drawer_service.get_drawer_summary(self.current_drawer_id)
+        summary = self.service.get_drawer_summary(self.current_drawer_id)
         
         # Update status section
         is_open = summary.get('is_open', False)
@@ -143,7 +158,8 @@ class CashDrawerView(QWidget):
         
         # Update balance
         current_balance = summary.get('current_balance', Decimal('0.00'))
-        self.balance_label.setText(locale.currency(float(current_balance), grouping=True))
+        # Use f-string formatting for currency, ensure 2 decimal places
+        self.balance_label.setText(f"${current_balance:,.2f}")
         
         # Update open info if available
         if is_open:
@@ -177,25 +193,37 @@ class CashDrawerView(QWidget):
             self.open_button.setText("Abrir Caja")
             
         # Update table with entries
-        entries = summary.get('entries_today', [])
-        self.table_model.update_entries(entries)
+        raw_entries = summary.get('entries_today', [])
+        # Pre-format amounts to strings before passing to the model
+        formatted_entries = []
+        for entry in raw_entries:
+            # Create a copy to avoid modifying the original dict
+            formatted_entry = entry.copy() 
+            amount = formatted_entry.get('amount', Decimal('0.00'))
+            # Store the formatted string directly
+            formatted_entry['amount'] = f"${amount:,.2f}" 
+            formatted_entries.append(formatted_entry)
+            
+        self.table_model.update_entries(formatted_entries)
         
         # Update summary section
         initial_amount = summary.get('initial_amount', Decimal('0.00'))
         total_in = summary.get('total_in', Decimal('0.00'))
         total_out = summary.get('total_out', Decimal('0.00'))
         
-        self.initial_amount_label.setText(locale.currency(float(initial_amount), grouping=True))
-        self.total_in_label.setText(locale.currency(float(total_in), grouping=True))
-        self.total_out_label.setText(locale.currency(float(total_out), grouping=True))
+        # Use f-string formatting for currency
+        self.initial_amount_label.setText(f"${initial_amount:,.2f}")
+        self.total_in_label.setText(f"${total_in:,.2f}")
+        self.total_out_label.setText(f"${total_out:,.2f}")
         
         # Calculate expected balance and difference (would normally be done in the service)
         expected_balance = initial_amount + total_in - total_out
         difference = current_balance - expected_balance
         
-        self.expected_balance_label.setText(locale.currency(float(expected_balance), grouping=True))
-        self.actual_balance_label.setText(locale.currency(float(current_balance), grouping=True))
-        self.difference_label.setText(locale.currency(float(difference), grouping=True))
+        # Use f-string formatting for currency
+        self.expected_balance_label.setText(f"${expected_balance:,.2f}")
+        self.actual_balance_label.setText(f"${current_balance:,.2f}") # Reuse formatted current_balance
+        self.difference_label.setText(f"${difference:,.2f}")
         
         # Style the difference label based on value
         if difference == 0:
@@ -208,7 +236,7 @@ class CashDrawerView(QWidget):
     def _handle_open_drawer(self):
         """Handle opening or closing the cash drawer."""
         print("_handle_open_drawer called")
-        summary = self.cash_drawer_service.get_drawer_summary(self.current_drawer_id)
+        summary = self.service.get_drawer_summary(self.current_drawer_id)
         is_open = summary.get('is_open', False)
         
         if is_open:
@@ -225,7 +253,7 @@ class CashDrawerView(QWidget):
             # Drawer is closed, open it
             # Use the correct dialog class name (alias) and parent
             print("Drawer is closed, opening dialog")
-            dialog = OpenDrawerDialog(self.cash_drawer_service, self.user_id, self)
+            dialog = OpenDrawerDialog(self.service, self.user_id, self)
             if dialog.exec():
                 print("Dialog executed successfully")
                 # The dialog now handles the service call and message boxes internally
@@ -240,13 +268,13 @@ class CashDrawerView(QWidget):
     def _handle_add_cash(self):
         """Handle adding cash to the drawer."""
         # Check if drawer is open first
-        summary = self.cash_drawer_service.get_drawer_summary(self.current_drawer_id)
+        summary = self.service.get_drawer_summary(self.current_drawer_id)
         if not summary.get('is_open', False):
             QMessageBox.warning(self, "Error", "La caja debe estar abierta para agregar efectivo.")
             return
 
         # Use the correct dialog class name (alias), pass service/user_id, and parent
-        dialog = CashMovementDialog(self.cash_drawer_service, self.user_id, is_adding=True, parent=self)
+        dialog = CashMovementDialog(self.service, self.user_id, is_adding=True, parent=self)
         if dialog.exec():
             # The dialog now handles the service call and message boxes internally
             # We just need to refresh the view if it succeeded
@@ -256,13 +284,13 @@ class CashDrawerView(QWidget):
     def _handle_remove_cash(self):
         """Handle removing cash from the drawer."""
         # Check if drawer is open first
-        summary = self.cash_drawer_service.get_drawer_summary(self.current_drawer_id)
+        summary = self.service.get_drawer_summary(self.current_drawer_id)
         if not summary.get('is_open', False):
             QMessageBox.warning(self, "Error", "La caja debe estar abierta para retirar efectivo.")
             return
 
         # Use the correct dialog class name (alias), pass service/user_id, and parent
-        dialog = CashMovementDialog(self.cash_drawer_service, self.user_id, is_adding=False, parent=self)
+        dialog = CashMovementDialog(self.service, self.user_id, is_adding=False, parent=self)
         if dialog.exec():
              # The dialog now handles the service call and message boxes internally
              # We just need to refresh the view if it succeeded
@@ -278,3 +306,10 @@ class CashDrawerView(QWidget):
             "Imprimir Reporte",
             "La funcionalidad de impresión de reportes no está implementada en esta versión."
         )
+
+# Re-export utility functions
+__all__ = [
+    'parse_currency_input',
+    'calculate_difference',
+    'CashDrawerView'
+]

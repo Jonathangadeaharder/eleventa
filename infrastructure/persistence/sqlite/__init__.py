@@ -9,11 +9,16 @@ try:
 except ImportError:
     pass  # It's okay if it doesn't exist yet
 
+# Import table dependency handling
+from infrastructure.persistence.sqlite.table_deps import register_table_creation_events, create_tables_in_order
+
 __all__ = [
     'Base', 
     'engine', 
     'SessionLocal', 
     'init_db', 
     'ensure_all_models_mapped',
-    'Database'
+    'Database',
+    'register_table_creation_events',
+    'create_tables_in_order'
 ] 

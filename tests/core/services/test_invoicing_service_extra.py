@@ -43,10 +43,15 @@ class DummyCustomerRepo:
 
 
 def make_service(invoice_repo=None, sale_repo=None, customer_repo=None):
+    # Create factory functions that return the provided repos
+    invoice_repo_factory = lambda session=None: invoice_repo or DummyInvoiceRepo()
+    sale_repo_factory = lambda session=None: sale_repo or DummySaleRepo([])
+    customer_repo_factory = lambda session=None: customer_repo or DummyCustomerRepo([])
+    
     return InvoicingService(
-        invoice_repo or DummyInvoiceRepo(),
-        sale_repo or DummySaleRepo([]),
-        customer_repo or DummyCustomerRepo([])
+        invoice_repo_factory=invoice_repo_factory,
+        sale_repo_factory=sale_repo_factory,
+        customer_repo_factory=customer_repo_factory
     )
 
 
@@ -55,7 +60,7 @@ def make_service(invoice_repo=None, sale_repo=None, customer_repo=None):
 def test_generate_next_invoice_number_first():
     repo = DummyInvoiceRepo([])
     svc = make_service(invoice_repo=repo)
-    assert svc._generate_next_invoice_number() == "0001-00000001"
+    assert svc._generate_next_invoice_number(repo) == "0001-00000001"
 
 
 def test_generate_next_invoice_number_increment():
@@ -69,7 +74,7 @@ def test_generate_next_invoice_number_increment():
     )
     repo = DummyInvoiceRepo([inv1])
     svc = make_service(invoice_repo=repo)
-    assert svc._generate_next_invoice_number() == "0001-00000006"
+    assert svc._generate_next_invoice_number(repo) == "0001-00000006"
 
 
 def test_determine_invoice_type_various():

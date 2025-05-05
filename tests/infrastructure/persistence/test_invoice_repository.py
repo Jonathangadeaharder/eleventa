@@ -2,212 +2,214 @@ import pytest
 import datetime
 from decimal import Decimal
 import time
+import uuid
 
-import sys
-import os
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
 
 from core.models.customer import Customer
 from core.models.sale import Sale, SaleItem
 from core.models.invoice import Invoice
 from infrastructure.persistence.sqlite.repositories import (
-    SqliteCustomerRepository,
-    SqliteSaleRepository,
-    SqliteInvoiceRepository
+    SqliteInvoiceRepository,
 )
-from infrastructure.persistence.sqlite.database import engine, Base
-from sqlalchemy import delete
 from infrastructure.persistence.sqlite.models_mapping import (
-    InvoiceOrm, SaleOrm, CustomerOrm, SaleItemOrm
+    InvoiceOrm, SaleOrm, CustomerOrm, SaleItemOrm, ProductOrm, DepartmentOrm
 )
 
-@pytest.fixture(scope="function", autouse=True)
-def setup_database(test_db_session):
-    """Set up the database for each test."""
-    # Create tables
-    Base.metadata.create_all(bind=engine)
-    
-    # Clear existing data to avoid unique constraint violations
-    test_db_session.execute(delete(InvoiceOrm))
-    test_db_session.execute(delete(SaleItemOrm))  
-    test_db_session.execute(delete(SaleOrm))
-    test_db_session.execute(delete(CustomerOrm))
-    test_db_session.flush()
-    
-    yield
-    
-    # Cleanup after each test
-    test_db_session.execute(delete(InvoiceOrm))
-    test_db_session.execute(delete(SaleItemOrm))
-    test_db_session.execute(delete(SaleOrm))
-    test_db_session.execute(delete(CustomerOrm))
-    test_db_session.flush()
 
 @pytest.fixture
-def customer_repo(test_db_session):
-    return SqliteCustomerRepository(test_db_session)
+def create_customer(test_db_session):
+    """Fixture to create a customer with transactional isolation."""
+    def _create_customer(name="Test Customer"):
+        customer_repo = SqliteCustomerRepository(test_db_session)
+        unique_suffix = str(int(time.time() * 1000))
+        customer = Customer(
+            name=f"{name} {unique_suffix}",
+            address="123 Test St",
+            phone="555-1234",
+            email=f"test{unique_suffix}@example.com",
+            cuit=f"20-12345678-{unique_suffix[-1]}",
+            iva_condition="Responsable Inscripto"
+        )
+        added_customer = customer_repo.add(customer)
+        return added_customer
+    return _create_customer
 
 @pytest.fixture
-def sale_repo(test_db_session):
-    return SqliteSaleRepository(test_db_session)
+def create_department(test_db_session):
+    """Fixture to create a department with transactional isolation."""
+    def _create_department(name="Testing Dept"):
+        dept_repo = SqliteDepartmentRepository(test_db_session)
+        dept = Department(name=name)
+        added_dept = dept_repo.add(dept)
+        return added_dept
+    return _create_department
 
 @pytest.fixture
-def invoice_repo(test_db_session):
-    return SqliteInvoiceRepository(test_db_session)
+def create_product(test_db_session):
+    """Fixture to create a product with transactional isolation."""
+    def _create_product(dept_id, code_suffix=""):
+        prod_repo = SqliteProductRepository(test_db_session)
+        code = f"PFS_{code_suffix}{uuid.uuid4()}"
+        prod = prod_repo.add(Product(code=code, description="ProdForSale", sell_price=100.0, department_id=dept_id))
+        return prod
+    return _create_product
 
-def create_sample_customer(customer_repo):
-    unique_suffix = str(int(time.time()))
-    customer = Customer(
-        name="Test Customer",
-        address="123 Test St",
-        phone="555-1234",
-        email="test@example.com",
-        cuit=f"20{unique_suffix}",
-        iva_condition="Responsable Inscripto"
-    )
-    return customer_repo.add(customer)
-
-def create_sample_sale(sale_repo, customer_id):
-    sale = Sale(
-        customer_id=customer_id,
-        timestamp=datetime.datetime.now(),
-        payment_type="cash"
-    )
-    
-    # Add a simple SaleItem to make the total match
-    sale_item = SaleItem(
-        product_id=1,
-        quantity=Decimal("1"),
-        unit_price=Decimal("100.00"),
-        product_code="TEST001",
-        product_description="Test Product"
-    )
-    # Set the total_price field by calculating it
-    sale_item.total_price = sale_item.quantity * sale_item.unit_price
-    sale.items = [sale_item]
-    
-    return sale_repo.add_sale(sale)
+@pytest.fixture
+def create_sale(test_db_session):
+    """Fixture to create a sale with transactional isolation."""
+    def _create_sale(customer_id, product):
+        sale_repo = SqliteSaleRepository(test_db_session)
+        item = SaleItem(
+            product_id=product.id,
+            quantity=Decimal("1"),
+            unit_price=Decimal("100.00"),
+            product_code=product.code,
+            product_description=product.description
+        )
+        sale = Sale(items=[item], customer_id=customer_id)
+        added_sale = sale_repo.add_sale(sale)
+        return added_sale
+    return _create_sale
 
 def get_unique_invoice_number():
-    unique_suffix = str(int(time.time()))
+    """Generates a unique invoice number for testing."""
+    unique_suffix = str(int(time.time() * 1000))
     return f"A-0001-{unique_suffix}"
 
-def test_add_and_get_invoice(customer_repo, sale_repo, invoice_repo):
-    customer = create_sample_customer(customer_repo)
-    sale = create_sample_sale(sale_repo, customer.id)
+def create_customer_department_product_sale(test_db_session, create_customer, create_department, create_product, create_sale, suffix=""):
+    """Helper to create customer, department, product, and sale with transactional isolation."""
+    customer = create_customer(name=f"Test Customer {suffix}")
+    dept = create_department(name=f"Test Department {suffix}")
+    product = create_product(dept.id, code_suffix=suffix)
+    sale = create_sale(customer.id, product)
+    return customer, dept, product, sale
+
+def test_add_and_get_invoice(invoice_repo, test_db_session, request, create_customer, create_department, create_product, create_sale):
+    """Test adding a new invoice and retrieving it with transactional isolation."""
+    # Start a transaction
+    test_db_session.begin_nested()
+    
+    # --- Setup ---
+    customer, dept, product, sale = create_customer_department_product_sale(test_db_session, create_customer, create_department, create_product, create_sale, "AddGet")
+    # --- End Setup ---
+    
+    # Add finalizer to rollback the transaction after test completion
+    def finalizer():
+        test_db_session.rollback()
+    request.addfinalizer(finalizer)
+    
     invoice_number = get_unique_invoice_number()
+    cust_details = customer.to_dict() if hasattr(customer, 'to_dict') else {"name": customer.name, "id": customer.id} 
+
     invoice = Invoice(
         sale_id=sale.id,
         customer_id=customer.id,
         invoice_number=invoice_number,
         invoice_date=datetime.datetime.now(),
-        invoice_type="A",
-        customer_details={
-            "name": customer.name,
-            "cuit": customer.cuit,
-            "iva_condition": customer.iva_condition
-        },
-        subtotal=Decimal("82.64"),
-        iva_amount=Decimal("17.36"),
-        total=Decimal("100.00"),
-        iva_condition=customer.iva_condition,
-        cae="12345678901234",
-        cae_due_date=datetime.datetime.now() + datetime.timedelta(days=10),
-        notes="Test invoice",
+        total=sale.total,
+        invoice_type = "A",
+        customer_details = cust_details,
+        subtotal = sale.total / Decimal("1.21"), 
+        iva_amount = sale.total - (sale.total / Decimal("1.21")),
+        iva_condition = customer.iva_condition or "Responsable Inscripto",
         is_active=True
     )
+
+    # Add invoice (no manual commit needed)
     added_invoice = invoice_repo.add(invoice)
+
     assert added_invoice is not None
+    assert added_invoice.id is not None
     assert added_invoice.sale_id == sale.id
     assert added_invoice.customer_id == customer.id
     assert added_invoice.invoice_number == invoice_number
 
-    fetched_by_id = invoice_repo.get_by_id(added_invoice.id)
-    assert fetched_by_id is not None
-    assert fetched_by_id.invoice_number == invoice_number
+    # Retrieve and verify
+    retrieved_invoice = invoice_repo.get_by_id(added_invoice.id)
+    assert retrieved_invoice is not None
+    assert retrieved_invoice.invoice_number == invoice_number
+    assert retrieved_invoice.sale_id == sale.id
 
-    fetched_by_sale = invoice_repo.get_by_sale_id(sale.id)
-    assert fetched_by_sale is not None
-    assert fetched_by_sale.id == added_invoice.id
-
-def test_get_all_invoices(customer_repo, sale_repo, invoice_repo):
-    customer = create_sample_customer(customer_repo)
-    sale = create_sample_sale(sale_repo, customer.id)
-    invoice_number = get_unique_invoice_number()
-    invoice = Invoice(
-        sale_id=sale.id,
-        customer_id=customer.id,
-        invoice_number=invoice_number,
-        invoice_date=datetime.datetime.now(),
-        invoice_type="A",
-        customer_details={
-            "name": customer.name,
-            "cuit": customer.cuit,
-            "iva_condition": customer.iva_condition
-        },
-        subtotal=Decimal("50.00"),
-        iva_amount=Decimal("10.50"),
-        total=Decimal("60.50"),
-        iva_condition=customer.iva_condition,
-        cae="98765432109876",
-        cae_due_date=datetime.datetime.now() + datetime.timedelta(days=10),
-        notes="Another test invoice",
-        is_active=True
-    )
-    invoice_repo.add(invoice)
-    all_invoices = invoice_repo.get_all()
-    assert any(inv.invoice_number == invoice_number for inv in all_invoices)
-
-def test_duplicate_sale_id_raises_error(customer_repo, sale_repo, invoice_repo):
-    customer = create_sample_customer(customer_repo)
-    sale = create_sample_sale(sale_repo, customer.id)
-    invoice_number1 = get_unique_invoice_number()
-    # Wait a moment to ensure unique invoice numbers
-    time.sleep(1)
-    invoice_number2 = get_unique_invoice_number()
+def test_get_all_invoices(invoice_repo, test_db_session, request, create_customer, create_department, create_product, create_sale):
+    """Test retrieving all invoices with transactional isolation."""
+    # Start a transaction
+    test_db_session.begin_nested()
     
+    invoice_numbers_added = set()
+
+    # --- Create Invoice 1 ---
+    customer1, dept1, product1, sale1 = create_customer_department_product_sale(test_db_session, create_customer, create_department, create_product, create_sale, "All1")
+    
+    inv_num1 = get_unique_invoice_number()
+    cust1_details = customer1.to_dict() if hasattr(customer1, 'to_dict') else {"name": customer1.name, "id": customer1.id} 
+    inv1 = Invoice(sale_id=sale1.id, customer_id=customer1.id, invoice_number=inv_num1, total=sale1.total, customer_details=cust1_details, invoice_type="A", iva_condition=customer1.iva_condition or "RI")
+    invoice_repo.add(inv1)
+    invoice_numbers_added.add(inv_num1)
+    # --- End Invoice 1 --- 
+
+    time.sleep(0.01) 
+
+    # --- Create Invoice 2 ---
+    customer2, dept2, product2, sale2 = create_customer_department_product_sale(test_db_session, create_customer, create_department, create_product, create_sale, "All2")
+    
+    inv_num2 = get_unique_invoice_number()
+    cust2_details = customer2.to_dict() if hasattr(customer2, 'to_dict') else {"name": customer2.name, "id": customer2.id} 
+    inv2 = Invoice(sale_id=sale2.id, customer_id=customer2.id, invoice_number=inv_num2, total=sale2.total, customer_details=cust2_details, invoice_type="A", iva_condition=customer2.iva_condition or "RI")
+    invoice_repo.add(inv2)
+    invoice_numbers_added.add(inv_num2)
+    # --- End Invoice 2 --- 
+    
+    # Add finalizer to rollback the transaction after test completion
+    def finalizer():
+        test_db_session.rollback()
+    request.addfinalizer(finalizer)
+
+    # Retrieve all
+    all_invoices = invoice_repo.get_all()
+    assert len(all_invoices) == 2 
+    retrieved_invoice_numbers = {inv.invoice_number for inv in all_invoices}
+    assert retrieved_invoice_numbers == invoice_numbers_added
+
+def test_duplicate_sale_id_raises_error(invoice_repo, test_db_session, request, create_customer, create_department, create_product, create_sale):
+    """Test that adding an invoice for an already invoiced sale raises error with transactional isolation."""
+    # Start a transaction
+    test_db_session.begin_nested()
+    
+    # --- Setup ---
+    customer, dept, product, sale = create_customer_department_product_sale(test_db_session, create_customer, create_department, create_product, create_sale, "Dup")
+    
+    invoice_number1 = get_unique_invoice_number()
+    cust_details = customer.to_dict() if hasattr(customer, 'to_dict') else {"name": customer.name, "id": customer.id} 
+
     invoice1 = Invoice(
-        sale_id=sale.id,
-        customer_id=customer.id,
-        invoice_number=invoice_number1,
-        invoice_date=datetime.datetime.now(),
+        sale_id=sale.id, 
+        customer_id=customer.id, 
+        invoice_number=invoice_number1, 
+        total=sale.total,
+        customer_details=cust_details,
         invoice_type="A",
-        customer_details={
-            "name": customer.name,
-            "cuit": customer.cuit,
-            "iva_condition": customer.iva_condition
-        },
-        subtotal=Decimal("30.00"),
-        iva_amount=Decimal("6.30"),
-        total=Decimal("36.30"),
-        iva_condition=customer.iva_condition,
-        cae="11111111111111",
-        cae_due_date=datetime.datetime.now() + datetime.timedelta(days=10),
-        notes="Duplicate sale test",
-        is_active=True
+        iva_condition=customer.iva_condition or "RI"
     )
     invoice_repo.add(invoice1)
+
+    # Attempt to add second invoice for the same sale
+    time.sleep(0.01) 
+    invoice_number2 = get_unique_invoice_number() 
     invoice2 = Invoice(
         sale_id=sale.id,  # Same sale_id as invoice1
-        customer_id=customer.id,
-        invoice_number=invoice_number2,
-        invoice_date=datetime.datetime.now(),
+        customer_id=customer.id, 
+        invoice_number=invoice_number2, 
+        total=sale.total,
+        customer_details=cust_details,
         invoice_type="A",
-        customer_details={
-            "name": customer.name,
-            "cuit": customer.cuit,
-            "iva_condition": customer.iva_condition
-        },
-        subtotal=Decimal("30.00"),
-        iva_amount=Decimal("6.30"),
-        total=Decimal("36.30"),
-        iva_condition=customer.iva_condition,
-        cae="22222222222222",
-        cae_due_date=datetime.datetime.now() + datetime.timedelta(days=10),
-        notes="Duplicate sale test 2",
-        is_active=True
+        iva_condition=customer.iva_condition or "RI"
     )
-    with pytest.raises(Exception):
+    
+    with pytest.raises(ValueError, match="Sale with ID .* already has an invoice"): 
         invoice_repo.add(invoice2)
+        # No commit needed as add should fail
+        
+    # Add finalizer to rollback the transaction after test completion
+    def finalizer():
+        test_db_session.rollback()
+    request.addfinalizer(finalizer)

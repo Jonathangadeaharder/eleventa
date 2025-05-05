@@ -3,12 +3,14 @@ import os
 import tempfile
 from decimal import Decimal
 from datetime import datetime
+import pytest
 
 from core.models.sale import Sale, SaleItem
 from infrastructure.reporting.receipt_builder import (
     format_currency, format_sale_date, format_item_row, generate_receipt_pdf
 )
 
+@pytest.mark.unit
 class TestReceiptBuilder(unittest.TestCase):
     def setUp(self):
         """Set up test data."""
@@ -58,7 +60,7 @@ class TestReceiptBuilder(unittest.TestCase):
         self.assertEqual(format_currency(10.5), "$10.50")
         self.assertEqual(format_currency(Decimal("10.5")), "$10.50")
         self.assertEqual(format_currency(0), "$0.00")
-        self.assertEqual(format_currency(1000), "$1000.00")
+        self.assertEqual(format_currency(1000), "$1,000.00")
 
     def test_format_sale_date(self):
         """Test the format_sale_date helper function."""

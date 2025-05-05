@@ -54,7 +54,15 @@ class SelectCustomerDialog(QDialog):
         self.proxy_model = QSortFilterProxyModel()
         self.proxy_model.setSourceModel(self.model)
         self.proxy_model.setFilterCaseSensitivity(Qt.CaseInsensitive)
+        
+        # Set model to table and ensure selection model is created
         self.customer_table.setModel(self.proxy_model)
+        
+        # Force selection model creation if needed
+        if self.customer_table.selectionModel() is None:
+            current_model = self.customer_table.model()
+            self.customer_table.setModel(None)
+            self.customer_table.setModel(current_model)
         
         main_layout.addWidget(self.customer_table)
         
@@ -101,22 +109,49 @@ class SelectCustomerDialog(QDialog):
         search_text = self.search_edit.text()
         self.proxy_model.setFilterRegularExpression(search_text)
         
-    def accept(self):
-        """Handle dialog acceptance."""
-        # Get the selected customer
-        selected_rows = self.customer_table.selectionModel().selectedRows()
-        if selected_rows:
-            # Get the model index from the proxy model
-            proxy_index = selected_rows[0]
-            # Map it to the source model
-            source_index = self.proxy_model.mapToSource(proxy_index)
-            # Get the item from the source model
-            name_item = self.model.item(source_index.row(), 0)
-            # Get the customer object from the item's data
-            self.selected_customer = name_item.data(Qt.UserRole)
-            
-        super().accept()
+    def accept(self, index=None):
+        """
+        Handles dialog acceptance. If an index is provided (e.g., from double-click),
+        selects the corresponding customer. Otherwise, uses the current selection.
+        """
+        selected_index = None
+        # Get selection model safely
+        selection_model = self.customer_table.selectionModel()
+
+        # Proceed only if selection model exists
+        if selection_model:
+            if index and index.isValid():
+                # Map proxy index to source index if needed (important!)
+                source_index = self.proxy_model.mapToSource(index)
+                selected_index = source_index
+                # We don't strictly need to visually select here for the logic,
+                # but if desired, ensure selection_model is valid first.
+                # selection_model.select(index, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
+            else:
+                # Check selectedRows only if selection_model is valid
+                rows = selection_model.selectedRows()
+                if rows:
+                    # Map proxy index to source index
+                    proxy_index = rows[0]
+                    source_index = self.proxy_model.mapToSource(proxy_index)
+                    selected_index = source_index
+
+        # Check if a valid source index was determined
+        if selected_index and selected_index.isValid():
+            item = self.model.itemFromIndex(selected_index)
+            if item:
+                self.selected_customer = item.data(Qt.UserRole)
+                # Call base accept ONLY if a customer is successfully selected
+                super().accept()
+            else:
+                # Handle case where index is valid but no item found (shouldn't happen ideally)
+                self.selected_customer = None
+                # Consider logging this unexpected state
+        else:
+            # No valid selection (or selection model was None), do not accept the dialog
+            self.selected_customer = None
+            # Optionally provide user feedback here if desired (e.g., QMessageBox)
         
     def get_selected_customer(self) -> Optional[Customer]:
         """Return the selected customer or None if none was selected."""
-        return self.selected_customer 
+        return self.selected_customer

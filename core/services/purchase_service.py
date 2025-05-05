@@ -1,5 +1,7 @@
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime
+from decimal import Decimal
+import logging
 
 # Adjust path if necessary
 import sys
@@ -61,7 +63,7 @@ class PurchaseService:
         # using the supplier_repo_factory
 
         supplier = Supplier(**supplier_data)
-        with session_scope(session) as session:
+        with session_scope(session=session) as session:
             # Instantiate repo with session from factory
             supplier_repo = self.supplier_repo_factory(session)
             # Check for duplicates using the session-specific repo
@@ -149,7 +151,7 @@ class PurchaseService:
         if not items_data:
             raise ValueError("Purchase order must contain at least one item.")
 
-        with session_scope(session) as session:
+        with session_scope(session=session) as session:
             # Instantiate repos with session from factories
             supplier_repo = self.supplier_repo_factory(session)
             product_repo = self.product_repo_factory(session)
@@ -176,16 +178,15 @@ class PurchaseService:
                     product_id=product.id,
                     product_code=product.code, # Denormalize
                     product_description=product.description, # Denormalize
-                    quantity_ordered=quantity,
-                    cost_price=cost,
+                    quantity=quantity,
+                    unit_price=cost, # Correct parameter name
                     quantity_received=0 # Initially zero
                 )
                 po_items.append(po_item)
 
             purchase_order = PurchaseOrder(
                 supplier_id=supplier.id,
-                supplier_name=supplier.name, # Denormalize
-                order_date=po_data.get('order_date', datetime.now()),
+                date=po_data.get('order_date', datetime.now()),
                 expected_delivery_date=po_data.get('expected_delivery_date'),
                 status="PENDING", # Initial status
                 notes=po_data.get('notes'),
@@ -207,15 +208,15 @@ class PurchaseService:
             purchase_order_repo = self.purchase_order_repo_factory(session) # Instantiate repo
             return purchase_order_repo.get_all(status=status, supplier_id=supplier_id)
 
-    def receive_purchase_order_items(self, po_id: int, received_items_data: Dict[int, float], notes: Optional[str] = None) -> PurchaseOrder:
+    def receive_purchase_order_items(self, po_id: int, received_data: Dict[int, Dict], notes: Optional[str] = None) -> PurchaseOrder:
         """
         Receives stock against a purchase order.
         :param po_id: The ID of the purchase order.
-        :param received_items_data: Dict mapping PurchaseOrderItem ID to quantity received in this batch.
+        :param received_data: Dict mapping PurchaseOrderItem ID to quantity received in this batch.
         :param notes: Optional notes for the inventory movement.
         :return: The updated PurchaseOrder.
         """
-        if not received_items_data:
+        if not received_data:
             raise ValueError("No received item quantities provided.")
 
         with session_scope() as session:
@@ -231,43 +232,49 @@ class PurchaseService:
                 raise ValueError(f"Purchase Order {po_id} is already {po.status} and cannot receive more items.")
 
             po_items_dict = {item.id: item for item in po.items}
-            total_items_ordered = sum(item.quantity_ordered for item in po.items)
+            total_items_ordered = sum(item.quantity for item in po.items)
             total_items_previously_received = sum(item.quantity_received for item in po.items)
             total_received_this_batch = 0
             updated_item_ids = set()
 
-            for item_id, qty_received_batch in received_items_data.items():
-                if qty_received_batch <= 0:
-                    continue # Ignore zero or negative receipts
+            # Iterate through the items to be received
+            for item_id, received_info in received_data.items(): # Rename loop var to received_info
+                qty_received_value = received_info.get('quantity_received') # Get quantity value
+                notes = received_info.get('notes')
 
+                if qty_received_value is None:
+                    logging.warning(f"Missing 'quantity_received' for item {item_id} in receive data. Skipping.")
+                    continue # Skip this item if quantity is missing
+                
+                # Basic validation for the quantity received in this batch
+                if not isinstance(qty_received_value, (Decimal, float, int)) or qty_received_value <= 0:
+                    raise ValueError(f"Invalid quantity received ({qty_received_value}) for item ID {item_id}. Must be a positive number.")
+                qty_received_value = Decimal(qty_received_value) # Ensure Decimal
+
+                # Find the corresponding PurchaseOrderItem within the PO
                 po_item = po_items_dict.get(item_id)
-                if not po_item:
+                if po_item is None:
                     raise ValueError(f"Purchase Order Item with ID {item_id} not found in PO {po_id}.")
 
-                if po_item.quantity_received + qty_received_batch > po_item.quantity_ordered:
-                    raise ValueError(f"Cannot receive {qty_received_batch} for item {po_item.product_code}. "
-                                     f"Ordered: {po_item.quantity_ordered}, Already Received: {po_item.quantity_received}.")
+                # Check if receiving more than ordered
+                if Decimal(str(po_item.quantity_received)) + qty_received_value > po_item.quantity:
+                    raise ValueError(f"Cannot receive {qty_received_value} for item {po_item.product_code}. "
+                                     f"Ordered: {po_item.quantity}, Already Received: {po_item.quantity_received}.")
 
                 # 1. Update Inventory Stock using InventoryService
-                #    The service should handle logging the movement.
                 self.inventory_service.add_inventory(
                     product_id=po_item.product_id,
-                    quantity=qty_received_batch,
-                    cost_price=po_item.cost_price, # Use cost from PO item
+                    quantity=qty_received_value,
+                    cost_price=po_item.unit_price, # Use unit_price from PO item
                     movement_description=f"Receiving PO-{po_id}. {notes or ''}".strip(),
                     related_id=po_id,
                     session=session # Pass the session for transactionality
                 )
 
-                # 2. Update the quantity_received using the repository method
-                success = purchase_order_repo.update_item_received_quantity(item_id, qty_received_batch)
-                if not success:
-                    # Should not happen if PO item was found earlier, but handle the case
-                    raise RuntimeError(f"Failed to update quantity_received for item {item_id}")
-                
-                # Update local tracking
-                updated_item_ids.add(item_id)
-                total_received_this_batch += qty_received_batch
+                # 2. Update the quantity received on the PurchaseOrderItem
+                self.purchase_order_repo_factory(session).update_item_received_quantity(item_id, qty_received_value, session=session)
+                po_item.quantity_received += qty_received_value # Update local object state
+                total_received_this_batch += qty_received_value
 
             # 3. Update PO Status
             new_total_received = total_items_previously_received + total_received_this_batch
@@ -284,7 +291,7 @@ class PurchaseService:
 
             # Update local item objects for the return value (already done by modifying item_orm)
             for item_id in updated_item_ids:
-                 po_items_dict[item_id].quantity_received += received_items_data[item_id]
+                 po_items_dict[item_id].quantity_received += received_data[item_id]['quantity_received']
 
             # Commit happens automatically via session_scope exit
             # Re-fetch the PO to ensure all updates are reflected? Optional.

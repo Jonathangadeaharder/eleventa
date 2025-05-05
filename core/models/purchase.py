@@ -1,40 +1,74 @@
-from dataclasses import dataclass, field
+from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey, Text
+from sqlalchemy.orm import relationship
+from core.database import Base
 from datetime import datetime
-from typing import List, Optional
+import uuid
 
-from core.models.product import Product # Assuming Product model exists
-from core.models.supplier import Supplier # Assuming Supplier model exists
+class Purchase(Base):
+    __tablename__ = 'purchases'
+    
+    id = Column(Integer, primary_key=True)
+    product_id = Column(Integer, ForeignKey('products.id'), nullable=False)
+    supplier_id = Column(Integer, ForeignKey('suppliers.id'), nullable=False)
+    quantity = Column(Numeric(10, 2), nullable=False)
+    unit_price = Column(Numeric(10, 2), nullable=False)
+    total_price = Column(Numeric(10, 2), nullable=False)
+    purchase_date = Column(DateTime, default=datetime.utcnow)
+    invoice_number = Column(String(100))
+    
+    product = relationship("Product", back_populates="purchases")
+    supplier = relationship("Supplier", back_populates="purchases")
 
-@dataclass
-class PurchaseOrderItem:
-    """Represents an item within a purchase order."""
-    id: Optional[int] = None
-    purchase_order_id: Optional[int] = None
-    product_id: int = 0
-    product_code: str = "" # Denormalized for easier display
-    product_description: str = "" # Denormalized for easier display
-    quantity_ordered: float = 0.0
-    cost_price: float = 0.0 # Cost price at the time of order
-    quantity_received: float = 0.0 # Track received quantity separately
-
-    @property
-    def subtotal(self) -> float:
-        return self.quantity_ordered * self.cost_price
-
-@dataclass
 class PurchaseOrder:
-    """Represents a purchase order placed with a supplier."""
-    id: Optional[int] = None
-    supplier_id: int = 0
-    supplier_name: str = "" # Denormalized for easier display
-    order_date: datetime = field(default_factory=datetime.now)
-    expected_delivery_date: Optional[datetime] = None
-    status: str = "PENDING" # e.g., PENDING, PARTIALLY_RECEIVED, RECEIVED, CANCELLED
-    notes: Optional[str] = None
-    items: List[PurchaseOrderItem] = field(default_factory=list)
-    created_at: datetime = field(default_factory=datetime.now)
-    updated_at: datetime = field(default_factory=datetime.now)
+    """Purchase order model representing an order to a supplier."""
+    
+    def __init__(self, 
+                 id=None, 
+                 supplier_id=None, 
+                 date=None, 
+                 status="draft", 
+                 notes="", 
+                 total=0, 
+                 items=None,
+                 expected_delivery_date=None):
+        self.id = id
+        self.supplier_id = supplier_id
+        self.date = date or datetime.now()
+        self.status = status  # draft, sent, received, cancelled
+        self.notes = notes
+        self.total = total
+        self.items = items or []
+        self.expected_delivery_date = expected_delivery_date
 
+class PurchaseOrderItem:
+    """Item within a purchase order."""
+    
+    def __init__(self, 
+                 id=None, 
+                 order_id=None, 
+                 product_id=None, 
+                 quantity=0, 
+                 unit_price=0, 
+                 quantity_received=0,
+                 product_code=None,
+                 product_description=None):
+        self.id = id
+        self.order_id = order_id
+        self.product_id = product_id
+        self.product_code = product_code
+        self.product_description = product_description
+        self.quantity = quantity
+        self.unit_price = unit_price
+        self.quantity_received = quantity_received
+        
     @property
-    def total_amount(self) -> float:
-        return sum(item.subtotal for item in self.items)
+    def total(self):
+        """Calculate the total price for this item."""
+        return self.quantity * self.unit_price
+        
+    @property
+    def received_status(self):
+        """Calculate the received status as a percentage."""
+        if self.quantity == 0:
+            return 0
+        return min(100, (self.quantity_received / self.quantity) * 100)

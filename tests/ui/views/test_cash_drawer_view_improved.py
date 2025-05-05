@@ -1,88 +1,100 @@
 """
-Tests for the CashDrawerView UI component - Improved version.
+Improved tests for the CashDrawerView UI component.
 
-This test file focuses on improving code coverage by testing specific
-functionality that was not covered in the original test files.
+This file contains tests for the CashDrawerView component with improved stability:
+1. Uses pytest-qt fixtures for QApplication management
+2. Properly mocks service classes and dialogs
+3. Contains simplified tests focusing on core functionality
 """
 
-# Standard library imports
 import sys
+import pytest
 from decimal import Decimal
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-# Testing frameworks
-import pytest
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QMessageBox
+# Import Qt support module first - this sets up the environment
+from tests.ui.qt_support import (
+    Qt, QApplication, QMessageBox, QT_IMPORTS_AVAILABLE
+)
 
-# Application components
+# Skip all tests if Qt imports aren't available
+pytestmark = [
+    pytest.mark.skipif(not QT_IMPORTS_AVAILABLE, reason="PySide6 imports not available"),
+    pytest.mark.timeout(5)  # Set timeout to prevent hanging tests
+]
+
+# Import application components after Qt environment is configured
 from ui.views.cash_drawer_view import CashDrawerView
 from core.services.cash_drawer_service import CashDrawerService
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
 from ui.dialogs.cash_drawer_dialogs import OpenDrawerDialog, CashMovementDialog
 
-# Set timeout to prevent hanging tests and skip these tests due to Qt crash issues
-pytestmark = [
-    pytest.mark.timeout(5),
-    pytest.mark.skip(reason="Skipping cash drawer tests to avoid Qt crash issues")
-]
-
-
 # --- Helper Functions ---
 
-def create_drawer_summary(is_open=False, current_balance=Decimal('0.00')):
-    """Create a simple drawer summary for testing."""
+def create_drawer_summary(is_open=False, balance=Decimal('100.00')):
+    """Create a mock drawer summary for testing."""
     return {
         'is_open': is_open,
-        'current_balance': current_balance,
-        'opened_at': datetime.now() if is_open else None,
-        'opened_by': 1 if is_open else None,
-        'entries_today': [],
-        'initial_amount': Decimal('0.00'),
+        'current_balance': balance,
+        'initial_amount': Decimal('100.00'),
         'total_in': Decimal('0.00'),
-        'total_out': Decimal('0.00')
+        'total_out': Decimal('0.00'),
+        'entries_today': [],
+        'opened_at': datetime.now() if is_open else None,
+        'opened_by': 1 if is_open else None
     }
-
 
 # --- Fixtures ---
 
 @pytest.fixture
 def mock_cash_drawer_service():
-    """Provides a mock CashDrawerService."""
-    mock_service = MagicMock(spec=CashDrawerService)
-    mock_service.get_drawer_summary.return_value = create_drawer_summary()
-    return mock_service
-
-
-@pytest.fixture(scope='module')
-def qt_application():
-    """Provides a QApplication fixture that persists for the module."""
-    app = QApplication.instance()
-    if app is None:
-        # Create application if it doesn't exist
-        app = QApplication(sys.argv)
-    return app
-
-
-@pytest.fixture
-def cash_drawer_view(qt_application, mock_cash_drawer_service):
-    """Provides an instance of CashDrawerView with a mock service."""
-    view = CashDrawerView(cash_drawer_service=mock_cash_drawer_service, user_id=1)
-    
-    try:
-        # Show and process events
-        view.show()
-        QApplication.processEvents()
-        yield view
-    finally:
-        # Clean up
-        view.close()
-        view.deleteLater()
-        QApplication.processEvents()
-
+    """Create a mock cash drawer service."""
+    service = MagicMock(spec=CashDrawerService)
+    service.get_drawer_summary.return_value = create_drawer_summary(is_open=False)
+    return service
 
 # --- Tests ---
+
+# Simple test to check if the module loads properly
+def test_module_loads():
+    """Simple test to ensure module loads properly."""
+    assert True
+
+@pytest.mark.skipif(not QT_IMPORTS_AVAILABLE, reason="PySide6 imports not available")
+@patch('ui.views.cash_drawer_view.OpenDrawerDialog')
+@patch('ui.views.cash_drawer_view.CashMovementDialog')
+@patch('ui.views.cash_drawer_view.QMessageBox')
+def test_cash_drawer_closed_state(mock_message_box, mock_movement_dialog, 
+                                 mock_open_dialog, qtbot, mock_cash_drawer_service):
+    """Test the CashDrawerView in closed state."""
+    # Configure mock service to return a closed drawer
+    mock_cash_drawer_service.get_drawer_summary.return_value = create_drawer_summary(is_open=False)
+    
+    # Configure dialog mocks
+    mock_open_dialog_instance = MagicMock()
+    mock_open_dialog.return_value = mock_open_dialog_instance
+    mock_open_dialog_instance.exec.return_value = False  # Dialog canceled by default
+    
+    # Create the view
+    view = CashDrawerView(cash_drawer_service=mock_cash_drawer_service, user_id=1)
+    qtbot.addWidget(view)
+    
+    try:
+        # Test initial state
+        assert view.status_label.text() == "Cerrada"
+        assert not view.add_cash_button.isEnabled()
+        assert not view.remove_cash_button.isEnabled()
+        assert view.open_close_button.text() == "Abrir caja"
+        assert view.open_close_button.isEnabled()
+        
+        # Verify service was called
+        mock_cash_drawer_service.get_drawer_summary.assert_called_once()
+    finally:
+        # Cleanup
+        view.close()
+        view.deleteLater()
+        qtbot.wait(50)  # Allow events to process
 
 @patch('ui.views.cash_drawer_view.QMessageBox')
 def test_close_drawer_dialog(mock_message_box, cash_drawer_view, mock_cash_drawer_service, qtbot):

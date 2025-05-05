@@ -43,12 +43,54 @@
 ## 5. UI Interactive Dialogs & Views
 
 - [ ] Use `pytest-qt` (qtbot) to simulate signal/slot flows in dialogs:
-  - [ ] `LoginDialog`, `ProductDialog`, etc.
+  - [x] LoginDialog
+    - [x] Test accept with valid credentials
+    - [x] Test reject with invalid credentials
+  - [x] ProductDialog
+    - [x] Test add mode: fill fields and accept
+    - [x] Test edit mode: load existing data and accept
+  - [x] DepartmentDialog
+    - [x] Test add mode: fill name and accept
+    - [x] Test edit mode: load existing data and accept
+  - [x] AddInventoryDialog
+    - [x] Test fields presence and defaults
+    - [x] Test valid addition and service call
+    - [x] Test validation for non-positive quantity
   - [ ] Button clicks, field inputs, dialog acceptance/rejection
 - [ ] Start with simplest dialogs (no external I/O):
   - [ ] Checkbox state changes
   - [ ] Text validators
   - [ ] Focus handling
 
----
+## 6. UI Views & Screens
+
+- [ ] Test main application views using pytest-qt:
+  - [ ] ProductsView
+    - [ ] Verify loading of products into table
+    - [ ] Test filtering by department
+    - [ ] Simulate 'Edit' action opens ProductDialog
+    - [ ] Simulate 'Add' action opens ProductDialog
+  - [ ] CustomersView
+    - [ ] Verify loading of customers
+    - [ ] Test search and filter functionality
+  - [ ] SalesView
+    - [ ] Verify loading of sales records
+    - [ ] Test date range filter
+  - [ ] CorteView (report generation)
+    - [ ] Verify report UI renders correctly
+    - [ ] Test export report functionality
+
+## 7. Continuous Integration & Reporting
+
+- [ ] Integrate `run_unified_tests.py` into CI pipeline (e.g., GitHub Actions)
+- [ ] Publish coverage reports and HTML artifacts from CI runs
+- [ ] Enforce minimum coverage thresholds (e.g., 80%) to fail builds
+
+## 8. End-to-End Tests
+
+- [x] Sales end-to-end flow: complete sale process and error handling (in `tests/integration/test_end_to_end_flows.py`)
+- [x] Invoicing end-to-end flow: invoice generation from sale (in `tests/integration/test_end_to_end_flows.py`)
+- [x] Concurrency scenarios: inventory updates during concurrent sales (in `tests/integration/test_end_to_end_flows.py`)
+- [x] Simple product creation flow (in `tests/integration/test_end_to_end_flows.py`)
+
 *This plan focuses on core & infrastructure testing first before moving to UI components.*

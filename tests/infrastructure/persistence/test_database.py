@@ -3,8 +3,6 @@ import os
 from sqlalchemy import text, Column, Integer, String, inspect
 from sqlalchemy.orm import Session, declarative_base
 from sqlalchemy.exc import OperationalError, ResourceClosedError, InvalidRequestError
-from sqlalchemy.engine import create_engine
-from sqlalchemy.orm import sessionmaker
 
 # Adjust path to import from the project root
 import sys
@@ -12,61 +10,34 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from infrastructure.persistence.sqlite.database import engine, SessionLocal, DATABASE_URL
 from infrastructure.persistence.utils import session_scope
 
 # Create a separate Base for test models to avoid conflicts with the main Base
 _TestBase = declarative_base()
-
-# Use a specific test database file to avoid conflicts with other tests
-TEST_DATABASE_URL = "sqlite:///:memory:"  # Use in-memory database for tests
-
-# Create a test engine and session
-test_engine = create_engine(TEST_DATABASE_URL)
-TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 class _TestItem(_TestBase):
     __tablename__ = "test_items"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
 
-# Ensure test tables are created before tests run
+# Setup test models in our test session
 @pytest.fixture(scope="function", autouse=True)
-def setup_test_tables():
-    # Create the test_items table
-    _TestBase.metadata.create_all(bind=test_engine)
+def setup_test_tables(db_engine, test_db_session):
+    # Create the test_items table using the session-scoped engine
+    _TestBase.metadata.create_all(bind=db_engine)
     
     # Verify tables were created
-    inspector = inspect(test_engine)
+    inspector = inspect(db_engine)
     tables = inspector.get_table_names()
-    print(f"Tables in database after setup: {tables}")
     
-    # Register the test session factory
-    from infrastructure.persistence.utils import session_scope_provider
-    original_factory = session_scope_provider.get_session_factory()
-    session_scope_provider.set_session_factory(TestSessionLocal)
-    
-    # Yield control to the tests
     yield
     
-    # Restore the original session factory
-    session_scope_provider.set_session_factory(original_factory)
-    
-    # Clean up after tests
-    _TestBase.metadata.drop_all(bind=test_engine)
-    print("Test tables dropped")
+    # Tables will be cleaned up by the transaction rollback in test_db_session
 
-# Remove database file check since we're using in-memory database
-# if os.path.exists(DATABASE_URL.split("///")[1]):
-#     try:
-#         os.remove(DATABASE_URL.split("///")[1])
-#     except OSError as e:
-#         print(f"Warning: Could not remove test database file before test: {e}")
-
-def test_database_connection():
+def test_database_connection(db_engine):
     """Verify that engine.connect() successfully establishes a connection."""
     try:
-        connection = test_engine.connect()
+        connection = db_engine.connect()
         assert connection is not None
         # Optional: Execute a simple query
         result = connection.execute(text("SELECT 1"))
@@ -75,7 +46,7 @@ def test_database_connection():
     except OperationalError as e:
         pytest.fail(f"Database connection failed: {e}")
 
-def test_session_scope_success():
+def test_session_scope_success(test_db_session):
     """Verify the session_scope yields a valid session and executes code."""
     session_instance = None
     try:
@@ -102,7 +73,7 @@ def test_session_scope_rollback():
     # This implies the except block in session_scope (with rollback) was likely executed.
     assert session_instance is not None # Verify session object was assigned
 
-def test_session_scope_rollback_data_consistency():
+def test_session_scope_rollback_data_consistency(test_db_session):
     """
     Test that after an exception and rollback, no partial data is persisted.
     """
@@ -118,7 +89,7 @@ def test_session_scope_rollback_data_consistency():
         result = session.query(_TestItem).filter_by(id=1).first()
         assert result is None, "Row should not exist after rollback"
 
-def test_session_scope_commit_exception_consistency():
+def test_session_scope_commit_exception_consistency(test_db_session):
     """
     Test that a commit failure (e.g., due to unique constraint) triggers rollback and leaves DB consistent.
     """
@@ -140,18 +111,3 @@ def test_session_scope_commit_exception_consistency():
         items = session.query(_TestItem).filter_by(id=2).all()
         assert len(items) == 1
         assert items[0].name == "unique"
-
-# Clean up fixture is not needed since we're using in-memory database
-# @pytest.fixture(scope="session", autouse=True)
-# def cleanup_db_file():
-#     yield
-#     # Teardown: remove the database file
-#     db_path = DATABASE_URL.split("///")[1]
-#     if os.path.exists(db_path):
-#         try:
-#             # Ensure all connections are closed before removing
-#             engine.dispose()
-#             os.remove(db_path)
-#             print(f"\nCleaned up test database file: {db_path}")
-#         except OSError as e:
-#             print(f"Warning: Could not remove test database file after test: {e}")

@@ -185,7 +185,7 @@ def create_user(
 def create_supplier(
     id: Optional[int] = None,
     name: str = "Test Supplier",
-    contact_name: Optional[str] = "Supplier Contact",
+    contact_person: Optional[str] = "Supplier Contact",
     phone: Optional[str] = "555-9876",
     email: Optional[str] = "supplier@example.com",
     address: Optional[str] = "456 Supplier St"
@@ -194,7 +194,7 @@ def create_supplier(
     return Supplier(
         id=id,
         name=name,
-        contact_name=contact_name,
+        contact_person=contact_person,
         phone=phone,
         email=email,
         address=address
@@ -410,4 +410,135 @@ def test_supplier():
 @pytest.fixture
 def test_purchase_order(test_supplier):
     """Fixture that returns a test purchase order linked to the test supplier."""
-    return create_purchase_order(supplier_id=test_supplier.id if test_supplier.id else 1) 
+    return create_purchase_order(supplier_id=test_supplier.id if test_supplier.id else 1)
+
+@pytest.fixture
+def test_data_factory(clean_db):
+    """
+    Fixture for creating standardized test data.
+    
+    Returns a factory object with methods to create standard test entities
+    like products, customers, sales, etc. with customizable properties.
+    
+    Example usage:
+    ```
+    def test_something(test_data_factory):
+        # Create a standard product
+        product = test_data_factory.create_product()
+        
+        # Create a product with custom properties
+        custom_product = test_data_factory.create_product(
+            code="CUSTOM1",
+            description="Custom Product",
+            sell_price=150.00
+        )
+    ```
+    """
+    from core.models.product import Product
+    from core.models.customer import Customer
+    from core.models.sale import Sale, SaleItem
+    from core.models.user import User
+    from infrastructure.persistence.sqlite.repositories import (
+        SqliteProductRepository,
+        SqliteCustomerRepository,
+        SqliteSaleRepository,
+        SqliteUserRepository
+    )
+    
+    session = clean_db
+    product_repo = SqliteProductRepository(session)
+    customer_repo = SqliteCustomerRepository(session)
+    sale_repo = SqliteSaleRepository(session)
+    user_repo = SqliteUserRepository(session)
+    
+    class TestDataFactory:
+        def create_product(self, **kwargs):
+            """Create a test product with default or custom properties."""
+            defaults = {
+                "code": "TEST001",
+                "description": "Test Product",
+                "cost_price": 80.00,
+                "sell_price": 100.00,
+                "department_id": None,
+                "quantity_in_stock": 10,
+                "min_stock": 1
+            }
+            # Override defaults with any provided kwargs
+            defaults.update(kwargs)
+            product = Product(**defaults)
+            product = product_repo.add(product)
+            session.commit()
+            return product
+            
+        def create_customer(self, **kwargs):
+            """Create a test customer with default or custom properties."""
+            defaults = {
+                "name": "Test Customer",
+                "address": "123 Test St",
+                "cuit": "20123456789",
+                "iva_condition": "Responsable Inscripto",
+                "email": "test@example.com",
+                "phone": "1234567890"
+            }
+            # Override defaults with any provided kwargs
+            defaults.update(kwargs)
+            customer = Customer(**defaults)
+            customer = customer_repo.add(customer)
+            session.commit()
+            return customer
+        
+        def create_user(self, **kwargs):
+            """Create a test user with default or custom properties."""
+            defaults = {
+                "username": "testuser",
+                "password_hash": "$2b$12$test_hash_for_testing_only",
+                "is_active": True
+            }
+            # Override defaults with any provided kwargs
+            defaults.update(kwargs)
+            user = User(**defaults)
+            user = user_repo.add(user)
+            session.commit()
+            return user
+            
+        def create_sale(self, products=None, customer=None, **kwargs):
+            """
+            Create a test sale with provided products and customer.
+            
+            If products or customer are not provided, they will be created.
+            """
+            from datetime import datetime
+            
+            # Create customer if not provided
+            if customer is None:
+                customer = self.create_customer()
+                
+            # Create a default product if not provided
+            if products is None:
+                products = [self.create_product()]
+                
+            # Create sale items from products
+            sale_items = []
+            for product in products:
+                sale_items.append(SaleItem(
+                    product_id=product.id,
+                    product_code=product.code,
+                    product_description=product.description,
+                    quantity=1,
+                    unit_price=product.sell_price
+                ))
+                
+            # Create the sale
+            defaults = {
+                "timestamp": datetime.now(),
+                "customer_id": customer.id,
+                "items": sale_items
+            }
+            # Override defaults with any provided kwargs
+            defaults.update(kwargs)
+            sale = Sale(**defaults)
+            sale = sale_repo.add_sale(sale)
+            session.commit()
+            return sale
+    
+    return TestDataFactory() 

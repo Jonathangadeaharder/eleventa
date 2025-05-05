@@ -10,6 +10,7 @@ import pytest
 from core.services.user_service import UserService
 from infrastructure.persistence.sqlite.repositories import SqliteUserRepository
 from core.models.user import User
+from infrastructure.persistence.sqlite.models_mapping import map_models, ensure_all_models_mapped
 
 @pytest.fixture
 def user_service(clean_db):
@@ -22,6 +23,15 @@ def user_service(clean_db):
 class TestUserIntegration:
     """Integration tests for UserService and repository interactions."""
 
+    @classmethod
+    def setup_class(cls):
+        """Ensure all models are mapped before running tests."""
+        # This ensures the UserOrm and other tables are created properly
+        map_models()
+        ensure_all_models_mapped()
+        
+        print("All models mapped for TestUserIntegration tests")
+
     def test_add_user_valid_user_returns_user(self, user_service):
         """
         Test that adding a valid user returns a User object with an assigned ID
@@ -33,7 +43,7 @@ class TestUserIntegration:
         assert new_user.is_active is True
 
         # Verify user is persisted
-        fetched_user = user_service.get_user(new_user.id)
+        fetched_user = user_service.get_user_by_id(new_user.id)
         assert fetched_user.username == "johndoe"
         assert fetched_user.is_active is True
 

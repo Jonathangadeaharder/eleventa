@@ -3,6 +3,7 @@ import tempfile
 import subprocess
 import sys
 import pytest
+import shutil
 
 @pytest.mark.alembic
 def test_alembic_upgrade_head_on_fresh_db():
@@ -22,9 +23,33 @@ def test_alembic_upgrade_head_on_fresh_db():
         env = os.environ.copy()
         env["DATABASE_URL"] = f"sqlite:///{db_path}"
 
+        # Find the alembic executable in the venv
+        alembic_cmd = None
+        if sys.platform.startswith('win'):
+            # On Windows, look for alembic.exe in Scripts directory
+            venv_dir = os.environ.get('VIRTUAL_ENV')
+            if venv_dir:
+                alembic_cmd = os.path.join(venv_dir, 'Scripts', 'alembic.exe')
+            else:
+                # Try to find it in the path
+                alembic_cmd = shutil.which('alembic.exe')
+        else:
+            # On Unix, look for alembic in bin directory
+            venv_dir = os.environ.get('VIRTUAL_ENV')
+            if venv_dir:
+                alembic_cmd = os.path.join(venv_dir, 'bin', 'alembic')
+            else:
+                # Try to find it in the path
+                alembic_cmd = shutil.which('alembic')
+        
+        if not alembic_cmd or not os.path.exists(alembic_cmd):
+            pytest.skip(f"Alembic command not found at {alembic_cmd}. Ensure alembic is installed in your environment.")
+            
+        print(f"Using alembic command: {alembic_cmd}")
+
         # Run 'alembic upgrade head' using subprocess from the project root
         result = subprocess.run(
-            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            [alembic_cmd, "upgrade", "head"],
             cwd=project_root, # Use the project root as the working directory
             env=env,
             capture_output=True,
@@ -63,9 +88,31 @@ def test_product_and_department_tables_schema():
         env = os.environ.copy()
         env["DATABASE_URL"] = f"sqlite:///{db_path}"
 
+        # Find the alembic executable in the venv
+        alembic_cmd = None
+        if sys.platform.startswith('win'):
+            # On Windows, look for alembic.exe in Scripts directory
+            venv_dir = os.environ.get('VIRTUAL_ENV')
+            if venv_dir:
+                alembic_cmd = os.path.join(venv_dir, 'Scripts', 'alembic.exe')
+            else:
+                # Try to find it in the path
+                alembic_cmd = shutil.which('alembic.exe')
+        else:
+            # On Unix, look for alembic in bin directory
+            venv_dir = os.environ.get('VIRTUAL_ENV')
+            if venv_dir:
+                alembic_cmd = os.path.join(venv_dir, 'bin', 'alembic')
+            else:
+                # Try to find it in the path
+                alembic_cmd = shutil.which('alembic')
+        
+        if not alembic_cmd or not os.path.exists(alembic_cmd):
+            pytest.skip(f"Alembic command not found at {alembic_cmd}. Ensure alembic is installed in your environment.")
+
         # Run migrations from the project root
         result = subprocess.run(
-            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            [alembic_cmd, "upgrade", "head"],
             cwd=project_root, # Use the project root as the working directory
             env=env,
             capture_output=True,
@@ -135,9 +182,31 @@ def test_invoice_table_schema():
         env = os.environ.copy()
         env["DATABASE_URL"] = f"sqlite:///{db_path}"
 
+        # Find the alembic executable in the venv
+        alembic_cmd = None
+        if sys.platform.startswith('win'):
+            # On Windows, look for alembic.exe in Scripts directory
+            venv_dir = os.environ.get('VIRTUAL_ENV')
+            if venv_dir:
+                alembic_cmd = os.path.join(venv_dir, 'Scripts', 'alembic.exe')
+            else:
+                # Try to find it in the path
+                alembic_cmd = shutil.which('alembic.exe')
+        else:
+            # On Unix, look for alembic in bin directory
+            venv_dir = os.environ.get('VIRTUAL_ENV')
+            if venv_dir:
+                alembic_cmd = os.path.join(venv_dir, 'bin', 'alembic')
+            else:
+                # Try to find it in the path
+                alembic_cmd = shutil.which('alembic')
+        
+        if not alembic_cmd or not os.path.exists(alembic_cmd):
+            pytest.skip(f"Alembic command not found at {alembic_cmd}. Ensure alembic is installed in your environment.")
+
         # Run migrations from the project root
         result = subprocess.run(
-            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            [alembic_cmd, "upgrade", "head"],
             cwd=project_root, # Use the project root as the working directory
             env=env,
             capture_output=True,

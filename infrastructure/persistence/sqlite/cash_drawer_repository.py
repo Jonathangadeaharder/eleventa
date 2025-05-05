@@ -159,16 +159,26 @@ class SQLiteCashDrawerRepository(ICashDrawerRepository):
             
     def _map_to_domain_model(self, entry_orm: CashDrawerEntryOrm) -> CashDrawerEntry:
         """Map ORM model to domain model."""
-        entry_type = CashDrawerEntryType(entry_orm.entry_type) if isinstance(entry_orm.entry_type, str) else entry_orm.entry_type
-        return CashDrawerEntry(
+        if not entry_orm:
+            return None
+        
+        # Instantiate using __init__ without the ID
+        domain_model = CashDrawerEntry(
             timestamp=entry_orm.timestamp,
-            entry_type=entry_type,
-            amount=Decimal(str(entry_orm.amount)),
+            entry_type=entry_orm.entry_type,
+            amount=entry_orm.amount,
             description=entry_orm.description,
             user_id=entry_orm.user_id,
             drawer_id=entry_orm.drawer_id,
-            id=entry_orm.id
+            # Note: related_sale_id is not in the domain model __init__
         )
+        # Assign the ID after instantiation
+        domain_model.id = entry_orm.id 
+        # Assign related_sale_id if it exists on the ORM model (adjust if needed)
+        if hasattr(entry_orm, 'related_sale_id'):
+            domain_model.related_sale_id = entry_orm.related_sale_id
+        
+        return domain_model
 
     def get_entries_by_type(self, entry_type: str, start_date: Optional[datetime] = None, 
                           end_date: Optional[datetime] = None) -> List[CashDrawerEntry]:

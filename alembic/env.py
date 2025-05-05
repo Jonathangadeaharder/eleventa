@@ -20,6 +20,10 @@ from infrastructure.persistence.sqlite.database import Base # Use the correct Ba
 # This ensures all ORM classes are defined before Base.metadata is used.
 import infrastructure.persistence.sqlite.models_mapping
 
+# Register table creation event hooks for proper table ordering
+from infrastructure.persistence.sqlite.table_deps import register_table_creation_events
+register_table_creation_events(Base.metadata)
+
 # Import the Base from your models definition
 # We need to define where Base lives. Let's assume it will eventually be tied
 # to a central model definition, perhaps infrastructure.persistence.sqlite.database for now.

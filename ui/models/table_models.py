@@ -212,7 +212,13 @@ class SaleItemTableModel(QAbstractTableModel):
          """Gets the SaleItem object at a specific model row."""
          if 0 <= row < len(self._items):
              return self._items[row]
-         return None 
+         return None
+
+    def clear(self):
+         """Clears all items from the model."""
+         self.beginResetModel()
+         self._items = []
+         self.endResetModel()
 
 # --- Add Customer Table Model ---
 
@@ -522,18 +528,25 @@ class CashDrawerTableModel(QAbstractTableModel):
                 }
                 return type_labels.get(entry.entry_type, str(entry.entry_type))
             elif col == 3:  # Amount
-                return locale.currency(float(entry.amount), grouping=True)
+                # Amount is now pre-formatted string from the view
+                return entry.get('amount', "$0.00") # Accessing dict directly
             elif col == 4:  # Description
-                return entry.description or ""
+                # Ensure we access dict keys, provide default
+                return entry.get('description', "")
             elif col == 5:  # User ID
-                return str(entry.user_id or "")
+                # Ensure we access dict keys, provide default
+                return str(entry.get('user_id', ""))
         
         elif role == Qt.BackgroundRole:
-            if entry.entry_type == CashDrawerEntryType.START:
+            # Need to access entry_type from the dictionary
+            entry_type = entry.get('type') # Assuming type key holds the enum or string representation
+            # Map string representation back to Enum if necessary, or handle strings directly
+            # This part might need adjustment based on what's in the dict
+            if entry_type == CashDrawerEntryType.START or entry_type == 'add': # Adjust based on actual data
                 return QBrush(QColor(230, 230, 250))  # Light lavender
-            elif entry.entry_type == CashDrawerEntryType.IN:
+            elif entry_type == CashDrawerEntryType.IN:
                 return QBrush(QColor(240, 255, 240))  # Light green
-            elif entry.entry_type == CashDrawerEntryType.OUT:
+            elif entry_type == CashDrawerEntryType.OUT or entry_type == 'remove': # Adjust based on actual data
                 return QBrush(QColor(255, 240, 240))  # Light red
                 
         elif role == Qt.TextAlignmentRole:
@@ -546,10 +559,23 @@ class CashDrawerTableModel(QAbstractTableModel):
         return None
         
     def update_entries(self, entries: List[CashDrawerEntry]):
-        """Update the model with new entries."""
-        self.beginResetModel()
+        """Update the model with new entries using granular signals."""
+        old_row_count = len(self._entries)
+        new_row_count = len(entries)
+
+        # Signal removal of old rows if any existed
+        if old_row_count > 0:
+            self.beginRemoveRows(QModelIndex(), 0, old_row_count - 1)
+            self._entries = [] # Clear existing entries internally before signaling end
+            self.endRemoveRows()
+
+        # Update internal data
         self._entries = entries
-        self.endResetModel()
+
+        # Signal insertion of new rows if any exist
+        if new_row_count > 0:
+            self.beginInsertRows(QModelIndex(), 0, new_row_count - 1)
+            self.endInsertRows()
         
     def get_entry_at_row(self, row: int) -> Optional[CashDrawerEntry]:
         """Get the entry at the specified row."""

@@ -1,0 +1,6 @@
+pytest-qt
+pytest-mock
+importlib-metadata
+sqlalchemy
+pytest-cov
+bcrypt

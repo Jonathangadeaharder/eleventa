@@ -7,8 +7,16 @@ import json
 # Assuming config.py is in the project root, it should be:
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Check if we're in test mode
+TEST_MODE = os.environ.get('TEST_MODE', 'false').lower() == 'true'
+
 # Database configuration (now uses corrected BASE_DIR)
-DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'eleventa_clone.db')}"
+if TEST_MODE:
+    # Use in-memory database for tests
+    DATABASE_URL = "sqlite:///:memory:"
+else:
+    # Use file-based database for normal operation
+    DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'eleventa_clone.db')}"
 
 # Path to configuration file
 CONFIG_FILE = os.path.join(BASE_DIR, 'app_config.json')
@@ -20,6 +28,9 @@ class Config:
     STORE_CUIT = "30-12345678-9"
     STORE_IVA_CONDITION = "Responsable Inscripto"
     STORE_PHONE = ""
+    
+    # Output directory for generated PDFs
+    PDF_OUTPUT_DIR = os.path.join(BASE_DIR, 'pdfs')
 
     # Add other config variables here
     # Example: DEFAULT_PRINTER = ""

@@ -17,83 +17,84 @@ from core.services.invoicing_service import InvoicingService
 class TestInvoicingServiceFixInMain:
     """Tests for verifying the fix for the repository factory issue."""
     
-    def test_proposed_fix_directly(self):
+    def test_factory_approach(self):
         """
-        Test that explains and verifies the exact issue and the fix.
+        Test that the factory approach works correctly with InvoicingService.
         
-        This test demonstrates why passing a factory function directly to InvoicingService 
-        causes the error, and how instantiating repositories before passing them fixes it.
+        This test demonstrates the correct way to use repository factories with InvoicingService.
         """
         # Create mocks for the test
         mock_session = MagicMock()
         mock_repo = MagicMock()
         mock_repo.get_all.return_value = []
         
-        # 1. Simulate the original broken code (factory function passed directly)
-        def get_repo_factory(session):
+        # Define a repository factory function
+        def invoice_repo_factory(session=None):
             """This simulates the factory function in main.py"""
-            # This function would normally return a repository instance
-            # But we're not going to call it in the broken case
             return mock_repo
+            
+        def sale_repo_factory(session=None):
+            return MagicMock()
+            
+        def customer_repo_factory(session=None):
+            return MagicMock()
         
-        # Create service with the WRONG approach (passing factory function directly)
-        broken_service = InvoicingService(
-            invoice_repo=get_repo_factory,  # Wrong: passing function
-            sale_repo=MagicMock(),
-            customer_repo=MagicMock()
+        # Create service with the factory approach
+        service = InvoicingService(
+            invoice_repo_factory=invoice_repo_factory,
+            sale_repo_factory=sale_repo_factory,
+            customer_repo_factory=customer_repo_factory
         )
         
-        # This will fail with 'function' object has no attribute 'get_all'
-        with pytest.raises(AttributeError) as exc_info:
-            broken_service.get_all_invoices()
-        
-        # Verify the exact error message
-        assert "'function' object has no attribute 'get_all'" in str(exc_info.value)
-        
-        # 2. Now test the FIXED approach (instantiating repositories first)
-        # This is what our fix in main.py does
-        fixed_service = InvoicingService(
-            invoice_repo=get_repo_factory(mock_session),  # Right: passing repository instance
-            sale_repo=MagicMock(),
-            customer_repo=MagicMock()
-        )
-        
-        # This should not raise an error
-        result = fixed_service.get_all_invoices()
+        # This should work correctly with session_scope in the service
+        with patch('core.services.invoicing_service.session_scope') as mock_session_scope:
+            # Configure the mock session_scope context manager
+            mock_context = MagicMock()
+            mock_context.__enter__.return_value = mock_session
+            mock_session_scope.return_value = mock_context
+            
+            # Call the service method
+            result = service.get_all_invoices()
         
         # Verify get_all was called on the repository
         mock_repo.get_all.assert_called_once()
         assert result == []
         
-    def test_fix_with_actual_repository(self):
+    def test_with_actual_repository(self):
         """Test with the actual SqliteInvoiceRepository to verify compatibility."""
         # Create a mock session
         mock_session = MagicMock()
         
-        # Create a real repository with the mock session
-        repo_instance = SqliteInvoiceRepository(mock_session)
-        
-        # For testing, we'll patch the get_all method on the real repository
-        original_get_all = repo_instance.get_all
-        get_all_called = False
-        
-        def mock_get_all():
-            nonlocal get_all_called
-            get_all_called = True
-            return []
+        # Create factory functions
+        def invoice_repo_factory(session=None):
+            # Use the provided session or the mock session
+            return SqliteInvoiceRepository(session or mock_session)
             
-        repo_instance.get_all = mock_get_all
+        def sale_repo_factory(session=None):
+            return MagicMock()
+            
+        def customer_repo_factory(session=None):
+            return MagicMock()
         
-        # Create service with the repository instance
+        # Create service with the factory functions
         service = InvoicingService(
-            invoice_repo=repo_instance,
-            sale_repo=MagicMock(),
-            customer_repo=MagicMock()
+            invoice_repo_factory=invoice_repo_factory,
+            sale_repo_factory=sale_repo_factory,
+            customer_repo_factory=customer_repo_factory
         )
         
-        # Call get_all_invoices
-        result = service.get_all_invoices()
-        
+        # For testing, we'll patch the real repository's get_all method
+        with patch.object(SqliteInvoiceRepository, 'get_all', return_value=[]) as mock_get_all:
+            # We also need to patch session_scope since we're not in a real session
+            with patch('core.services.invoicing_service.session_scope') as mock_session_scope:
+                # Configure the mock session_scope context manager
+                mock_context = MagicMock()
+                mock_context.__enter__.return_value = mock_session
+                mock_session_scope.return_value = mock_context
+                
+                # Call the service method
+                result = service.get_all_invoices()
+            
         # Verify our mock was called
-        assert get_all_called, "get_all was not called on the repository"
+        mock_get_all.assert_called_once()
         assert result == [], "get_all_invoices should return empty list in our test" 

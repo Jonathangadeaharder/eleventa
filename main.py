@@ -136,19 +136,12 @@ def main(test_mode=False, test_user=None, mock_services=None):
         # Instantiate Corte Service
         corte_service = CorteService(get_sale_repo, get_cash_drawer_repo)
         
-        # Fix: Create session and instantiate InvoicingService with actual repository instances
-        # instead of factory functions to avoid "function object has no attribute get_all" error
-        invoicing_service = None
-        with session_scope() as session:
-            invoice_repo = get_invoice_repo(session)
-            sale_repo = get_sale_repo(session)
-            customer_repo = get_customer_repo(session)
-            
-            invoicing_service = InvoicingService(
-                invoice_repo=invoice_repo,     # Pass repository instance
-                sale_repo=sale_repo,           # Pass repository instance
-                customer_repo=customer_repo    # Pass repository instance
-            )
+        # Update: Use repository factories for InvoicingService
+        invoicing_service = InvoicingService(
+            invoice_repo_factory=get_invoice_repo,
+            sale_repo_factory=get_sale_repo,
+            customer_repo_factory=get_customer_repo
+        )
         
         # Create a proper sale repository factory for ReportingService
         @contextmanager

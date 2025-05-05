@@ -1,0 +1,565 @@
+============================= test session starts =============================
+platform win32 -- Python 3.10.0, pytest-8.3.5, pluggy-1.5.0 -- C:\Users\Jonandrop\Documents\eleventa\venv\Scripts\python.exe
+cachedir: .pytest_cache
+PySide6 6.9.0 -- Qt runtime 6.9.0 -- Qt compiled 6.9.0
+rootdir: C:\Users\Jonandrop\Documents\eleventa
+configfile: pytest.ini
+testpaths: tests
+plugins: cov-6.1.1, mock-3.14.0, qt-4.4.0, timeout-2.3.1
+timeout: 10.0s
+timeout method: thread
+timeout func_only: False
+collecting ... collected 632 items / 252 deselected / 380 selected
+
+tests/core/models/test_customer.py::TestCustomerModel::test_customer_creation PASSED [  0%]
+tests/core/models/test_customer.py::TestCustomerModel::test_customer_creation_defaults PASSED [  0%]
+tests/core/models/test_department.py::test_department_initialization PASSED [  0%]
+tests/core/models/test_department.py::test_department_initialization_with_defaults PASSED [  1%]
+tests/core/models/test_department.py::test_department_initialization_some_values PASSED [  1%]
+tests/core/models/test_inventory.py::TestInventoryMovement::test_inventory_movement_creation PASSED [  1%]
+tests/core/models/test_invoice.py::TestInvoiceModel::test_invoice_creation PASSED [  1%]
+tests/core/models/test_invoice.py::TestInvoiceModel::test_invoice_creation_with_all_fields PASSED [  2%]
+tests/core/models/test_product.py::test_department_creation PASSED       [  2%]
+tests/core/models/test_product.py::test_product_creation PASSED          [  2%]
+tests/core/models/test_product.py::test_product_edge_cases PASSED        [  2%]
+tests/core/models/test_product.py::test_department_edge_cases PASSED     [  3%]
+tests/core/models/test_sale.py::TestSaleModels::test_sale_creation PASSED [  3%]
+tests/core/models/test_sale.py::TestSaleModels::test_sale_creation_empty PASSED [  3%]
+tests/core/models/test_sale.py::TestSaleModels::test_sale_item_creation PASSED [  3%]
+tests/core/models/test_sale_model.py::test_saleitem_subtotal PASSED      [  4%]
+tests/core/models/test_sale_model.py::test_sale_total_empty PASSED       [  4%]
+tests/core/models/test_sale_model.py::test_sale_total_with_items PASSED  [  4%]
+tests/core/models/test_user.py::TestUserModel::test_user_creation_defaults PASSED [  5%]
+tests/core/models/test_user.py::TestUserModel::test_user_creation_with_id_and_inactive PASSED [  5%]
+tests/core/services/test_cash_drawer_service.py::test_open_drawer PASSED [  5%]
+tests/core/services/test_cash_drawer_service.py::test_open_drawer_already_open PASSED [  5%]
+tests/core/services/test_cash_drawer_service.py::test_open_drawer_negative_amount PASSED [  6%]
+tests/core/services/test_cash_drawer_service.py::test_add_cash PASSED    [  6%]
+tests/core/services/test_cash_drawer_service.py::test_add_cash_drawer_not_open PASSED [  6%]
+tests/core/services/test_cash_drawer_service.py::test_add_cash_negative_amount PASSED [  6%]
+tests/core/services/test_cash_drawer_service.py::test_remove_cash PASSED [  7%]
+tests/core/services/test_cash_drawer_service.py::test_remove_cash_drawer_not_open PASSED [  7%]
+tests/core/services/test_cash_drawer_service.py::test_remove_cash_negative_amount PASSED [  7%]
+tests/core/services/test_cash_drawer_service.py::test_remove_cash_insufficient_funds PASSED [  7%]
+tests/core/services/test_cash_drawer_service.py::test_get_drawer_summary PASSED [  8%]
+tests/core/services/test_corte_service.py::TestCorteService::test_calculate_corte_data PASSED [  8%]
+tests/core/services/test_corte_service.py::TestCorteService::test_calculate_corte_data_invalid_period PASSED [  8%]
+tests/core/services/test_corte_service.py::TestCorteService::test_calculate_corte_data_repository_failure PASSED [  8%]
+tests/core/services/test_corte_service.py::TestCorteService::test_calculate_sales_by_payment_type PASSED [  9%]
+tests/core/services/test_corte_service.py::TestCorteService::test_calculate_starting_balance PASSED [  9%]
+tests/core/services/test_corte_service.py::TestCorteService::test_register_closing_balance PASSED [  9%]
+tests/core/services/test_customer_service.py::test_add_customer_success 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:32:58 [    INFO] core.services.customer_service:customer_service.py:47 - Added customer: John Doe (ID: 1)
+PASSED                                                                   [ 10%]
+tests/core/services/test_customer_service.py::test_add_customer_validation_missing_name PASSED [ 10%]
+tests/core/services/test_customer_service.py::test_add_customer_validation_invalid_email PASSED [ 10%]
+tests/core/services/test_customer_service.py::test_update_customer_success 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:32:58 [    INFO] core.services.customer_service:customer_service.py:74 - Updated customer info: John Doe (ID: 1)
+PASSED                                                                   [ 10%]
+tests/core/services/test_customer_service.py::test_update_customer_not_found PASSED [ 11%]
+tests/core/services/test_customer_service.py::test_update_customer_validation_empty_name PASSED [ 11%]
+tests/core/services/test_customer_service.py::test_get_customer_by_id_success PASSED [ 11%]
+tests/core/services/test_customer_service.py::test_get_customer_by_id_not_found PASSED [ 11%]
+tests/core/services/test_customer_service.py::test_get_all_customers PASSED [ 12%]
+tests/core/services/test_customer_service.py::test_find_customer PASSED  [ 12%]
+tests/core/services/test_customer_service.py::test_delete_customer_success_no_balance 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:32:59 [    INFO] core.services.customer_service:customer_service.py:100 - Deleted customer ID: 1
+PASSED                                                                   [ 12%]
+tests/core/services/test_customer_service.py::test_delete_customer_not_found 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:32:59 [ WARNING] core.services.customer_service:customer_service.py:90 - Attempted to delete non-existent customer ID: 99
+PASSED                                                                   [ 12%]
+tests/core/services/test_customer_service.py::test_delete_customer_with_balance PASSED [ 13%]
+tests/core/services/test_customer_service.py::test_apply_payment_success 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:32:59 [    INFO] core.services.customer_service:customer_service.py:165 - Applied payment 10 of 100.00 to customer 1. New balance: 100.00
+PASSED                                                                   [ 13%]
+tests/core/services/test_customer_service.py::test_apply_payment_customer_not_found PASSED [ 13%]
+tests/core/services/test_customer_service.py::test_apply_payment_non_positive_amount PASSED [ 13%]
+tests/core/services/test_customer_service.py::test_increase_customer_debt_success 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:32:59 [    INFO] core.services.customer_service:customer_service.py:187 - Increased debt for customer 1 by 25.00. New balance: -25.00
+PASSED                                                                   [ 14%]
+tests/core/services/test_customer_service.py::test_increase_customer_debt_customer_not_found PASSED [ 14%]
+tests/core/services/test_customer_service.py::test_increase_customer_debt_non_positive_amount PASSED [ 14%]
+tests/core/services/test_customer_service.py::test_get_customer_payments_success PASSED [ 15%]
+tests/core/services/test_customer_service.py::test_get_customer_payments_no_payments PASSED [ 15%]
+tests/core/services/test_inventory_service.py::test_add_inventory_success PASSED [ 15%]
+tests/core/services/test_inventory_service.py::test_add_inventory_zero_quantity PASSED [ 15%]
+tests/core/services/test_inventory_service.py::test_add_inventory_negative_quantity PASSED [ 16%]
+tests/core/services/test_inventory_service.py::test_add_inventory_product_not_found PASSED [ 16%]
+tests/core/services/test_inventory_service.py::test_add_inventory_product_does_not_use_inventory PASSED [ 16%]
+tests/core/services/test_inventory_service.py::test_adjust_inventory_success_positive PASSED [ 16%]
+tests/core/services/test_inventory_service.py::test_adjust_inventory_success_negative PASSED [ 17%]
+tests/core/services/test_inventory_service.py::test_adjust_inventory_zero_quantity PASSED [ 17%]
+tests/core/services/test_inventory_service.py::test_adjust_inventory_product_not_found PASSED [ 17%]
+tests/core/services/test_inventory_service.py::test_adjust_inventory_product_does_not_use_inventory PASSED [ 17%]
+tests/core/services/test_inventory_service.py::test_adjust_inventory_results_in_negative_stock PASSED [ 18%]
+tests/core/services/test_inventory_service.py::test_decrease_stock_for_sale_success PASSED [ 18%]
+tests/core/services/test_inventory_service.py::test_decrease_stock_for_sale_product_not_found PASSED [ 18%]
+tests/core/services/test_inventory_service.py::test_decrease_stock_for_sale_product_no_inventory PASSED [ 18%]
+tests/core/services/test_inventory_service.py::test_decrease_stock_for_sale_insufficient_stock PASSED [ 19%]
+tests/core/services/test_inventory_service.py::test_decrease_stock_for_sale_zero_quantity PASSED [ 19%]
+tests/core/services/test_inventory_service.py::test_decrease_stock_for_sale_negative_quantity PASSED [ 19%]
+tests/core/services/test_inventory_service.py::test_get_inventory_report PASSED [ 20%]
+tests/core/services/test_inventory_service.py::test_get_low_stock_products PASSED [ 20%]
+tests/core/services/test_inventory_service.py::test_get_inventory_movements_all PASSED [ 20%]
+tests/core/services/test_inventory_service.py::test_get_inventory_movements_for_product PASSED [ 20%]
+tests/core/services/test_invoicing_concurrency.py::test_create_invoice_integration PASSED [ 21%]
+tests/core/services/test_invoicing_concurrency.py::test_concurrent_invoice_creation PASSED [ 21%]
+tests/core/services/test_invoicing_service.py::TestInvoicingService::test_create_invoice_already_exists PASSED [ 21%]
+tests/core/services/test_invoicing_service.py::TestInvoicingService::test_create_invoice_customer_not_found PASSED [ 21%]
+tests/core/services/test_invoicing_service.py::TestInvoicingService::test_create_invoice_from_sale_success PASSED [ 22%]
+tests/core/services/test_invoicing_service.py::TestInvoicingService::test_create_invoice_no_customer PASSED [ 22%]
+tests/core/services/test_invoicing_service.py::TestInvoicingService::test_create_invoice_sale_not_found PASSED [ 22%]
+tests/core/services/test_invoicing_service.py::TestInvoicingService::test_determine_invoice_type PASSED [ 22%]
+tests/core/services/test_invoicing_service.py::TestInvoicingService::test_generate_invoice_pdf FAILED [ 23%]
+tests/core/services/test_invoicing_service.py::TestInvoicingService::test_generate_invoice_pdf_error_handling PASSED [ 23%]
+tests/core/services/test_invoicing_service.py::TestInvoicingService::test_get_iva_rate PASSED [ 23%]
+tests/core/services/test_invoicing_service.py::TestInvoicingService::test_get_next_invoice_number PASSED [ 23%]
+tests/core/services/test_invoicing_service.py::TestInvoicingService::test_get_next_invoice_number_first_invoice PASSED [ 24%]
+tests/core/services/test_invoicing_service_extra.py::test_generate_next_invoice_number_first PASSED [ 24%]
+tests/core/services/test_invoicing_service_extra.py::test_generate_next_invoice_number_increment PASSED [ 24%]
+tests/core/services/test_invoicing_service_extra.py::test_determine_invoice_type_various PASSED [ 25%]
+tests/core/services/test_invoicing_service_extra.py::test_get_iva_rate_various PASSED [ 25%]
+tests/core/services/test_invoicing_service_extra.py::test_create_invoice_sale_not_found PASSED [ 25%]
+tests/core/services/test_invoicing_service_extra.py::test_create_invoice_already_has_invoice PASSED [ 25%]
+tests/core/services/test_invoicing_service_extra.py::test_create_invoice_no_customer PASSED [ 26%]
+tests/core/services/test_invoicing_service_extra.py::test_create_invoice_customer_not_found PASSED [ 26%]
+tests/core/services/test_invoicing_service_extra.py::test_create_invoice_success PASSED [ 26%]
+tests/core/services/test_invoicing_service_extra.py::test_create_invoice_duplicate_on_save PASSED [ 26%]
+tests/core/services/test_invoicing_service_extra.py::test_get_invoice_by_id_and_sale_id_and_all PASSED [ 27%]
+tests/core/services/test_invoicing_service_integration.py::test_create_invoice_integration PASSED [ 27%]
+tests/core/services/test_invoicing_service_integration.py::test_concurrent_invoice_creation PASSED [ 27%]
+tests/core/services/test_product_service.py::test_add_product_success 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [    INFO] core.services.product_service:product_service.py:66 - Adding product with code: P001
+PASSED                                                                   [ 27%]
+tests/core/services/test_product_service.py::test_add_product_basic_validation_fails[invalid_product0-C\xf3digo es requerido] 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: C¾digo es requerido. Rolling back.
+PASSED                                                                   [ 28%]
+tests/core/services/test_product_service.py::test_add_product_basic_validation_fails[invalid_product1-Descripci\xf3n es requerida] 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Descripci¾n es requerida. Rolling back.
+PASSED                                                                   [ 28%]
+tests/core/services/test_product_service.py::test_add_product_basic_validation_fails[invalid_product2-Precio de venta debe ser positivo] 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Precio de venta debe ser positivo. Rolling back.
+PASSED                                                                   [ 28%]
+tests/core/services/test_product_service.py::test_add_product_basic_validation_fails[invalid_product3-Precio de costo debe ser positivo] 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Precio de costo debe ser positivo. Rolling back.
+PASSED                                                                   [ 28%]
+tests/core/services/test_product_service.py::test_add_product_duplicate_code_fails 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: C¾digo 'DUP01' ya existe. Rolling back.
+PASSED                                                                   [ 29%]
+tests/core/services/test_product_service.py::test_add_product_nonexistent_dept_fails 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Departamento con ID 99 no existe. Rolling back.
+PASSED                                                                   [ 29%]
+tests/core/services/test_product_service.py::test_update_product_success 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [    INFO] core.services.product_service:product_service.py:84 - Updating product with ID: 101
+PASSED                                                                   [ 29%]
+tests/core/services/test_product_service.py::test_update_product_validation_fails 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Descripci¾n es requerida. Rolling back.
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Precio de venta debe ser positivo. Rolling back.
+PASSED                                                                   [ 30%]
+tests/core/services/test_product_service.py::test_update_product_code_conflict_fails 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: C¾digo 'P002' ya existe para otro producto. Rolling back.
+PASSED                                                                   [ 30%]
+tests/core/services/test_product_service.py::test_update_product_nonexistent_fails 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Producto con ID 999 no encontrado. Rolling back.
+PASSED                                                                   [ 30%]
+tests/core/services/test_product_service.py::test_delete_product_success 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [    INFO] core.services.product_service:product_service.py:100 - Deleting product with ID: 201
+2025-04-27 09:33:00 [    INFO] core.services.product_service:product_service.py:100 - Deleting product with ID: 202
+PASSED                                                                   [ 30%]
+tests/core/services/test_product_service.py::test_delete_product_with_stock_fails 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Producto 'DEL03' no puede ser eliminado porque tiene stock (5). Rolling back.
+PASSED                                                                   [ 31%]
+tests/core/services/test_product_service.py::test_delete_product_nonexistent 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [ WARNING] core.services.product_service:product_service.py:103 - Attempted to delete non-existent product with ID: 999
+PASSED                                                                   [ 31%]
+tests/core/services/test_product_service.py::test_find_product_calls_search PASSED [ 31%]
+tests/core/services/test_product_service.py::test_find_product_calls_get_all PASSED [ 31%]
+tests/core/services/test_product_service.py::test_add_department_success 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [    INFO] core.services.product_service:product_service.py:172 - Adding department with name: New Dept
+PASSED                                                                   [ 32%]
+tests/core/services/test_product_service.py::test_add_department_validation_fails[invalid_dept0-Nombre de departamento es requerido] 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Nombre de departamento es requerido. Rolling back.
+PASSED                                                                   [ 32%]
+tests/core/services/test_product_service.py::test_add_department_duplicate_name_fails 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Departamento 'Existing Dept' ya existe. Rolling back.
+PASSED                                                                   [ 32%]
+tests/core/services/test_product_service.py::test_delete_department_success 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [    INFO] core.services.product_service:product_service.py:209 - Deleting department with ID: 10
+PASSED                                                                   [ 32%]
+tests/core/services/test_product_service.py::test_delete_department_in_use_fails 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Departamento 'InUseDept' no puede ser eliminado, estß en uso por 1 producto(s).. Rolling back.
+PASSED                                                                   [ 33%]
+tests/core/services/test_product_service.py::test_get_all_departments PASSED [ 33%]
+tests/core/services/test_product_service.py::test_update_department_success 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [    INFO] core.services.product_service:product_service.py:226 - Updating department with ID: 5
+PASSED                                                                   [ 33%]
+tests/core/services/test_product_service.py::test_update_department_validation_fails 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Nombre de departamento es requerido. Rolling back.
+PASSED                                                                   [ 33%]
+tests/core/services/test_product_service.py::test_update_department_duplicate_name_fails 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Departamento 'Existing Name' ya existe. Rolling back.
+PASSED                                                                   [ 34%]
+tests/core/services/test_product_service.py::test_update_department_nonexistent_fails 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Departamento con ID 999 no encontrado. Rolling back.
+PASSED                                                                   [ 34%]
+tests/core/services/test_product_service.py::test_product_service_integration 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [    INFO] core.services.product_service:product_service.py:172 - Adding department with name: IntegrationDept
+2025-04-27 09:33:00 [    INFO] core.services.product_service:product_service.py:66 - Adding product with code: INTEG01
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Departamento 'IntegrationDept' no puede ser eliminado, estß en uso por 1 producto(s).. Rolling back.
+2025-04-27 09:33:00 [    INFO] core.services.product_service:product_service.py:100 - Deleting product with ID: 1
+2025-04-27 09:33:00 [    INFO] core.services.product_service:product_service.py:209 - Deleting department with ID: 1
+PASSED                                                                   [ 34%]
+tests/core/services/test_product_service_departments.py::test_add_department_success 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [    INFO] core.services.product_service:product_service.py:172 - Adding department with name: Dept1
+PASSED                                                                   [ 35%]
+tests/core/services/test_product_service_departments.py::test_add_department_duplicate_name PASSED [ 35%]
+tests/core/services/test_product_service_departments.py::test_get_all_departments PASSED [ 35%]
+tests/core/services/test_product_service_departments.py::test_delete_department_nonexistent 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [ WARNING] core.services.product_service:product_service.py:200 - Attempted to delete non-existent department with ID: 99
+PASSED                                                                   [ 35%]
+tests/core/services/test_product_service_departments.py::test_delete_department_in_use_fails PASSED [ 36%]
+tests/core/services/test_product_service_departments.py::test_delete_department_success 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [    INFO] core.services.product_service:product_service.py:209 - Deleting department with ID: 4
+PASSED                                                                   [ 36%]
+tests/core/services/test_product_service_departments.py::test_update_department_missing_id PASSED [ 36%]
+tests/core/services/test_product_service_departments.py::test_update_department_not_found PASSED [ 36%]
+tests/core/services/test_product_service_departments.py::test_update_department_validation_fails PASSED [ 37%]
+tests/core/services/test_product_service_departments.py::test_update_department_success 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [    INFO] core.services.product_service:product_service.py:226 - Updating department with ID: 8
+PASSED                                                                   [ 37%]
+tests/core/services/test_purchase_service.py::test_add_supplier PASSED   [ 37%]
+tests/core/services/test_purchase_service.py::test_create_purchase_order PASSED [ 37%]
+tests/core/services/test_purchase_service.py::test_add_supplier_success PASSED [ 38%]
+tests/core/services/test_purchase_service.py::test_add_supplier_missing_name PASSED [ 38%]
+tests/core/services/test_purchase_service.py::test_add_supplier_duplicate_name 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Supplier with name 'Test Supplier Inc.' already exists.. Rolling back.
+PASSED                                                                   [ 38%]
+tests/core/services/test_purchase_service.py::test_create_purchase_order_success PASSED [ 38%]
+tests/core/services/test_purchase_service.py::test_create_purchase_order_no_supplier_id PASSED [ 39%]
+tests/core/services/test_purchase_service.py::test_create_purchase_order_no_items PASSED [ 39%]
+tests/core/services/test_purchase_service.py::test_create_purchase_order_supplier_not_found 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Supplier with ID 1 not found.. Rolling back.
+PASSED                                                                   [ 39%]
+tests/core/services/test_purchase_service.py::test_create_purchase_order_product_not_found 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Product with ID 101 not found.. Rolling back.
+PASSED                                                                   [ 40%]
+tests/core/services/test_purchase_service.py::test_create_purchase_order_invalid_item_data[invalid_item_data0-Invalid item data.*Quantity must be > 0] 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Invalid item data: {'product_id': 101, 'quantity': 0, 'cost': Decimal('10.00')}. Quantity must be > 0, cost >= 0.. Rolling back.
+PASSED                                                                   [ 40%]
+tests/core/services/test_purchase_service.py::test_create_purchase_order_invalid_item_data[invalid_item_data1-Invalid item data.*Quantity must be > 0] 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Invalid item data: {'product_id': 101, 'quantity': -5, 'cost': Decimal('10.00')}. Quantity must be > 0, cost >= 0.. Rolling back.
+PASSED                                                                   [ 40%]
+tests/core/services/test_purchase_service.py::test_create_purchase_order_invalid_item_data[invalid_item_data2-Invalid item data.*] 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Invalid item data: {'product_id': None, 'quantity': 5, 'cost': Decimal('10.00')}. Quantity must be > 0, cost >= 0.. Rolling back.
+PASSED                                                                   [ 40%]
+tests/core/services/test_purchase_service.py::test_create_purchase_order_invalid_item_data[invalid_item_data3-Invalid item data.*cost >= 0] 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Invalid item data: {'product_id': 101, 'quantity': 5, 'cost': Decimal('-1.00')}. Quantity must be > 0, cost >= 0.. Rolling back.
+PASSED                                                                   [ 41%]
+tests/core/services/test_purchase_service.py::test_update_supplier_success PASSED [ 41%]
+tests/core/services/test_purchase_service.py::test_update_supplier_not_found 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Supplier with ID 999 not found.. Rolling back.
+PASSED                                                                   [ 41%]
+tests/core/services/test_purchase_service.py::test_update_supplier_name_conflict 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Another supplier with name 'Existing Name' already exists.. Rolling back.
+PASSED                                                                   [ 41%]
+tests/core/services/test_purchase_service.py::test_delete_supplier_success PASSED [ 42%]
+tests/core/services/test_purchase_service.py::test_delete_supplier_with_active_po 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Cannot delete supplier with active or pending purchase orders.. Rolling back.
+PASSED                                                                   [ 42%]
+tests/core/services/test_purchase_service.py::test_find_suppliers_no_query PASSED [ 42%]
+tests/core/services/test_purchase_service.py::test_find_suppliers_with_query PASSED [ 42%]
+tests/core/services/test_purchase_service.py::test_find_suppliers_with_query_no_match PASSED [ 43%]
+tests/core/services/test_purchase_service.py::test_get_supplier_by_id_found PASSED [ 43%]
+tests/core/services/test_purchase_service.py::test_get_supplier_by_id_not_found PASSED [ 43%]
+tests/core/services/test_purchase_service.py::test_get_purchase_order_by_id_found PASSED [ 43%]
+tests/core/services/test_purchase_service.py::test_get_purchase_order_by_id_not_found PASSED [ 44%]
+tests/core/services/test_purchase_service.py::test_find_purchase_orders_no_filters PASSED [ 44%]
+tests/core/services/test_purchase_service.py::test_find_purchase_orders_with_filters PASSED [ 44%]
+tests/core/services/test_purchase_service.py::test_receive_purchase_order_items_partial_success PASSED [ 45%]
+tests/core/services/test_purchase_service.py::test_receive_purchase_order_items_full_success PASSED [ 45%]
+tests/core/services/test_purchase_service.py::test_receive_purchase_order_items_po_not_found 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Purchase Order with ID 999 not found.. Rolling back.
+PASSED                                                                   [ 45%]
+tests/core/services/test_purchase_service.py::test_receive_purchase_order_items_invalid_status[RECEIVED] 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Purchase Order 1001 is already RECEIVED and cannot receive more items.. Rolling back.
+PASSED                                                                   [ 45%]
+tests/core/services/test_purchase_service.py::test_receive_purchase_order_items_invalid_status[CANCELLED] 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Purchase Order 1001 is already CANCELLED and cannot receive more items.. Rolling back.
+PASSED                                                                   [ 46%]
+tests/core/services/test_purchase_service.py::test_receive_purchase_order_items_item_not_found 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Purchase Order Item with ID 9999 not found in PO 1001.. Rolling back.
+PASSED                                                                   [ 46%]
+tests/core/services/test_purchase_service.py::test_receive_purchase_order_items_over_receive 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Cannot receive 9.0 for item P101. Ordered: 10, Already Received: 2.0.. Rolling back.
+PASSED                                                                   [ 46%]
+tests/core/services/test_purchase_service.py::test_receive_purchase_order_items_empty_data PASSED [ 46%]
+tests/core/services/test_receipt_generation.py::TestReceiptGeneration::test_generate_receipt_pdf_config_values PASSED [ 47%]
+tests/core/services/test_receipt_generation.py::TestReceiptGeneration::test_generate_receipt_pdf_sale_not_found PASSED [ 47%]
+tests/core/services/test_receipt_generation.py::TestReceiptGeneration::test_generate_receipt_pdf_success PASSED [ 47%]
+tests/core/services/test_receipt_generation.py::TestReceiptGeneration::test_generate_receipt_pdf_with_customer PASSED [ 47%]
+tests/core/services/test_reporting_service.py::TestReportingService::test_get_sales_summary_by_period PASSED [ 48%]
+tests/core/services/test_reporting_service.py::TestReportingService::test_get_sales_by_payment_type PASSED [ 48%]
+tests/core/services/test_reporting_service.py::TestReportingService::test_get_sales_by_department PASSED [ 48%]
+tests/core/services/test_reporting_service.py::TestReportingService::test_get_sales_by_customer PASSED [ 48%]
+tests/core/services/test_reporting_service.py::TestReportingService::test_get_top_selling_products PASSED [ 49%]
+tests/core/services/test_reporting_service.py::TestReportingService::test_calculate_profit_for_period PASSED [ 49%]
+tests/core/services/test_reporting_service.py::TestReportingService::test_get_daily_sales_report PASSED [ 49%]
+tests/core/services/test_reporting_service.py::TestReportingService::test_get_sales_trend PASSED [ 50%]
+tests/core/services/test_reporting_service.py::TestReportingService::test_get_comparative_report PASSED [ 50%]
+tests/core/services/test_sale_service.py::test_create_sale_success PASSED [ 50%]
+tests/core/services/test_sale_service.py::test_create_sale_success_item_without_inventory PASSED [ 50%]
+tests/core/services/test_sale_service.py::test_create_sale_validation_empty_list PASSED [ 51%]
+tests/core/services/test_sale_service.py::test_create_sale_validation_missing_data PASSED [ 51%]
+tests/core/services/test_sale_service.py::test_create_sale_validation_invalid_quantity_format PASSED [ 51%]
+tests/core/services/test_sale_service.py::test_create_sale_validation_non_positive_quantity PASSED [ 51%]
+tests/core/services/test_sale_service.py::test_create_sale_with_various_payment_types PASSED [ 52%]
+tests/core/services/test_sale_service.py::test_create_sale_with_different_user_ids PASSED [ 52%]
+tests/core/services/test_sale_service.py::test_create_sale_validation_product_not_found 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Product with ID 999 not found.. Rolling back.
+PASSED                                                                   [ 52%]
+tests/core/services/test_sale_service.py::test_create_sale_transactionality_inventory_fail 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Insufficient stock!. Rolling back.
+PASSED                                                                   [ 52%]
+tests/core/services/test_sale_service.py::test_create_sale_validation_missing_user_id PASSED [ 53%]
+tests/core/services/test_sale_service.py::test_create_sale_validation_missing_payment_type_non_credit PASSED [ 53%]
+tests/core/services/test_sale_service.py::test_create_sale_credit_sale_success PASSED [ 53%]
+tests/core/services/test_sale_service.py::test_create_sale_credit_sale_missing_customer PASSED [ 53%]
+tests/core/services/test_sale_service.py::test_create_sale_credit_sale_customer_not_found 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:00 [   ERROR] root:utils.py:93 - Error during session: Customer with ID 999 not found.. Rolling back.
+PASSED                                                                   [ 54%]
+tests/core/services/test_sale_service.py::test_get_sale_by_id_found PASSED [ 54%]
+tests/core/services/test_sale_service.py::test_get_sale_by_id_not_found PASSED [ 54%]
+tests/core/services/test_sale_service.py::test_generate_receipt_pdf_success PASSED [ 55%]
+tests/core/services/test_sale_service.py::test_generate_receipt_pdf_sale_not_found PASSED [ 55%]
+tests/core/services/test_user_service.py::test_add_user_with_valid_data_succeeds PASSED [ 55%]
+tests/core/services/test_user_service.py::test_add_user_with_existing_username_raises_error PASSED [ 55%]
+tests/core/services/test_user_service.py::test_add_user_with_empty_username_raises_error PASSED [ 56%]
+tests/core/services/test_user_service.py::test_add_user_with_empty_password_raises_error PASSED [ 56%]
+tests/core/services/test_user_service.py::test_authenticate_with_valid_credentials_succeeds PASSED [ 56%]
+tests/core/services/test_user_service.py::test_authenticate_with_incorrect_password_returns_none PASSED [ 56%]
+tests/core/services/test_user_service.py::test_authenticate_with_nonexistent_user_returns_none PASSED [ 57%]
+tests/core/services/test_user_service.py::test_authenticate_with_inactive_user_returns_none PASSED [ 57%]
+tests/core/services/test_user_service.py::test_authenticate_with_empty_credentials_returns_none PASSED [ 57%]
+tests/core/services/test_user_service.py::test_get_user_by_id_returns_user_when_exists PASSED [ 57%]
+tests/core/services/test_user_service.py::test_get_user_by_username_returns_user_when_exists PASSED [ 58%]
+tests/core/test_config.py::test_load_defaults_when_no_file PASSED        [ 58%]
+tests/core/test_config.py::test_save_and_load_cycle PASSED               [ 58%]
+tests/core/test_exceptions.py::test_application_error_base PASSED        [ 58%]
+tests/core/test_exceptions.py::test_validation_error PASSED              [ 59%]
+tests/core/test_exceptions.py::test_resource_not_found_error PASSED      [ 59%]
+tests/core/test_exceptions.py::test_database_error_basic PASSED          [ 59%]
+tests/core/test_exceptions.py::test_database_error_with_original PASSED  [ 60%]
+tests/core/test_exceptions.py::test_authentication_error PASSED          [ 60%]
+tests/core/test_exceptions.py::test_business_rule_error PASSED           [ 60%]
+tests/core/test_exceptions.py::test_external_service_error_basic PASSED  [ 60%]
+tests/core/test_exceptions.py::test_external_service_error_with_name PASSED [ 61%]
+tests/infrastructure/persistence/test_cash_drawer_repository.py::TestSQLiteCashDrawerRepository::test_add_and_get_entry_by_id PASSED [ 61%]
+tests/infrastructure/persistence/test_cash_drawer_repository.py::TestSQLiteCashDrawerRepository::test_get_entry_by_id_not_found PASSED [ 61%]
+tests/infrastructure/persistence/test_cash_drawer_repository.py::TestSQLiteCashDrawerRepository::test_get_entries_by_date_range PASSED [ 61%]
+tests/infrastructure/persistence/test_cash_drawer_repository.py::TestSQLiteCashDrawerRepository::test_get_entries_by_drawer_id PASSED [ 62%]
+tests/infrastructure/persistence/test_cash_drawer_repository.py::TestSQLiteCashDrawerRepository::test_get_current_balance PASSED [ 62%]
+tests/infrastructure/persistence/test_cash_drawer_repository.py::TestSQLiteCashDrawerRepository::test_get_current_balance_no_entries PASSED [ 62%]
+tests/infrastructure/persistence/test_cash_drawer_repository.py::TestSQLiteCashDrawerRepository::test_is_drawer_open PASSED [ 62%]
+tests/infrastructure/persistence/test_cash_drawer_repository.py::TestSQLiteCashDrawerRepository::test_get_today_entries PASSED [ 63%]
+tests/infrastructure/persistence/test_cash_drawer_repository.py::TestSQLiteCashDrawerRepository::test_get_entries_by_type PASSED [ 63%]
+tests/infrastructure/persistence/test_cash_drawer_repository.py::TestSQLiteCashDrawerRepository::test_get_last_start_entry PASSED [ 63%]
+tests/infrastructure/persistence/test_cash_drawer_repository.py::TestSQLiteCashDrawerRepository::test_get_last_start_entry_none PASSED [ 63%]
+tests/infrastructure/persistence/test_credit_payment_repository.py::test_add_and_get_credit_payment PASSED [ 64%]
+tests/infrastructure/persistence/test_credit_payment_repository.py::test_get_credit_payments_for_customer PASSED [ 64%]
+tests/infrastructure/persistence/test_credit_payment_repository.py::test_get_for_customer_empty PASSED [ 64%]
+tests/infrastructure/persistence/test_credit_payment_repository.py::test_negative_payment_amount_raises_error PASSED [ 65%]
+tests/infrastructure/persistence/test_customer_repository.py::TestSqliteCustomerRepository::test_add_customer PASSED [ 65%]
+tests/infrastructure/persistence/test_customer_repository.py::TestSqliteCustomerRepository::test_add_customer_duplicate_email PASSED [ 65%]
+tests/infrastructure/persistence/test_customer_repository.py::TestSqliteCustomerRepository::test_delete_customer PASSED [ 65%]
+tests/infrastructure/persistence/test_customer_repository.py::TestSqliteCustomerRepository::test_delete_customer_not_found PASSED [ 66%]
+tests/infrastructure/persistence/test_customer_repository.py::TestSqliteCustomerRepository::test_get_all_customers PASSED [ 66%]
+tests/infrastructure/persistence/test_customer_repository.py::TestSqliteCustomerRepository::test_get_all_customers_pagination PASSED [ 66%]
+tests/infrastructure/persistence/test_customer_repository.py::TestSqliteCustomerRepository::test_get_customer_by_id PASSED [ 66%]
+tests/infrastructure/persistence/test_customer_repository.py::TestSqliteCustomerRepository::test_get_customer_by_id_not_found PASSED [ 67%]
+tests/infrastructure/persistence/test_customer_repository.py::TestSqliteCustomerRepository::test_search_customer_by_name PASSED [ 67%]
+tests/infrastructure/persistence/test_customer_repository.py::TestSqliteCustomerRepository::test_search_customers_filtering_and_sorting PASSED [ 67%]
+tests/infrastructure/persistence/test_customer_repository.py::TestSqliteCustomerRepository::test_update_customer PASSED [ 67%]
+tests/infrastructure/persistence/test_customer_repository.py::TestSqliteCustomerRepository::test_update_customer_not_found PASSED [ 68%]
+tests/infrastructure/persistence/test_database.py::test_database_connection PASSED [ 68%]
+tests/infrastructure/persistence/test_database.py::test_session_scope_success PASSED [ 68%]
+tests/infrastructure/persistence/test_database.py::test_session_scope_rollback 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:02 [   ERROR] root:utils.py:93 - Error during session: Test exception. Rolling back.
+PASSED                                                                   [ 68%]
+tests/infrastructure/persistence/test_database.py::test_session_scope_rollback_data_consistency 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:02 [   ERROR] root:utils.py:93 - Error during session: Simulated failure. Rolling back.
+PASSED                                                                   [ 69%]
+tests/infrastructure/persistence/test_database.py::test_session_scope_commit_exception_consistency 
+-------------------------------- live log call --------------------------------
+2025-04-27 09:33:02 [   ERROR] root:utils.py:93 - Error during session: (sqlite3.IntegrityError) UNIQUE constraint failed: test_items.id
+[SQL: INSERT INTO test_items (id, name) VALUES (?, ?)]
+[parameters: (2, 'duplicate')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj). Rolling back.
+PASSED                                                                   [ 69%]
+tests/infrastructure/persistence/test_database_module.py::test_import_mappings_returns_models_module PASSED [ 69%]
+tests/infrastructure/persistence/test_database_module.py::test_ensure_all_models_mapped PASSED [ 70%]
+tests/infrastructure/persistence/test_database_module.py::test_create_all_tables_creates_model_tables PASSED [ 70%]
+tests/infrastructure/persistence/test_database_module.py::test_init_db_calls_create_all PASSED [ 70%]
+tests/infrastructure/persistence/test_database_operations.py::test_database_initialization PASSED [ 70%]
+tests/infrastructure/persistence/test_database_operations.py::test_execute_query PASSED [ 71%]
+tests/infrastructure/persistence/test_database_operations.py::test_execute_query_exception PASSED [ 71%]
+tests/infrastructure/persistence/test_database_operations.py::test_execute_query_with_return PASSED [ 71%]
+tests/infrastructure/persistence/test_database_operations.py::test_execute_many PASSED [ 71%]
+tests/infrastructure/persistence/test_database_operations.py::test_get_last_row_id PASSED [ 72%]
+tests/infrastructure/persistence/test_database_operations.py::test_close_connection PASSED [ 72%]
+tests/infrastructure/persistence/test_database_operations.py::test_transaction_operations PASSED [ 72%]
+tests/infrastructure/persistence/test_database_operations.py::test_create_engine_with_correct_url PASSED [ 72%]
+tests/infrastructure/persistence/test_database_operations.py::test_session_creation PASSED [ 73%]
+tests/infrastructure/persistence/test_database_operations.py::test_session_scope_provider_setup PASSED [ 73%]
+tests/infrastructure/persistence/test_database_operations.py::test_init_db PASSED [ 73%]
+tests/infrastructure/persistence/test_database_operations.py::test_ensure_all_models_mapped PASSED [ 73%]
+tests/infrastructure/persistence/test_db_ops.py::test_simple PASSED      [ 74%]
+tests/infrastructure/persistence/test_department_repository.py::test_add_department PASSED [ 74%]
+tests/infrastructure/persistence/test_department_repository.py::test_add_department_duplicate_name PASSED [ 74%]
+tests/infrastructure/persistence/test_department_repository.py::test_get_department_by_id PASSED [ 75%]
+tests/infrastructure/persistence/test_department_repository.py::test_get_department_by_id_not_found PASSED [ 75%]
+tests/infrastructure/persistence/test_department_repository.py::test_get_department_by_name PASSED [ 75%]
+tests/infrastructure/persistence/test_department_repository.py::test_get_department_by_name_not_found PASSED [ 75%]
+tests/infrastructure/persistence/test_department_repository.py::test_get_all_departments PASSED [ 76%]
+tests/infrastructure/persistence/test_department_repository.py::test_update_department PASSED [ 76%]
+tests/infrastructure/persistence/test_department_repository.py::test_delete_department PASSED [ 76%]
+tests/infrastructure/persistence/test_department_repository.py::test_delete_department_with_linked_products_raises_error PASSED [ 76%]
+tests/infrastructure/persistence/test_inventory_repository.py::TestSqliteInventoryRepository::test_add_movement PASSED [ 77%]
+tests/infrastructure/persistence/test_inventory_repository.py::TestSqliteInventoryRepository::test_get_all_movements PASSED [ 77%]
+tests/infrastructure/persistence/test_inventory_repository.py::TestSqliteInventoryRepository::test_get_movements_for_product PASSED [ 77%]
+tests/infrastructure/persistence/test_invoice_repository.py::test_add_and_get_invoice PASSED [ 77%]
+tests/infrastructure/persistence/test_invoice_repository.py::test_get_all_invoices PASSED [ 78%]
+tests/infrastructure/persistence/test_invoice_repository.py::test_duplicate_sale_id_raises_error PASSED [ 78%]
+tests/infrastructure/persistence/test_product_repository.py::test_add_product PASSED [ 78%]
+tests/infrastructure/persistence/test_product_repository.py::test_add_product_duplicate_code PASSED [ 78%]
+tests/infrastructure/persistence/test_product_repository.py::test_get_product_by_id PASSED [ 79%]
+tests/infrastructure/persistence/test_product_repository.py::test_get_product_by_id_not_found PASSED [ 79%]
+tests/infrastructure/persistence/test_product_repository.py::test_get_product_by_code PASSED [ 79%]
+tests/infrastructure/persistence/test_product_repository.py::test_get_product_by_code_not_found PASSED [ 80%]
+tests/infrastructure/persistence/test_product_repository.py::test_get_all_products PASSED [ 80%]
+tests/infrastructure/persistence/test_product_repository.py::test_update_product PASSED [ 80%]
+tests/infrastructure/persistence/test_product_repository.py::test_delete_product PASSED [ 80%]
+tests/infrastructure/persistence/test_product_repository.py::test_search_product PASSED [ 81%]
+tests/infrastructure/persistence/test_product_repository.py::test_update_stock PASSED [ 81%]
+tests/infrastructure/persistence/test_product_repository.py::test_get_low_stock PASSED [ 81%]
+tests/infrastructure/persistence/test_product_repository.py::test_get_all_products_filtered_and_paginated PASSED [ 81%]
+tests/infrastructure/persistence/test_product_repository.py::test_get_all_products_sorting PASSED [ 82%]
+tests/infrastructure/persistence/test_repository_base.py::test_repository_initialization PASSED [ 82%]
+tests/infrastructure/persistence/test_repository_base.py::test_session_property PASSED [ 82%]
+tests/infrastructure/persistence/test_repository_base.py::test_session_property_no_session PASSED [ 82%]
+tests/infrastructure/persistence/test_repository_base.py::test_set_session PASSED [ 83%]
+tests/infrastructure/persistence/test_repository_base.py::test_entity_to_domain PASSED [ 83%]
+tests/infrastructure/persistence/test_repository_base.py::test_domain_to_entity PASSED [ 83%]
+tests/infrastructure/persistence/test_repository_base.py::test_get_by_id PASSED [ 83%]
+tests/infrastructure/persistence/test_repository_base.py::test_get_all PASSED [ 84%]
+tests/infrastructure/persistence/test_repository_base.py::test_add PASSED [ 84%]
+tests/infrastructure/persistence/test_repository_base.py::test_update PASSED [ 84%]
+tests/infrastructure/persistence/test_repository_base.py::test_delete PASSED [ 85%]
+tests/infrastructure/persistence/test_sale_repository.py::TestSaleRepository::test_add_sale PASSED [ 85%]
+tests/infrastructure/persistence/test_sale_repository.py::TestSaleRepository::test_get_sales_summary_by_period PASSED [ 85%]
+tests/infrastructure/persistence/test_sale_repository.py::TestSaleRepository::test_get_sales_by_payment_type PASSED [ 85%]
+tests/infrastructure/persistence/test_sale_repository.py::TestSaleRepository::test_get_sales_by_department PASSED [ 86%]
+tests/infrastructure/persistence/test_sale_repository.py::TestSaleRepository::test_get_sales_by_customer PASSED [ 86%]
+tests/infrastructure/persistence/test_sale_repository.py::TestSaleRepository::test_get_top_selling_products PASSED [ 86%]
+tests/infrastructure/persistence/test_sale_repository.py::TestSaleRepository::test_calculate_profit_for_period PASSED [ 86%]
+tests/infrastructure/persistence/test_sale_repository.py::TestSaleRepository::test_get_sale_by_id PASSED [ 87%]
+tests/infrastructure/persistence/test_sale_repository.py::TestSaleRepository::test_get_sales_by_period_filtering PASSED [ 87%]
+tests/infrastructure/persistence/test_simple2.py::test_simple PASSED     [ 87%]
+tests/infrastructure/persistence/test_user_repository.py::TestUserRepository::test_add_user PASSED [ 87%]
+tests/infrastructure/persistence/test_user_repository.py::TestUserRepository::test_add_user_duplicate_username PASSED [ 88%]
+tests/infrastructure/persistence/test_user_repository.py::TestUserRepository::test_get_user_by_id PASSED [ 88%]
+tests/infrastructure/persistence/test_user_repository.py::TestUserRepository::test_get_user_by_id_not_found PASSED [ 88%]
+tests/infrastructure/persistence/test_user_repository.py::TestUserRepository::test_get_user_by_username PASSED [ 88%]
+tests/infrastructure/persistence/test_user_repository.py::TestUserRepository::test_get_user_by_username_not_found PASSED [ 89%]
+tests/infrastructure/test_alembic_migrations.py::test_alembic_upgrade_head_on_fresh_db PASSED [ 89%]
+tests/infrastructure/test_alembic_migrations.py::test_product_and_department_tables_schema PASSED [ 89%]
+tests/infrastructure/test_alembic_migrations.py::test_invoice_table_schema PASSED [ 90%]
+tests/integration/test_app_initialization.py::TestAppInitialization::test_app_initialization_with_test_user SKIPPED [ 90%]
+tests/integration/test_app_initialization.py::TestAppInitialization::test_app_initialization_with_real_services PASSED [ 90%]
+tests/integration/test_app_initialization.py::TestIntegrationWithoutLoginPrompt::test_invoicing_service_in_test_mode PASSED [ 90%]
+tests/integration/test_db_simple.py::test_db_import PASSED               [ 91%]
+tests/integration/test_db_simple.py::test_simple_db_session PASSED       [ 91%]
+tests/integration/test_end_to_end_flows.py::TestSalesEndToEndFlow::test_complete_sale_process ERROR [ 91%]
+tests/integration/test_end_to_end_flows.py::TestSalesEndToEndFlow::test_sale_with_error_handling ERROR [ 91%]
+tests/integration/test_end_to_end_flows.py::TestInvoicingEndToEndFlow::test_invoice_generation_from_sale ERROR [ 92%]
+tests/integration/test_end_to_end_flows.py::TestConcurrencyAndEdgeCases::test_inventory_updates_during_concurrent_sales ERROR [ 92%]
+tests/integration/test_end_to_end_flows.py::TestConcurrencyAndEdgeCases::test_simple_product_creation ERROR [ 92%]
+tests/integration/test_invoicing_integration.py::TestInvoicingIntegration::test_create_invoice_from_sale ERROR [ 92%]
+tests/integration/test_invoicing_integration.py::TestInvoicingIntegration::test_get_all_invoices ERROR [ 93%]
+tests/integration/test_invoicing_integration.py::TestInvoicingIntegration::test_generate_invoice_pdf ERROR [ 93%]
+tests/integration/test_main_initialization.py::TestInvoicingServiceFixInMain::test_proposed_fix_directly PASSED [ 93%]
+tests/integration/test_main_initialization.py::TestInvoicingServiceFixInMain::test_fix_with_actual_repository PASSED [ 93%]
+tests/integration/test_products.py::test_product_model PASSED            [ 94%]
+tests/integration/test_simple.py::test_simple PASSED                     [ 94%]
+tests/integration/test_simple.py::test_import_exceptions PASSED          [ 94%]
+tests/integration/test_simple.py::test_import_department PASSED          [ 95%]
+tests/integration/test_user_integration.py::TestUserIntegration::test_add_user_valid_user_returns_user FAILED [ 95%]
+tests/integration/test_user_integration.py::TestUserIntegration::test_add_user_duplicate_username_raises_value_error FAILED [ 95%]
+tests/integration/test_user_integration.py::TestUserIntegration::test_authenticate_user_valid_credentials_returns_user FAILED [ 95%]
+tests/integration/test_user_integration.py::TestUserIntegration::test_authenticate_user_invalid_credentials_returns_none FAILED [ 96%]
+tests/test_cash_drawer_dialogs_copy.py::TestOpenCashDrawerDialog::test_initialization PASSED [ 96%]
+tests/test_cash_drawer_dialogs_copy.py::TestOpenCashDrawerDialog::test_accept_valid_amount PASSED [ 96%]
+tests/test_cash_drawer_dialogs_copy.py::TestOpenCashDrawerDialog::test_accept_default_description PASSED [ 96%]
+tests/test_cash_drawer_dialogs_copy.py::TestOpenCashDrawerDialog::test_service_error_on_accept PASSED [ 97%]
+tests/test_cash_drawer_dialogs_copy.py::TestAddRemoveCashDialog::test_initialization_add PASSED [ 97%]
+tests/test_cash_drawer_dialogs_copy.py::TestAddRemoveCashDialog::test_initialization_remove PASSED [ 97%]
+tests/test_cash_drawer_dialogs_copy.py::TestAddRemoveCashDialog::test_accept_add_cash PASSED [ 97%]
+tests/test_cash_drawer_dialogs_copy.py::TestAddRemoveCashDialog::test_accept_remove_cash PASSED [ 98%]
+tests/test_cash_drawer_dialogs_copy.py::TestAddRemoveCashDialog::test_reject_missing_description PASSED [ 98%]
+tests/test_cash_drawer_dialogs_copy.py::TestAddRemoveCashDialog::test_service_value_error_on_accept PASSED [ 98%]
+tests/test_cash_drawer_dialogs_copy.py::TestCashDrawerHistoryDialog::test_apply_filter PASSED [ 98%]
+tests/test_cash_drawer_dialogs_copy.py::TestCashDrawerHistoryDialog::test_service_error_on_filter PASSED [ 99%]
+tests/test_cash_drawer_dialogs_copy.py::TestCashDrawerHistoryDialog::test_initialization_loads_today 

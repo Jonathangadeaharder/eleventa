@@ -19,7 +19,7 @@ def test_department_initialization_with_defaults():
     dept = Department()
     
     assert dept.id is None
-    assert dept.name is None
+    assert dept.name == ""
     assert dept.description is None
 
 def test_department_initialization_some_values():

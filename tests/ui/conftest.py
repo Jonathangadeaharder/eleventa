@@ -1,56 +1,40 @@
-import pytest
+import importlib.util
+import os
 import sys
-from PySide6.QtWidgets import (
-    QMessageBox, QDialog, QFileDialog, QInputDialog, 
-    QColorDialog, QFontDialog, QDialogButtonBox
-)
-from PySide6.QtCore import QTimer, QObject, QEventLoop, QCoreApplication
+import pytest
+from unittest.mock import MagicMock
 
-# Store original implementations to restore if needed
-_orig_methods = {}
+# Fix the path to properly include the project root
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_dir, "../.."))
+sys.path.insert(0, project_root)
 
-# Re-enable global patching (disabling it didn't solve the core crash)
-@pytest.fixture(scope="session", autouse=True) 
-def patch_qt_dialogs():
-    """
-    Globally patch all Qt dialog classes to prevent them from blocking during tests.
-    This ensures tests don't hang waiting for user interaction.
-    """
-    print("\n=== Patching all Qt dialogs to prevent test hanging ===")
-    
-    # Store original methods
-    _orig_methods['QMessageBox.exec'] = QMessageBox.exec
-    _orig_methods['QDialog.exec'] = QDialog.exec
-    
-    # Patch QDialog.exec - fundamental base class for all dialog windows
-    def dialog_exec_patch(self, *args, **kwargs):
-        print(f"Non-blocking exec called for {self.__class__.__name__}")
-        return QDialog.Accepted  # Return accepted (1) by default
-    
-    # Patch QMessageBox static methods
-    QMessageBox.information = lambda *args, **kwargs: QMessageBox.Ok
-    QMessageBox.warning = lambda *args, **kwargs: QMessageBox.Ok
-    QMessageBox.critical = lambda *args, **kwargs: QMessageBox.Ok
-    QMessageBox.question = lambda *args, **kwargs: QMessageBox.Yes
-    
-    # Apply patches
-    QMessageBox.exec = lambda *args, **kwargs: QMessageBox.Ok
-    QDialog.exec = dialog_exec_patch
-    
-    # File dialog patches
-    QFileDialog.getOpenFileName = lambda *args, **kwargs: ("test_file.txt", "")
-    QFileDialog.getSaveFileName = lambda *args, **kwargs: ("test_file.txt", "")
-    QFileDialog.getExistingDirectory = lambda *args, **kwargs: "/test/directory"
-    
-    print("=== Qt dialog patching complete ===")
-    
-    yield
-    
-    # No need to restore original methods at the end of test session
+@pytest.fixture(scope="session")
+def qt_module_loader():
+    def _load_module(module_path):
+        # Use absolute path from project root
+        abs_path = os.path.join(project_root, module_path)
+        spec = importlib.util.spec_from_file_location(
+            os.path.basename(module_path), abs_path
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    return _load_module
 
-@pytest.fixture(autouse=True)
-def ensure_no_hanging_tests(request):
-    """Set a timeout for each test to prevent hanging indefinitely."""
-    marker = request.node.get_closest_marker("timeout")
-    if not marker:
-        request.node.add_marker(pytest.mark.timeout(10))
+@pytest.fixture
+def qt_widget_fixture(qt_module_loader):
+    # Example fixture using dynamic import
+    widget_module = qt_module_loader("ui/widgets/my_widget.py")
+    return widget_module.MyWidget()
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--ui-test-dir",
+        action="store",
+        default="ui",
+        help="Directory containing UI modules to test"
+    )
+
+def pytest_configure(config):
+    config.ui_test_dir = config.getoption("--ui-test-dir")

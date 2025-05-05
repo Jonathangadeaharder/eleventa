@@ -11,20 +11,25 @@ This test suite verifies the functionality of the GenerateInvoiceDialog componen
 """
 
 import pytest
-# Skip the entire module due to persistent Qt crashes during qtbot.mouseClick
-pytest.skip("Skipping entire module due to persistent Qt crashes during qtbot.mouseClick", allow_module_level=True)
-
 from decimal import Decimal
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 from PySide6.QtWidgets import QDialog, QApplication
+from PySide6.QtTest import QTest
 from PySide6.QtCore import Qt
 
 from ui.dialogs.generate_invoice_dialog import GenerateInvoiceDialog
 from core.models.sale import Sale, SaleItem
 from core.models.customer import Customer
 from core.models.invoice import Invoice
+
+# Create QApplication instance once for all tests
+@pytest.fixture(scope="session")
+def qapp():
+    app = QApplication.instance() or QApplication([])
+    yield app
+    app.quit()
 
 # Test fixtures
 @pytest.fixture
@@ -101,7 +106,7 @@ def mock_customer():
     return mock_customer
 
 @pytest.fixture
-def invoice_dialog(qtbot, mock_invoicing_service):
+def invoice_dialog(qtbot, mock_invoicing_service, qapp):
     """Create a GenerateInvoiceDialog instance for testing."""
     dialog = GenerateInvoiceDialog(mock_invoicing_service)
     qtbot.addWidget(dialog)
@@ -125,36 +130,33 @@ def test_dialog_initialization(invoice_dialog):
     # Verify initial state
     assert invoice_dialog.generate_button.isEnabled() is False
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crash (access violation) during qtbot.mouseClick")
 @patch('ui.dialogs.generate_invoice_dialog.show_error_message')
-def test_search_sale_empty_id(mock_error_message, invoice_dialog, qtbot):
+def test_search_sale_empty_id(mock_error_message, invoice_dialog):
     """Test searching for a sale with an empty sale ID."""
     # Set empty sale ID
     invoice_dialog.sale_id_edit.setText("")
     
-    # Click search button
-    qtbot.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
+    # Trigger search button click using QTest
+    QTest.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
     
     # Verify error message
     mock_error_message.assert_called_once_with("Por favor ingrese un ID de venta.")
     assert invoice_dialog.generate_button.isEnabled() is False
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crash (access violation) during qtbot.mouseClick")
 @patch('ui.dialogs.generate_invoice_dialog.show_error_message')
-def test_search_sale_invalid_id(mock_error_message, invoice_dialog, qtbot):
+def test_search_sale_invalid_id(mock_error_message, invoice_dialog):
     """Test searching for a sale with an invalid sale ID."""
     # Set invalid sale ID (non-numeric)
     invoice_dialog.sale_id_edit.setText("abc")
     
-    # Click search button
-    qtbot.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
+    # Trigger search button click using QTest
+    QTest.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
     
     # Verify error message
     mock_error_message.assert_called_once_with("Por favor ingrese un ID de venta válido (número entero).")
     assert invoice_dialog.generate_button.isEnabled() is False
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crash (access violation) during qtbot.mouseClick")
-def test_search_sale_not_found(invoice_dialog, mock_invoicing_service, qtbot):
+def test_search_sale_not_found(invoice_dialog, mock_invoicing_service):
     """Test searching for a non-existent sale."""
     # Configure mock service to return None for the sale
     mock_invoicing_service.sale_repo.get_by_id.return_value = None
@@ -164,16 +166,15 @@ def test_search_sale_not_found(invoice_dialog, mock_invoicing_service, qtbot):
     
     # Use patch to capture error message
     with patch('ui.dialogs.generate_invoice_dialog.show_error_message') as mock_error:
-        # Click search button
-        qtbot.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
+        # Trigger search button click using QTest
+        QTest.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
         
         # Verify service was called and error message shown
         mock_invoicing_service.sale_repo.get_by_id.assert_called_once_with(999)
         mock_error.assert_called_once_with("No se encontró una venta con ID: 999")
         assert invoice_dialog.generate_button.isEnabled() is False
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crash (access violation) during qtbot.mouseClick")
-def test_search_sale_with_existing_invoice(invoice_dialog, mock_invoicing_service, mock_sale, qtbot):
+def test_search_sale_with_existing_invoice(invoice_dialog, mock_invoicing_service, mock_sale):
     """Test searching for a sale that already has an invoice."""
     # Configure mocks
     mock_invoicing_service.sale_repo.get_by_id.return_value = mock_sale
@@ -188,8 +189,8 @@ def test_search_sale_with_existing_invoice(invoice_dialog, mock_invoicing_servic
     
     # Use patch to capture error message
     with patch('ui.dialogs.generate_invoice_dialog.show_error_message') as mock_error:
-        # Click search button
-        qtbot.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
+        # Trigger search button click using QTest
+        QTest.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
         
         # Verify service calls and error message
         mock_invoicing_service.sale_repo.get_by_id.assert_called_once_with(1)
@@ -198,11 +199,10 @@ def test_search_sale_with_existing_invoice(invoice_dialog, mock_invoicing_servic
         assert "ya tiene una factura asociada" in mock_error.call_args[0][0]
         assert invoice_dialog.generate_button.isEnabled() is False
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crash (access violation) during qtbot.mouseClick")
-def test_search_sale_without_customer(invoice_dialog, mock_invoicing_service, mock_sale, qtbot):
-    """Test searching for a sale without a customer (required for invoicing)."""
-    # Configure mock sale without customer ID
-    mock_sale.customer_id = None
+def test_search_sale_without_customer(invoice_dialog, mock_invoicing_service, mock_sale):
+    """Test searching for a sale without associated customer."""
+    # Configure mocks
+    mock_sale.customer_id = None  # Sale without customer
     mock_invoicing_service.sale_repo.get_by_id.return_value = mock_sale
     mock_invoicing_service.get_invoice_by_sale_id.return_value = None
     
@@ -211,8 +211,8 @@ def test_search_sale_without_customer(invoice_dialog, mock_invoicing_service, mo
     
     # Use patch to capture error message
     with patch('ui.dialogs.generate_invoice_dialog.show_error_message') as mock_error:
-        # Click search button
-        qtbot.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
+        # Trigger search button click using QTest
+        QTest.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
         
         # Verify service calls and error message
         mock_invoicing_service.sale_repo.get_by_id.assert_called_once_with(1)
@@ -221,8 +221,8 @@ def test_search_sale_without_customer(invoice_dialog, mock_invoicing_service, mo
         assert "no tiene un cliente asociado" in mock_error.call_args[0][0]
         assert invoice_dialog.generate_button.isEnabled() is False
 
-def test_search_valid_sale(invoice_dialog, mock_invoicing_service, mock_sale, mock_customer, qtbot):
-    """Test searching for a valid sale with a customer."""
+def test_search_valid_sale(invoice_dialog, mock_invoicing_service, mock_sale, mock_customer):
+    """Test searching for a valid sale with customer."""
     # Configure mocks
     mock_invoicing_service.sale_repo.get_by_id.return_value = mock_sale
     mock_invoicing_service.get_invoice_by_sale_id.return_value = None
@@ -231,8 +231,8 @@ def test_search_valid_sale(invoice_dialog, mock_invoicing_service, mock_sale, mo
     # Set sale ID
     invoice_dialog.sale_id_edit.setText("1")
     
-    # Click search button
-    qtbot.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
+    # Trigger search button click using QTest
+    QTest.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
     
     # Verify service calls
     mock_invoicing_service.sale_repo.get_by_id.assert_called_once_with(1)
@@ -240,79 +240,68 @@ def test_search_valid_sale(invoice_dialog, mock_invoicing_service, mock_sale, mo
     mock_invoicing_service.customer_repo.get_by_id.assert_called_once_with(1)
     
     # Verify UI updates
-    assert invoice_dialog.sale_widget.isHidden()
-    assert not invoice_dialog.sale_items_table.isHidden()
-    assert "Fecha:" in invoice_dialog.sale_date_label.text()
-    assert "Total: $100.00" in invoice_dialog.sale_total_label.text()
-    assert "Cliente: John Doe" in invoice_dialog.customer_label.text()
-    assert invoice_dialog.generate_button.isEnabled()
-    
-    # Check sale items in table model
+    assert invoice_dialog.customer_label.text() == "Cliente: John Doe"
+    assert invoice_dialog.sale_date_label.text() == "Fecha: 10/05/2023"
+    assert invoice_dialog.sale_total_label.text() == "Total: $100.00"
     assert invoice_dialog.sale_items_model.rowCount() == 2
+    assert invoice_dialog.generate_button.isEnabled() is True
 
-def test_generate_invoice_success(invoice_dialog, mock_invoicing_service, mock_sale, mock_customer, qtbot):
+def test_generate_invoice_success(invoice_dialog, mock_invoicing_service, mock_sale, mock_customer):
     """Test successful invoice generation."""
     # Configure mocks
     mock_invoicing_service.sale_repo.get_by_id.return_value = mock_sale
     mock_invoicing_service.get_invoice_by_sale_id.return_value = None
     mock_invoicing_service.customer_repo.get_by_id.return_value = mock_customer
     
+    # Mock successful invoice creation
     mock_invoice = MagicMock(spec=Invoice)
-    mock_invoice.id = 1
-    mock_invoice.number = "INV-2023-001"
+    mock_invoice.invoice_number = "INV-2023-001"
     mock_invoicing_service.create_invoice_from_sale.return_value = mock_invoice
     
-    # Set up dialog with sale data
+    # Set sale ID and load sale data
     invoice_dialog.sale_id_edit.setText("1")
+    QTest.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
     
-    # Search for the sale first
-    qtbot.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
-    
-    # Mock accept method to prevent dialog from closing in test
-    with patch.object(QDialog, 'accept') as mock_accept:
-        # Click generate button
-        qtbot.mouseClick(invoice_dialog.generate_button, Qt.LeftButton)
+    # Generate invoice
+    with patch('ui.dialogs.generate_invoice_dialog.show_info_message') as mock_info:
+        QTest.mouseClick(invoice_dialog.generate_button, Qt.LeftButton)
         
-        # Verify service call
+        # Verify invoice created and success message
         mock_invoicing_service.create_invoice_from_sale.assert_called_once_with(1)
-        
-        # Verify dialog accepted
-        mock_accept.assert_called_once()
+        mock_info.assert_called_once()
+        assert "generada correctamente" in mock_info.call_args[0][2]
+        assert "INV-2023-001" in mock_info.call_args[0][2]
 
 @patch('ui.dialogs.generate_invoice_dialog.show_error_message')
-def test_generate_invoice_exception(mock_error, invoice_dialog, mock_invoicing_service, mock_sale, mock_customer, qtbot):
-    """Test error handling during invoice generation."""
+def test_generate_invoice_exception(mock_error, invoice_dialog, mock_invoicing_service, mock_sale, mock_customer):
+    """Test handling of exceptions during invoice generation."""
     # Configure mocks
     mock_invoicing_service.sale_repo.get_by_id.return_value = mock_sale
     mock_invoicing_service.get_invoice_by_sale_id.return_value = None
     mock_invoicing_service.customer_repo.get_by_id.return_value = mock_customer
     
-    # Set up service to raise an exception
-    error_message = "Database connection failed"
+    # Mock exception during invoice creation
+    error_message = "Error de conexión con el servicio SAT"
     mock_invoicing_service.create_invoice_from_sale.side_effect = Exception(error_message)
     
-    # Set up dialog with sale data
+    # Set sale ID and load sale data
     invoice_dialog.sale_id_edit.setText("1")
+    QTest.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
     
-    # Search for the sale first
-    qtbot.mouseClick(invoice_dialog.search_button, Qt.LeftButton)
-    
-    # Click generate button
-    qtbot.mouseClick(invoice_dialog.generate_button, Qt.LeftButton)
-    
-    # Verify service call
-    mock_invoicing_service.create_invoice_from_sale.assert_called_once_with(1)
+    # Try to generate invoice
+    QTest.mouseClick(invoice_dialog.generate_button, Qt.LeftButton)
     
     # Verify error message
+    mock_invoicing_service.create_invoice_from_sale.assert_called_once_with(1)
     mock_error.assert_called_once()
-    assert error_message in mock_error.call_args[0][0]
+    assert error_message in mock_error.call_args[0][2]
 
-def test_cancel_dialog(invoice_dialog, qtbot):
+def test_cancel_dialog(invoice_dialog):
     """Test canceling the dialog."""
-    # Mock reject method to prevent dialog from closing in test
+    # Set up to spy on the reject signal
     with patch.object(invoice_dialog, 'reject') as mock_reject:
         # Click cancel button
-        qtbot.mouseClick(invoice_dialog.cancel_button, Qt.LeftButton)
+        QTest.mouseClick(invoice_dialog.cancel_button, Qt.LeftButton)
         
         # Verify dialog rejected
         mock_reject.assert_called_once()

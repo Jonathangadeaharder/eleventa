@@ -1,0 +1,5 @@
+[tool.poetry.scripts]
+test = "pytest:main"
+test-unit = "pytest:main -m unit"
+test-integration = "pytest:main -m integration"
+test-ui = "pytest:main --ui" 

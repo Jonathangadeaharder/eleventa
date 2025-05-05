@@ -12,34 +12,34 @@ This test suite verifies the functionality of the ViewBase component, including:
 
 # Standard library imports
 import sys
+import os
 from decimal import Decimal
 
 # Testing frameworks
 import pytest
 from unittest.mock import MagicMock, patch
 
-# Qt components
-from PySide6.QtWidgets import (
-    QApplication, QTableView, QPushButton, QFrame, 
-    QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QAbstractItemView
+# Import Qt support module first - this sets up the environment
+from tests.ui.qt_support import (
+    Qt, QT_IMPORTS_AVAILABLE, QApplication, QTableView, QPushButton, QFrame,
+    QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QAbstractItemView,
+    QAbstractTableModel, QModelIndex, QIcon
 )
-from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex
-from PySide6.QtGui import QIcon
 
-# Application components
+# Skip all tests if Qt imports aren't available
+pytestmark = [
+    pytest.mark.skipif(not QT_IMPORTS_AVAILABLE, reason="PySide6 imports not available"),
+    pytest.mark.timeout(5)  # Apply timeout to all tests to prevent hanging
+]
+
+# Application components - import after Qt setup
 from ui.views.view_base import ViewBase
 from ui.utils import show_error_message, show_info_message, ask_confirmation
 
-# Test utilities
-import sys
-import os
-# Add root directory to path to import patch_resources
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
-from tests.ui import patch_resources
-
-# Apply timeout to all tests to prevent hanging
-pytestmark = pytest.mark.timeout(5)
+# Simple test to check if the module loads properly
+def test_module_loads():
+    """Simple test to ensure module loads properly."""
+    assert True
 
 # Mock classes for testing
 class MockTableModel(QAbstractTableModel):
@@ -109,9 +109,7 @@ def view_base(qtbot, monkeypatch):
         view.show()
         
         # Process events to ensure UI is ready
-        for _ in range(3):  # Process events multiple times for stability
-            QApplication.processEvents()
-            qtbot.wait(50)  # Short wait to process any pending events
+        qtbot.wait(50)  # Short wait to process any pending events
         
         yield view
     
@@ -121,15 +119,12 @@ def view_base(qtbot, monkeypatch):
             try:
                 view.close()
                 view.deleteLater()
-                for _ in range(3):  # Process events multiple times for cleanup
-                    QApplication.processEvents()
-                    qtbot.wait(50)
+                qtbot.wait(50)  # Process events for cleanup
             except Exception as e:
                 print(f"Error during cleanup: {e}")
                 # Continue with cleanup despite errors
 
-# INITIALIZATION TESTS
-
+@pytest.mark.skipif(not QT_IMPORTS_AVAILABLE, reason="PySide6 imports not available")
 def test_view_base_initialization(view_base):
     """
     Test that ViewBase initializes correctly with all expected widgets and layouts.
@@ -157,6 +152,7 @@ def test_view_base_initialization(view_base):
     assert isinstance(view_base.search_entry, QLineEdit)
     assert view_base.search_label.text() == "Buscar:"
 
+@pytest.mark.skipif(not QT_IMPORTS_AVAILABLE, reason="PySide6 imports not available")
 def test_view_base_layout_structure(view_base):
     """
     Test that the layout structure is correctly set up.
@@ -184,8 +180,7 @@ def test_view_base_layout_structure(view_base):
     # Footer layout checks
     assert isinstance(view_base.footer_layout, QHBoxLayout)
 
-# FUNCTIONALITY TESTS
-
+@pytest.mark.skipif(not QT_IMPORTS_AVAILABLE, reason="PySide6 imports not available")
 def test_set_view_title(view_base):
     """
     Test setting the view title.
@@ -197,8 +192,6 @@ def test_set_view_title(view_base):
     
     # Update title
     view_base.set_view_title("New Title")
-    
-    # Check updated title
     assert view_base.view_title.text() == "New Title"
 
 def test_setup_table_view(view_base, mock_table_view):

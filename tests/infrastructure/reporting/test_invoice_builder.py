@@ -4,9 +4,11 @@ import tempfile
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import patch
+import pytest
 
 from infrastructure.reporting.invoice_builder import InvoiceBuilder
 
+@pytest.mark.unit
 class TestInvoiceBuilder(unittest.TestCase):
     """Tests for the InvoiceBuilder class."""
     

@@ -12,8 +12,10 @@ from reportlab.pdfgen import canvas
 
 
 def format_currency(amount):
-    """Format amount as currency string with $ symbol."""
-    return f"${amount:.2f}"
+    """Format amount as currency string with $ symbol and thousands separator, minus sign before $."""
+    if amount < 0:
+        return "-${:,.2f}".format(abs(amount))
+    return "${:,.2f}".format(amount)
 
 
 def format_sale_date(date_obj):

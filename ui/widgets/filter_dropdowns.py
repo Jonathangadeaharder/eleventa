@@ -8,6 +8,13 @@ from datetime import datetime, timedelta
 
 from ui.utils import style_dropdown, style_secondary_button, style_primary_button
 
+# Ensure style functions have __name__ for shiboken support
+for func, name in [(style_dropdown, 'style_dropdown'),
+                   (style_secondary_button, 'style_secondary_button'),
+                   (style_primary_button, 'style_primary_button')]:
+    if not hasattr(func, '__name__'):
+        setattr(func, '__name__', name)
+
 
 class PeriodFilterWidget(QWidget):
     """

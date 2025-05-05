@@ -10,6 +10,12 @@ from unittest.mock import MagicMock
 import sys
 import os
 from contextlib import contextmanager
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+import sqlalchemy.pool
+
+# Set TEST_MODE environment variable for all test runs
+os.environ["TEST_MODE"] = "true"
 
 # Add project root to path if needed
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
@@ -45,25 +51,41 @@ def clean_db():
     Provide a clean database session for each test.
     
     This fixture:
-    1. Drops all existing tables defined in Base.metadata
-    2. Creates all tables defined in Base.metadata for an in-memory SQLite database
-    3. Initializes the schema
-    4. Yields the session for test use
-    5. Rolls back any uncommitted changes after the test
+    1. Creates an in-memory SQLite database
+    2. Creates all tables defined in Base.metadata
+    3. Yields the session for test use
+    4. Closes the session after test
     
     All integration tests should use this fixture to ensure proper
     database isolation between tests.
     """
-    from infrastructure.persistence.sqlite.database import SessionLocal, engine, Base, create_all_tables
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    import sqlalchemy.pool
+    from infrastructure.persistence.sqlite.database import Base, create_all_tables
     
-    # Drop all tables first to ensure a clean state for each test function
-    Base.metadata.drop_all(bind=engine)
+    # Override DATABASE_URL to ensure we use in-memory SQLite for tests
+    os.environ["DATABASE_URL"] = "sqlite:///:memory:"
     
-    # Create tables anew
-    create_all_tables(engine)
+    # Create an in-memory SQLite database for tests
+    test_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=sqlalchemy.pool.StaticPool,
+    )
+    
+    # Map all ORM models before creating tables
+    from infrastructure.persistence.sqlite.models_mapping import map_models
+    map_models()
+    
+    # Create tables in the in-memory database
+    create_all_tables(test_engine)
+    
+    # Create a test-specific session factory
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     
     # Create a session
-    session = SessionLocal()
+    session = TestingSessionLocal()
     
     try:
         yield session
@@ -71,8 +93,8 @@ def clean_db():
         # Roll back any changes made within the session during the test
         session.rollback()
         session.close()
-        # Optional: Clean up tables after test if needed, though dropping at the start is usually sufficient
-        # Base.metadata.drop_all(bind=engine)
+        # Drop tables after test to clean up
+        Base.metadata.drop_all(bind=test_engine)
 
 
 @pytest.fixture
@@ -193,6 +215,9 @@ def test_app(clean_db, authenticated_user, mock_external_services):
     def sale_repo_factory(session):
         return SqliteSaleRepository(session)
         
+    def invoice_repo_factory(session):
+        return SqliteInvoiceRepository(session)
+        
     def credit_payment_repo_factory(session):
         # Mock for now since it's not central to most tests
         return MagicMock()
@@ -223,9 +248,9 @@ def test_app(clean_db, authenticated_user, mock_external_services):
     )
     
     invoicing_service = InvoicingService(
-        invoice_repo=invoice_repo,
-        sale_repo=sale_repo,
-        customer_repo=customer_repo
+        invoice_repo_factory=invoice_repo_factory,
+        sale_repo_factory=sale_repo_factory,
+        customer_repo_factory=customer_repo_factory
     )
     
     # Return all components needed for integration tests
@@ -276,16 +301,19 @@ def test_data_factory(clean_db):
     from core.models.product import Product
     from core.models.customer import Customer
     from core.models.sale import Sale, SaleItem
+    from core.models.user import User
     from infrastructure.persistence.sqlite.repositories import (
         SqliteProductRepository,
         SqliteCustomerRepository,
-        SqliteSaleRepository
+        SqliteSaleRepository,
+        SqliteUserRepository
     )
     
     session = clean_db
     product_repo = SqliteProductRepository(session)
     customer_repo = SqliteCustomerRepository(session)
     sale_repo = SqliteSaleRepository(session)
+    user_repo = SqliteUserRepository(session)
     
     class TestDataFactory:
         def create_product(self, **kwargs):
@@ -303,7 +331,8 @@ def test_data_factory(clean_db):
             defaults.update(kwargs)
             product = Product(**defaults)
             product = product_repo.add(product)
-            session.commit()
+            # session.commit() # Let the test manage the transaction
+            session.flush() # Flush to assign ID
             return product
             
         def create_customer(self, **kwargs):
@@ -320,8 +349,24 @@ def test_data_factory(clean_db):
             defaults.update(kwargs)
             customer = Customer(**defaults)
             customer = customer_repo.add(customer)
-            session.commit()
+            # session.commit() # Let the test manage the transaction
+            session.flush() # Flush to assign ID
             return customer
+            
+        def create_user(self, **kwargs):
+            """Create a test user with default or custom properties."""
+            defaults = {
+                "username": "testuser",
+                "password_hash": "$2b$12$test_hash_for_testing_only",
+                "is_active": True
+            }
+            # Override defaults with any provided kwargs
+            defaults.update(kwargs)
+            user = User(**defaults)
+            user = user_repo.add(user)
+            # session.commit() # Let the test manage the transaction
+            session.flush() # Flush to assign ID
+            return user
             
         def create_sale(self, products=None, customer=None, **kwargs):
             """
@@ -360,7 +405,8 @@ def test_data_factory(clean_db):
             defaults.update(kwargs)
             sale = Sale(**defaults)
             sale = sale_repo.add_sale(sale)
-            session.commit()
+            # session.commit() # Let the test manage the transaction
+            session.flush() # Flush to assign ID
             return sale
     
     return TestDataFactory()

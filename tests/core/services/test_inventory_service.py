@@ -80,9 +80,18 @@ def test_add_inventory_success(mock_session_scope, inventory_service, mock_produ
     notes = "Received shipment"
     user_id = 1
 
-    # Create a copy to simulate the state fetched from the DB
-    # Note: In pytest, fixtures usually provide fresh instances, but explicit copy can be clearer
-    product_from_db = Product(**sample_product.__dict__)
+    # Create a copy by explicitly passing attributes, avoiding internal SQLAlchemy state
+    product_from_db = Product(
+        id=sample_product.id,
+        code=sample_product.code,
+        description=sample_product.description,
+        cost_price=sample_product.cost_price,
+        sell_price=sample_product.sell_price,
+        uses_inventory=sample_product.uses_inventory,
+        quantity_in_stock=sample_product.quantity_in_stock,
+        min_stock=sample_product.min_stock
+        # Add other relevant attributes if defined in the fixture and needed by the test
+    )
 
     # Configure mocks
     mock_product_repo.get_by_id.return_value = product_from_db
@@ -161,7 +170,17 @@ def test_adjust_inventory_success_positive(mock_session_scope, inventory_service
     reason = "Stock count correction"
     user_id = 2
 
-    product_from_db = Product(**sample_product.__dict__)
+    # product_from_db = Product(**sample_product.__dict__) # Old problematic line
+    product_from_db = Product( # Explicit creation
+        id=sample_product.id,
+        code=sample_product.code,
+        description=sample_product.description,
+        cost_price=sample_product.cost_price,
+        sell_price=sample_product.sell_price,
+        uses_inventory=sample_product.uses_inventory,
+        quantity_in_stock=sample_product.quantity_in_stock,
+        min_stock=sample_product.min_stock
+    )
     mock_product_repo.get_by_id.return_value = product_from_db
     mock_session = MagicMock()
     mock_session_scope.return_value.__enter__.return_value = mock_session
@@ -186,7 +205,17 @@ def test_adjust_inventory_success_negative(mock_session_scope, inventory_service
     reason = "Damaged goods"
     user_id = 1
 
-    product_from_db = Product(**sample_product.__dict__)
+    # product_from_db = Product(**sample_product.__dict__) # Old problematic line
+    product_from_db = Product( # Explicit creation
+        id=sample_product.id,
+        code=sample_product.code,
+        description=sample_product.description,
+        cost_price=sample_product.cost_price,
+        sell_price=sample_product.sell_price,
+        uses_inventory=sample_product.uses_inventory,
+        quantity_in_stock=sample_product.quantity_in_stock,
+        min_stock=sample_product.min_stock
+    )
     mock_product_repo.get_by_id.return_value = product_from_db
     mock_session = MagicMock()
     mock_session_scope.return_value.__enter__.return_value = mock_session
@@ -247,20 +276,24 @@ def test_decrease_stock_for_sale_success(inventory_service, mock_product_repo, m
     mock_session = MagicMock() # Create mock session
     product_id = sample_product.id
     quantity_sold = Decimal('3.0')
-    sale_id = 123
-    user_id = 5
+    sale_id = 101
+    user_id = 3
 
-    product_from_db = Product(**sample_product.__dict__)
+    # product_from_db = Product(**sample_product.__dict__) # Old problematic line
+    product_from_db = Product( # Explicit creation
+        id=sample_product.id,
+        code=sample_product.code,
+        description=sample_product.description,
+        cost_price=sample_product.cost_price,
+        sell_price=sample_product.sell_price,
+        uses_inventory=sample_product.uses_inventory,
+        quantity_in_stock=sample_product.quantity_in_stock,
+        min_stock=sample_product.min_stock
+    )
     mock_product_repo.get_by_id.return_value = product_from_db
 
-    # Action - pass the mock session
-    inventory_service.decrease_stock_for_sale(
-        session=mock_session,
-        product_id=product_id,
-        quantity=quantity_sold,
-        sale_id=sale_id,
-        user_id=user_id
-    )
+    # Action
+    inventory_service.decrease_stock_for_sale(mock_session, product_id, quantity_sold, sale_id, user_id)
 
     # Assertions
     mock_product_repo.get_by_id.assert_called_once_with(product_id)
@@ -305,16 +338,37 @@ def test_decrease_stock_for_sale_insufficient_stock(inventory_service, mock_prod
     quantity_sold = sample_product.quantity_in_stock + 1 # Sell more than available
     sale_id = 125
 
-    product_from_db = Product(**sample_product.__dict__)
+    # Arrange
+    mock_session = MagicMock()
+    product_id = sample_product.id
+    quantity_to_sell = Decimal('60.0') # More than available (50.0)
+    sale_id = 456
+    user_id = 7
+
+    # product_from_db = Product(**sample_product.__dict__) # Old problematic line
+    product_from_db = Product( # Explicit creation
+        id=sample_product.id,
+        code=sample_product.code,
+        description=sample_product.description,
+        cost_price=sample_product.cost_price,
+        sell_price=sample_product.sell_price,
+        uses_inventory=sample_product.uses_inventory,
+        quantity_in_stock=sample_product.quantity_in_stock,
+        min_stock=sample_product.min_stock
+    )
     mock_product_repo.get_by_id.return_value = product_from_db
 
-    with pytest.raises(ValueError, match=f"Insufficient stock for product {sample_product.code}"):
+    # Act & Assert
+    with pytest.raises(ValueError) as excinfo:
         inventory_service.decrease_stock_for_sale(
             session=mock_session,
             product_id=product_id,
-            quantity=quantity_sold,
-            sale_id=sale_id
+            quantity=quantity_to_sell,
+            sale_id=sale_id,
+            user_id=user_id
         )
+    expected_message = f"Insufficient stock for product {sample_product.code} (requires {quantity_to_sell}, has {sample_product.quantity_in_stock}). Sale {sale_id}"
+    assert str(excinfo.value) == expected_message
     mock_product_repo.update_stock.assert_not_called()
     mock_inventory_repo.add_movement.assert_not_called()
 
@@ -354,9 +408,20 @@ def test_get_low_stock_products(mock_session_scope, inventory_service, mock_prod
     """Test retrieving products with low stock."""
     # Arrange
     # Simulate sample_product being low stock
-    low_stock_product = replace(sample_product, quantity_in_stock=Decimal('5.0')) # Below min_stock of 10.0
-    expected_products = [low_stock_product]
-    mock_product_repo.get_low_stock.return_value = expected_products
+    # Create a low stock product based on sample_product, but manually
+    low_stock_product = Product(
+        id=sample_product.id,
+        code=sample_product.code,
+        description=sample_product.description,
+        cost_price=sample_product.cost_price,
+        sell_price=sample_product.sell_price,
+        uses_inventory=sample_product.uses_inventory,
+        quantity_in_stock=Decimal('5.0'), # Set the desired low quantity
+        min_stock=sample_product.min_stock
+    )
+
+    # Configure mock to return this product
+    mock_product_repo.get_low_stock.return_value = [low_stock_product]
     mock_session = MagicMock()
     mock_session_scope.return_value.__enter__.return_value = mock_session
 
@@ -366,7 +431,7 @@ def test_get_low_stock_products(mock_session_scope, inventory_service, mock_prod
     # Assert
     mock_session_scope.assert_called_once()
     mock_product_repo.get_low_stock.assert_called_once()
-    assert low_stock_list == expected_products
+    assert low_stock_list == [low_stock_product]
 
 @patch('core.services.inventory_service.session_scope')
 def test_get_inventory_movements_all(mock_session_scope, inventory_service, mock_inventory_repo):

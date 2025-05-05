@@ -1,0 +1,1 @@
+def test_customer_selection_and_accept(select_customer_dialog, test_customers, qtbot):

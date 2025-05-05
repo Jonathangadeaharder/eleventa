@@ -135,12 +135,23 @@ class ProductService:
             # Then call the method on the instantiated repository
             return prod_repo.get_by_code(code)
 
-    def get_product_by_id(self, product_id: int) -> Optional[Product]:
-        """Gets a product by its ID."""
-        logger.debug(f"Getting product with ID: {product_id}")
+    def get_product_by_id(self, product_id: Any) -> Optional[Product]:
+        """
+        Gets a product by its ID.
+        
+        Args:
+            product_id: The ID of the product (can be int or another type)
+            
+        Returns:
+            Product object if found, None otherwise
+        """
+        logger.debug(f"Getting product with ID: {product_id}, type: {type(product_id)}")
         with session_scope() as session:
             prod_repo = self.product_repo_factory(session)
-            return prod_repo.get_by_id(product_id)
+            product = prod_repo.get_by_id(product_id)
+            if not product:
+                logger.debug(f"Product with ID {product_id} not found")
+            return product
 
     def _validate_department(self, session: Session, department: Department, is_update: bool = False):
         """Common validation for department add/update."""

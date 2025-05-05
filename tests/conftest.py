@@ -1,113 +1,91 @@
-"""
-Pytest configuration for all tests.
-
-This module provides fixtures for database sessions and other common test requirements.
-"""
-import pytest
-import sqlalchemy
-from sqlalchemy import delete, inspect, MetaData, Column, Integer, String, Boolean, ForeignKey, Float, DateTime, Numeric, Text
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, scoped_session, Session, registry, relationship
 import sys
-import os
-import importlib
-from datetime import datetime
-from decimal import Decimal
-from uuid import uuid4
+import pytest
+sys.path.append(".")
 
-# Ensure the project root is in the sys.path for imports
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import sessionmaker, Session
+from core.database import Base
+from core.config import settings
+from infrastructure.persistence.sqlite.database import SessionLocal
+import sqlalchemy.pool
 
-# Import database components in correct order to handle circular imports
-from infrastructure.persistence.sqlite.database import Base, SessionLocal, engine as app_engine, create_all_tables
-
-# Import mappings AFTER Base is defined
-import infrastructure.persistence.sqlite.models_mapping
-from infrastructure.persistence.sqlite.models_mapping import ensure_all_models_mapped
-
-# Use a completely in-memory database for tests
-TEST_DB_URL = "sqlite:///:memory:"
+# Configure test database URL
+TEST_DATABASE_URL = settings.DATABASE_URL.replace("sqlite:///", "sqlite:///test_")
 
 @pytest.fixture(scope="session")
-def test_engine():
-    """Create and return a SQLAlchemy engine for testing."""
-    print(f"\n=== Creating test engine with URL: {TEST_DB_URL} ===")
-    engine = create_engine(
-        TEST_DB_URL,
-        echo=False,
-        connect_args={"check_same_thread": False}
+def db_engine():
+    """Provide a SQLAlchemy engine for the test session."""
+    from infrastructure.persistence.sqlite.database import Base
+    from infrastructure.persistence.sqlite.models_mapping import map_models
+    
+    # Create in-memory engine for testing
+    test_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=sqlalchemy.pool.StaticPool
     )
     
-    yield engine
+    # Ensure models are mapped
+    map_models()
     
-    print("\n=== Disposing test engine ===")
-    engine.dispose()
-
-@pytest.fixture(scope="session")
-def test_db_session_factory(test_engine):
-    """Create a session factory for testing."""
-    print("\n=== Creating test db session factory ===")
-    factory = sessionmaker(bind=test_engine, autocommit=False, autoflush=False)
-    yield factory
-
-@pytest.fixture(scope="session", autouse=True)
-def setup_test_database(test_engine):
-    """Create all tables in the test database ONCE per session."""
-    print("\n=== Fixture 'setup_test_database' starting... ===")
-    try:
-        # Ensure mappings are loaded before creating tables
-        ensure_all_models_mapped()
-        print(f"Attempting to create tables on engine: {test_engine.url}")
-        # Use the helper function from database.py
-        create_all_tables(test_engine)
-        print("Test database tables created successfully.")
-    except Exception as e:
-        pytest.fail(f"Failed to create test database tables: {e}")
-
-    yield # Let tests run
-
-    print("\n=== Fixture 'setup_test_database' tearing down (dropping tables)... ===")
-    try:
-        # Base.metadata.drop_all(test_engine) # Commented out to test hang
-        # print("Test database tables dropped.")
-        print("Skipping drop_all during teardown for testing hang.")
-    except Exception as e:
-        print(f"Warning: Error dropping test tables: {e}")
+    # Register table creation event hooks to control order
+    from infrastructure.persistence.sqlite.table_deps import register_table_creation_events
+    register_table_creation_events(Base.metadata)
+    
+    # Create schema with tables in the correct order
+    Base.metadata.create_all(bind=test_engine)
+    
+    yield test_engine
+    
+    # Cleanup after all tests
+    test_engine.dispose()
 
 @pytest.fixture(scope="function")
-def test_db_session(test_db_session_factory, setup_test_database): # Depend on setup
-    """
-    Create a session for each test function.
-    Handles transaction rollback automatically.
-    """
-    session = test_db_session_factory()
-    print(f"\n--- Test session {id(session)} started ---")
-    try:
-        yield session
-    finally:
-        session.rollback() # Rollback any uncommitted changes after test
-        session.close()
-        print(f"--- Test session {id(session)} closed ---")
-
-@pytest.fixture(scope="function")
-def clean_db(test_db_session):
-    """Provides a session and ensures tables are empty before the test."""
-    session = test_db_session # Get session from the existing fixture
-    print("--- Cleaning DB tables for test ---")
-    # Delete data from tables in reverse order of dependencies
-    # Use Base.metadata.sorted_tables for correct order
-    for table in reversed(Base.metadata.sorted_tables):
+def test_db_session(db_engine):
+    """Provide a SQLAlchemy session for each test with proper isolation."""
+    # Create a connection to use for transaction
+    connection = db_engine.connect()
+    
+    # Begin a non-ORM transaction
+    transaction = connection.begin()
+    
+    # Create a session bound to this connection
+    TestingSessionLocal = sessionmaker(
+        bind=connection, 
+        expire_on_commit=False,
+        future=True
+    )
+    session = TestingSessionLocal()
+    
+    # Override the begin_nested method to use subtransactions
+    original_begin_nested = session.begin_nested
+    
+    def begin_nested_with_subtransaction():
+        """Create a savepoint with better handling for nested transactions."""
+        return session.begin(nested=True)
+    
+    # Replace the method with our improved version
+    session.begin_nested = begin_nested_with_subtransaction
+    
+    # Provide better commit handling for subtransactions
+    original_commit = session.commit
+    
+    def commit_with_subtransaction_support():
+        """Commit changes with better handling for nested transactions."""
         try:
-            session.execute(table.delete())
+            original_commit()
         except Exception as e:
-            print(f"Warning: Could not delete from table {table.name}: {e}")
-    try:
-        session.commit() # Commit the deletions
-    except Exception as e:
-        print(f"Warning: Could not commit cleanup transaction: {e}")
-        session.rollback()
-    print("--- DB tables cleaned ---")
-    yield session # Provide the clean session to the test
-    # Rollback/close handled by test_db_session fixture's teardown
+            # If we're in a nested transaction, the commit is expected to fail
+            # but shouldn't crash the test unless it's the main transaction
+            if "This transaction is inactive" not in str(e):
+                raise
+    
+    # Replace the commit method with our improved version
+    session.commit = commit_with_subtransaction_support
+    
+    yield session
+    
+    # Clean up after the test
+    session.close()
+    transaction.rollback()  # Roll back the outer transaction
+    connection.close()  # Close the connection

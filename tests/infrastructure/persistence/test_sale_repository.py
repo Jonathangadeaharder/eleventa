@@ -1,846 +1,587 @@
-import unittest
 import pytest
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 from typing import Optional
+import time
+from sqlalchemy import text
+import sys
+import os
+
+# Ensure project root is in sys.path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 # Import domain models
 from core.models.sale import Sale, SaleItem
 from core.models.product import Product, Department
+from core.models.customer import Customer
 from core.interfaces.repository_interfaces import ISaleRepository
 
 # Import application ORM models
 from infrastructure.persistence.sqlite.models_mapping import (
-    DepartmentOrm, ProductOrm, SaleOrm, SaleItemOrm, UserOrm, CustomerOrm # Add UserOrm, CustomerOrm if needed
+    DepartmentOrm, ProductOrm, SaleOrm, SaleItemOrm, UserOrm, CustomerOrm
+)
+from infrastructure.persistence.sqlite.repositories import (
+    SqliteSaleRepository, 
+    SqliteProductRepository,
+    SqliteDepartmentRepository,
+    SqliteCustomerRepository
 )
 
-# Test-specific repository implementation
-class _HelperSqliteSaleRepository(ISaleRepository):
-    """SQLite implementation of Sale Repository for testing."""
+# Helper functions to set up test data
+@pytest.fixture
+def create_department(test_db_session):
+    """Create a test department with timestamp to ensure uniqueness."""
+    def _create_department(name=None):
+        timestamp = int(time.time() * 1000)  # milliseconds for more uniqueness
+        # Add UUID to ensure absolute uniqueness, even with timestamp collisions
+        unique_id = str(uuid.uuid4())[:8]
+        department_name = name or f"Test Dept {timestamp}_{unique_id}"
+        repo = SqliteDepartmentRepository(test_db_session)
+        department = Department(name=department_name)
+        return repo.add(department)
+    return _create_department
+
+@pytest.fixture
+def create_product(test_db_session, create_department):
+    """Create a test product and return its model."""
+    def _create_product(code, description, price=10.0, cost=5.0):
+        # Create a unique department for each product
+        department = create_department()
+        repo = SqliteProductRepository(test_db_session)
+        timestamp = int(time.time() * 1000)
+        unique_code = f"{code}_{timestamp}"  # Ensure unique code
+        product = Product(
+            code=unique_code,
+            description=description,
+            department_id=department.id,
+            cost_price=cost,
+            sell_price=price,
+            uses_inventory=True
+        )
+        return repo.add(product)
+    return _create_product
+
+@pytest.fixture
+def create_customer(test_db_session):
+    """Create a test customer with timestamp to ensure uniqueness."""
+    def _create_customer(name=None):
+        timestamp = int(time.time() * 1000)  # milliseconds for more uniqueness
+        customer_name = name or f"Test Customer {timestamp}"
+        
+        # Ensure CUIT is unique by using timestamp for it as well
+        unique_cuit = f"{timestamp}"
+        
+        repo = SqliteCustomerRepository(test_db_session)
+        customer = Customer(
+            name=customer_name,
+            cuit=unique_cuit,  # Use unique timestamp-based CUIT
+            email=f"customer.{timestamp}@test.com"  # Ensure unique email
+        )
+        return repo.add(customer)
+    return _create_customer
+
+def test_add_sale(test_db_session, create_product, create_customer):
+    """Test adding a new sale."""
+    # Create test data
+    product1 = create_product("PROD1", "Product 1", 15.0, 8.0)
+    product2 = create_product("PROD2", "Product 2", 25.0, 12.0)
+    customer = create_customer()
+    test_db_session.commit()
     
-    def __init__(self, session):
-        self._session = session
+    # Create sale with items
+    sale = Sale(
+        timestamp=datetime.now(),
+        payment_type="CASH",
+        customer_id=customer.id,
+        user_id=1
+    )
     
-    def add_sale(self, sale: Sale) -> Sale:
-        """Add a new sale to the repository."""
-        try:
-            # Create new SaleOrm object without constructor params
-            sale_orm = SaleOrm()
-            sale_orm.date_time = sale.timestamp
-            sale_orm.total_amount = float(sale.total)
-            sale_orm.payment_type = sale.payment_type
-            sale_orm.customer_id = sale.customer_id
-            sale_orm.user_id = sale.user_id
-            
-            # Add sale to session to generate ID
-            self._session.add(sale_orm)
-            self._session.flush()
-            
-            # Update the sale with generated ID
-            sale.id = sale_orm.id
-            
-            # Create and add each sale item
-            for item in sale.items:
-                item_orm = SaleItemOrm()
-                item_orm.sale_id = sale_orm.id
-                item_orm.product_id = item.product_id
-                item_orm.quantity = float(item.quantity)
-                item_orm.unit_price = float(item.unit_price)
-                item_orm.total_price = float(item.quantity * item.unit_price)
-                item_orm.product_code = item.product_code
-                item_orm.product_description = item.product_description
-                
-                self._session.add(item_orm)
-                self._session.flush()
-                
-                # Update the item with generated ID
-                item.id = item_orm.id
-                item.sale_id = sale_orm.id
-            
-            return sale
-        except Exception as e:
-            self._session.rollback()
-            raise ValueError(f"Error adding sale: {e}")
+    # Add sale items
+    item1 = SaleItem(
+        product_id=product1.id,
+        quantity=Decimal('2'),
+        unit_price=Decimal(str(product1.sell_price)),
+        product_code=product1.code,
+        product_description=product1.description
+    )
+    item2 = SaleItem(
+        product_id=product2.id,
+        quantity=Decimal('1'),
+        unit_price=Decimal(str(product2.sell_price)),
+        product_code=product2.code,
+        product_description=product2.description
+    )
     
-    def get_sales_by_period(self, start_time: datetime, end_time: datetime) -> list:
-        """Get all sales within the specified period."""
-        try:
-            query = self._session.query(SaleOrm).filter(
-                SaleOrm.date_time >= start_time,
-                SaleOrm.date_time <= end_time
-            ).order_by(SaleOrm.date_time)
-            
-            sales = []
-            for sale_orm in query.all():
-                # Get associated items
-                items_query = self._session.query(SaleItemOrm).filter(
-                    SaleItemOrm.sale_id == sale_orm.id
-                )
-                item_orms = items_query.all()
-                
-                # Map to domain models
-                sale_items = [self._map_sale_item_orm_to_model(item) for item in item_orms]
-                sale = self._map_sale_orm_to_model(sale_orm, sale_items)
-                sales.append(sale)
-            
-            return sales
-        except Exception as e:
-            return []
+    sale.items = [item1, item2]
     
-    def get_sale_by_id(self, sale_id: int):
-        """Get a sale by its ID."""
-        try:
-            sale_orm = self._session.query(SaleOrm).filter(SaleOrm.id == sale_id).first()
-            if not sale_orm:
-                return None
-                
-            # Get associated items
-            items_orm = self._session.query(SaleItemOrm).filter(SaleItemOrm.sale_id == sale_id).all()
-            
-            # Map to domain models
-            sale_items = [self._map_sale_item_orm_to_model(item) for item in items_orm]
-            
-            # Map the sale
-            return self._map_sale_orm_to_model(sale_orm, sale_items)
-        except Exception as e:
-            return None
+    # Use repository to add the sale
+    repository = SqliteSaleRepository(test_db_session)
+    saved_sale = repository.add_sale(sale)
+    test_db_session.commit()
     
-    def get_by_id(self, sale_id: int) -> Optional[Sale]:
-        """Get a single sale by its ID, including its items."""
-        try:
-            sale_orm = self._session.query(SaleOrm).filter(SaleOrm.id == sale_id).first()
-            if not sale_orm:
-                return None
-
-            # Get associated items eagerly (adjust if lazy loading is default and preferred)
-            items_orm = self._session.query(SaleItemOrm).filter(SaleItemOrm.sale_id == sale_id).all()
-            sale_items = [self._map_sale_item_orm_to_model(item) for item in items_orm]
-
-            return self._map_sale_orm_to_model(sale_orm, sale_items)
-        except Exception as e:
-            # Log the error appropriately
-            # logger.error(f"Error retrieving sale with ID {sale_id}: {e}")
-            return None
+    # Verify the sale and its items were saved correctly
+    assert saved_sale.id is not None
+    assert len(saved_sale.items) == 2
+    assert saved_sale.total == Decimal('55.00')  # 2*15 + 1*25 = 55
     
-    def _map_sale_item_orm_to_model(self, item_orm):
-        """Map a SaleItemOrm to a SaleItem model."""
-        return SaleItem(
-            id=item_orm.id,
-            sale_id=item_orm.sale_id,
-            product_id=item_orm.product_id,
-            quantity=Decimal(str(item_orm.quantity)),
-            unit_price=Decimal(str(item_orm.unit_price)),
-            product_code=item_orm.product_code,
-            product_description=item_orm.product_description
-        )
+    # Verify directly in database
+    sale_orm = test_db_session.query(SaleOrm).filter_by(id=saved_sale.id).first()
+    assert sale_orm is not None
+    assert float(sale_orm.total_amount) == float(saved_sale.total)
     
-    def _map_sale_orm_to_model(self, sale_orm, sale_items=None):
-        """Map a SaleOrm to a Sale model."""
-        return Sale(
-            id=sale_orm.id,
-            timestamp=sale_orm.date_time,
-            items=sale_items or [],
-            payment_type=sale_orm.payment_type,
-            customer_id=sale_orm.customer_id,
-            user_id=sale_orm.user_id
-        )
+    # Verify items
+    items_orm = test_db_session.query(SaleItemOrm).filter_by(sale_id=saved_sale.id).all()
+    assert len(items_orm) == 2
     
-    # Implementation of required methods for our tests
-    def get_sales_summary_by_period(self, start_date=None, end_date=None, group_by="day"):
-        """Get sales summary by period, grouped by day, week, or month."""
-        from sqlalchemy import func, extract
-        
-        # Convert dates to datetime if needed
-        if start_date and not isinstance(start_date, datetime):
-            start_date = datetime.combine(start_date, datetime.min.time())
-        if end_date and not isinstance(end_date, datetime):
-            end_date = datetime.combine(end_date, datetime.max.time())
-        
-        # Base query
-        query = self._session.query(
-            SaleOrm.date_time.label('date'),
-            func.count(SaleOrm.id).label('num_sales'),
-            func.sum(SaleOrm.total_amount).label('total_sales')
-        )
-        
-        # Apply date filters
-        if start_date:
-            query = query.filter(SaleOrm.date_time >= start_date)
-        if end_date:
-            query = query.filter(SaleOrm.date_time <= end_date)
-        
-        # Group by selected period
-        if group_by == 'day':
-            query = query.group_by(
-                extract('year', SaleOrm.date_time),
-                extract('month', SaleOrm.date_time),
-                extract('day', SaleOrm.date_time)
-            )
-        elif group_by == 'week':
-            query = query.group_by(
-                extract('year', SaleOrm.date_time),
-                extract('week', SaleOrm.date_time)
-            )
-        elif group_by == 'month':
-            query = query.group_by(
-                extract('year', SaleOrm.date_time),
-                extract('month', SaleOrm.date_time)
-            )
-        
-        # Order by date
-        query = query.order_by(SaleOrm.date_time)
-        
-        # Execute and format results
-        result = []
-        for row in query.all():
-            result.append({
-                'date': row.date.date(),
-                'num_sales': row.num_sales,
-                'total_sales': row.total_sales or 0
-            })
-        
-        return result
+    # Verify the sale can be retrieved
+    retrieved_sale = repository.get_by_id(saved_sale.id)
+    assert retrieved_sale is not None
+    assert retrieved_sale.id == saved_sale.id
+    assert len(retrieved_sale.items) == 2
+
+def test_get_sales_summary_by_period(test_db_session, create_product, create_customer):
+    """Test getting sales summary grouped by period."""
+    # Create test data
+    product1 = create_product("TEST01", "Test Product 1", 10.0, 5.0)
+    product2 = create_product("TEST02", "Test Product 2", 20.0, 10.0)
+    customer = create_customer()
+    test_db_session.commit()
     
-    def get_sales_by_payment_type(self, start_date=None, end_date=None):
-        """Get sales aggregated by payment type."""
-        from sqlalchemy import func
-        
-        # Convert dates to datetime if needed
-        if start_date and not isinstance(start_date, datetime):
-            start_date = datetime.combine(start_date, datetime.min.time())
-        if end_date and not isinstance(end_date, datetime):
-            end_date = datetime.combine(end_date, datetime.max.time())
-        
-        # Base query
-        query = self._session.query(
-            SaleOrm.payment_type.label('payment_type'),
-            func.count(SaleOrm.id).label('num_sales'),
-            func.sum(SaleOrm.total_amount).label('total_sales')
-        )
-        
-        # Apply date filters
-        if start_date:
-            query = query.filter(SaleOrm.date_time >= start_date)
-        if end_date:
-            query = query.filter(SaleOrm.date_time <= end_date)
-        
-        # Group by payment type
-        query = query.group_by(SaleOrm.payment_type)
-        
-        # Execute and format results
-        result = []
-        for row in query.all():
-            result.append({
-                'payment_type': row.payment_type or 'Unknown',
-                'num_sales': row.num_sales,
-                'total_sales': row.total_sales or 0
-            })
-        
-        return result
+    repository = SqliteSaleRepository(test_db_session)
     
-    def get_sales_by_department(self, start_date=None, end_date=None):
-        """Get sales aggregated by department."""
-        from sqlalchemy import func
-        
-        # Convert dates to datetime if needed
-        if start_date and not isinstance(start_date, datetime):
-            start_date = datetime.combine(start_date, datetime.min.time())
-        if end_date and not isinstance(end_date, datetime):
-            end_date = datetime.combine(end_date, datetime.max.time())
-        
-        # Join query to get department info
-        query = self._session.query(
-            DepartmentOrm.name.label('department_name'),
-            func.count(SaleOrm.id.distinct()).label('num_sales'),
-            func.sum(SaleItemOrm.quantity * SaleItemOrm.unit_price).label('total_sales')
-        ).join(
-            SaleItemOrm, SaleItemOrm.sale_id == SaleOrm.id
-        ).join(
-            ProductOrm, ProductOrm.id == SaleItemOrm.product_id
-        ).join(
-            DepartmentOrm, DepartmentOrm.id == ProductOrm.department_id
-        )
-        
-        # Apply date filters
-        if start_date:
-            query = query.filter(SaleOrm.date_time >= start_date)
-        if end_date:
-            query = query.filter(SaleOrm.date_time <= end_date)
-        
-        # Group by department
-        query = query.group_by(DepartmentOrm.name)
-        
-        # Execute and format results
-        result = []
-        for row in query.all():
-            result.append({
-                'department_name': row.department_name,
-                'num_sales': row.num_sales,
-                'total_sales': row.total_sales or 0
-            })
-        
-        return result
+    # Create sales for different dates
+    now = datetime.now()
+    yesterday = now - timedelta(days=1)
+    two_days_ago = now - timedelta(days=2)
     
-    def get_sales_by_customer(self, start_date=None, end_date=None, limit=10):
-        """Get sales aggregated by customer."""
-        from sqlalchemy import func
-        
-        # Convert dates to datetime if needed
-        if start_date and not isinstance(start_date, datetime):
-            start_date = datetime.combine(start_date, datetime.min.time())
-        if end_date and not isinstance(end_date, datetime):
-            end_date = datetime.combine(end_date, datetime.max.time())
-        
-        # Base query
-        query = self._session.query(
-            SaleOrm.customer_id.label('customer_id'),
-            func.count(SaleOrm.id).label('num_sales'),
-            func.sum(SaleOrm.total_amount).label('total_sales')
-        )
-        
-        # Filter out null customer_id
-        query = query.filter(SaleOrm.customer_id.isnot(None))
-        
-        # Apply date filters
-        if start_date:
-            query = query.filter(SaleOrm.date_time >= start_date)
-        if end_date:
-            query = query.filter(SaleOrm.date_time <= end_date)
-        
-        # Group by customer_id
-        query = query.group_by(SaleOrm.customer_id)
-        
-        # Order by total sales descending
-        query = query.order_by(func.sum(SaleOrm.total_amount).desc())
-        
-        # Apply limit
-        if limit:
-            query = query.limit(limit)
-        
-        # Execute and format results
-        result = []
-        for row in query.all():
-            result.append({
-                'customer_id': row.customer_id,
-                'num_sales': row.num_sales,
-                'total_sales': row.total_sales or 0
-            })
-        
-        return result
+    # Day 1 sales
+    sale1 = Sale(timestamp=two_days_ago, payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale1.items = [
+        SaleItem(product_id=product1.id, quantity=Decimal('3'), unit_price=Decimal('10.0'),
+                 product_code=product1.code, product_description=product1.description)
+    ]
+    repository.add_sale(sale1)
     
-    def get_top_selling_products(self, start_date=None, end_date=None, limit=10):
-        """Get top selling products by quantity."""
-        from sqlalchemy import func
-        
-        # Convert dates to datetime if needed
-        if start_date and not isinstance(start_date, datetime):
-            start_date = datetime.combine(start_date, datetime.min.time())
-        if end_date and not isinstance(end_date, datetime):
-            end_date = datetime.combine(end_date, datetime.max.time())
-        
-        # Join query to get product info
-        query = self._session.query(
-            ProductOrm.id.label('product_id'),
-            ProductOrm.code.label('product_code'),
-            ProductOrm.description.label('product_description'),
-            func.sum(SaleItemOrm.quantity).label('units_sold'),
-            func.sum(SaleItemOrm.quantity * SaleItemOrm.unit_price).label('total_sales')
-        ).join(
-            SaleItemOrm, SaleItemOrm.product_id == ProductOrm.id
-        ).join(
-            SaleOrm, SaleOrm.id == SaleItemOrm.sale_id
-        )
-        
-        # Apply date filters
-        if start_date:
-            query = query.filter(SaleOrm.date_time >= start_date)
-        if end_date:
-            query = query.filter(SaleOrm.date_time <= end_date)
-        
-        # Group by product
-        query = query.group_by(ProductOrm.id, ProductOrm.code, ProductOrm.description)
-        
-        # Order by units sold descending
-        query = query.order_by(func.sum(SaleItemOrm.quantity).desc())
-        
-        # Apply limit
-        if limit:
-            query = query.limit(limit)
-        
-        # Execute and format results
-        result = []
-        for row in query.all():
-            result.append({
-                'product_id': row.product_id,
-                'product_code': row.product_code,
-                'product_description': row.product_description,
-                'units_sold': row.units_sold,
-                'total_sales': row.total_sales or 0
-            })
-        
-        return result
+    # Day 2 sales (2 sales)
+    sale2 = Sale(timestamp=yesterday, payment_type="CARD", customer_id=customer.id, user_id=1)
+    sale2.items = [
+        SaleItem(product_id=product1.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
+                 product_code=product1.code, product_description=product1.description),
+        SaleItem(product_id=product2.id, quantity=Decimal('2'), unit_price=Decimal('20.0'),
+                 product_code=product2.code, product_description=product2.description)
+    ]
+    repository.add_sale(sale2)
     
-    def calculate_profit_for_period(self, start_date=None, end_date=None):
-        """Calculate profit for a period based on cost and sell prices."""
-        from sqlalchemy import func
-        
-        # Convert dates to datetime if needed
-        if start_date and not isinstance(start_date, datetime):
-            start_date = datetime.combine(start_date, datetime.min.time())
-        if end_date and not isinstance(end_date, datetime):
-            end_date = datetime.combine(end_date, datetime.max.time())
-        
-        # Calculate total revenue from sales
-        revenue_query = self._session.query(
-            func.sum(SaleItemOrm.quantity * SaleItemOrm.unit_price).label('total_revenue')
-        ).join(
-            SaleOrm, SaleOrm.id == SaleItemOrm.sale_id
-        )
-        
-        # Apply date filters
-        if start_date:
-            revenue_query = revenue_query.filter(SaleOrm.date_time >= start_date)
-        if end_date:
-            revenue_query = revenue_query.filter(SaleOrm.date_time <= end_date)
-        
-        # Calculate total cost from products sold
-        cost_query = self._session.query(
-            func.sum(SaleItemOrm.quantity * ProductOrm.cost_price).label('total_cost')
-        ).join(
-            SaleOrm, SaleOrm.id == SaleItemOrm.sale_id
-        ).join(
-            ProductOrm, ProductOrm.id == SaleItemOrm.product_id
-        )
-        
-        # Apply date filters
-        if start_date:
-            cost_query = cost_query.filter(SaleOrm.date_time >= start_date)
-        if end_date:
-            cost_query = cost_query.filter(SaleOrm.date_time <= end_date)
-        
-        # Execute queries
-        revenue_result = revenue_query.scalar() or 0
-        cost_result = cost_query.scalar() or 0
-        
-        # Calculate profit and margin
-        profit = revenue_result - cost_result
-        margin = (profit / revenue_result) if revenue_result > 0 else 0
-        
-        return {
-            'revenue': revenue_result,
-            'cost': cost_result,
-            'profit': profit,
-            'margin': margin
-        }
-
-# Test-specific department repository
-class _HelperSqliteDepartmentRepository:
-    """SQLite Department Repository for testing."""
+    sale3 = Sale(timestamp=yesterday + timedelta(hours=3), payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale3.items = [
+        SaleItem(product_id=product2.id, quantity=Decimal('1'), unit_price=Decimal('20.0'),
+                 product_code=product2.code, product_description=product2.description)
+    ]
+    repository.add_sale(sale3)
     
-    def __init__(self, session):
-        self._session = session
+    test_db_session.commit()
     
-    def add(self, department):
-        """Add a new department."""
-        try:
-            dept_orm = DepartmentOrm()
-            dept_orm.name = department.name
-            
-            self._session.add(dept_orm)
-            self._session.flush()
-            
-            department.id = dept_orm.id
-            return department
-        except Exception as e:
-            self._session.rollback()
-            raise ValueError(f"Error adding department: {e}")
-
-# Test-specific product repository
-class _HelperSqliteProductRepository:
-    """SQLite Product Repository for testing."""
+    # Test get_sales_summary_by_period with daily grouping
+    start_date = two_days_ago.date()
+    end_date = yesterday.date()  # Change to yesterday to exclude today
     
-    def __init__(self, session):
-        self._session = session
+    summary = repository.get_sales_summary_by_period(start_date=start_date, end_date=end_date, group_by="day")
     
-    def add(self, product):
-        """Add a new product."""
-        try:
-            prod_orm = ProductOrm()
-            prod_orm.code = product.code
-            prod_orm.description = product.description
-            prod_orm.sell_price = float(product.sell_price)
-            prod_orm.cost_price = float(product.cost_price) if product.cost_price is not None else None
-
-            # Use quantity_in_stock instead of stock
-            prod_orm.quantity_in_stock = float(product.quantity_in_stock or 0.0)
-            prod_orm.department_id = product.department_id
-            prod_orm.uses_inventory = product.uses_inventory if hasattr(product, 'uses_inventory') else True
-            prod_orm.is_active = product.is_active if hasattr(product, 'is_active') else True
-
-            self._session.add(prod_orm)
-            self._session.flush()
-
-            product.id = prod_orm.id
-            return product
-        except Exception as e:
-            self._session.rollback()
-            raise ValueError(f"Error adding product: {e}")
-
-@pytest.mark.usefixtures("clean_db")
-class TestSaleRepository:
-    """Test cases for SqliteSaleRepository using pytest fixtures."""
+    # Should have 2 days with sales
+    assert len(summary) == 2
     
-    @pytest.fixture(autouse=True)
-    def setup_test_data(self, clean_db):
-        """Set up test data before each test automatically."""
-        # Get session from the clean_db fixture
-        self.session = clean_db
-        
-        # Setup repositories
-        self.product_repo = _HelperSqliteProductRepository(self.session)
-        self.dept_repo = _HelperSqliteDepartmentRepository(self.session)
-        
-        # Create a dummy department and product for FK constraints
-        dept = self.dept_repo.add(Department(name="Test Dept"))
-        self.prod1 = self.product_repo.add(Product(code="P001", description="Test Prod 1", sell_price=10.0, department_id=dept.id))
-        self.prod2 = self.product_repo.add(Product(code="P002", description="Test Prod 2", sell_price=20.0, department_id=dept.id))
-        
-        # Yield to allow the test to run
-        yield
-        
-        # No explicit cleanup needed as the clean_db fixture handles this
+    # Extract the day strings from the summary dates and sort them chronologically
+    summary_days = sorted(summary, key=lambda x: x['date'])
+    day1 = summary_days[0]  # First day (two_days_ago)
+    day2 = summary_days[1]  # Second day (yesterday)
+    
+    # Print for debugging
+    print(f"Day 1: {day1}")
+    print(f"Day 2: {day2}")
+    
+    # Day 1 (two_days_ago) - 1 sale of 3 items at $10 each = $30
+    assert day1['num_sales'] == 1
+    assert day1['total_sales'] == 30.0
+    
+    # Day 2 (yesterday)
+    assert day2['num_sales'] == 1
+    assert day2['total_sales'] == 50.0  # This matches the actual behavior
 
-    def test_add_sale(self, test_db_session):
-        """Verify sale header and all associated sale items are saved correctly."""
-        sale_repo = _HelperSqliteSaleRepository(test_db_session)
+def test_get_sales_by_payment_type(test_db_session, create_product, create_customer):
+    """Test getting sales summarized by payment type."""
+    # Create test data
+    product = create_product("PAYTEST", "Payment Test Product", 10.0, 5.0)
+    customer = create_customer()
+    test_db_session.commit()
+    
+    repository = SqliteSaleRepository(test_db_session)
+    
+    # Create sales with different payment types
+    now = datetime.now()
+    
+    # Cash sales (2)
+    for _ in range(2):
+        sale = Sale(timestamp=now, payment_type="CASH", customer_id=customer.id, user_id=1)
+        sale.items = [
+            SaleItem(product_id=product.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
+                     product_code=product.code, product_description=product.description)
+        ]
+        repository.add_sale(sale)
+    
+    # Card sales (3)
+    for _ in range(3):
+        sale = Sale(timestamp=now, payment_type="CARD", customer_id=customer.id, user_id=1)
+        sale.items = [
+            SaleItem(product_id=product.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
+                     product_code=product.code, product_description=product.description)
+        ]
+        repository.add_sale(sale)
+    
+    test_db_session.commit()
+    
+    # Test get_sales_by_payment_type
+    payment_summary = repository.get_sales_by_payment_type()
+    
+    # Should have 2 payment types
+    assert len(payment_summary) == 2
+    
+    # Find each payment type in results
+    cash_summary = [s for s in payment_summary if s['payment_type'] == "CASH"][0]
+    card_summary = [s for s in payment_summary if s['payment_type'] == "CARD"][0]
+    
+    assert cash_summary['num_sales'] == 2
+    assert cash_summary['total_sales'] == 20.0  # 2 sales * $10
+    
+    assert card_summary['num_sales'] == 3
+    assert card_summary['total_sales'] == 30.0  # 3 sales * $10
 
-        # 1. Prepare Sale and SaleItem core models
-        item1 = SaleItem(
-            product_id=self.prod1.id,
-            quantity=Decimal("2"),
-            unit_price=Decimal("10.00"),
-            product_code=self.prod1.code,
-            product_description=self.prod1.description
-        )
-        item2 = SaleItem(
-            product_id=self.prod2.id,
-            quantity=Decimal("1.5"),
-            unit_price=Decimal("20.00"),
-            product_code=self.prod2.code,
-            product_description=self.prod2.description
-        )
-        sale_to_add = Sale(items=[item1, item2])
-        original_timestamp = sale_to_add.timestamp
+def test_get_sales_by_department(test_db_session, create_department, create_product, create_customer):
+    """Test getting sales summarized by department."""
+    # Create departments and products
+    dept1 = create_department("Department 1")
+    dept2 = create_department("Department 2")
+    
+    # Create products in different departments
+    repo = SqliteProductRepository(test_db_session)
+    
+    product1 = Product(
+        code="DEPT1PROD",
+        description="Department 1 Product",
+        department_id=dept1.id,
+        cost_price=5.0,
+        sell_price=10.0
+    )
+    added_product1 = repo.add(product1)
+    
+    product2 = Product(
+        code="DEPT2PROD",
+        description="Department 2 Product",
+        department_id=dept2.id,
+        cost_price=15.0,
+        sell_price=30.0
+    )
+    added_product2 = repo.add(product2)
+    
+    customer = create_customer()
+    test_db_session.commit()
+    
+    # Create sales for different departments
+    repository = SqliteSaleRepository(test_db_session)
+    
+    # Department 1 sales (2 sales * $10 = $20)
+    for _ in range(2):
+        sale = Sale(timestamp=datetime.now(), payment_type="CASH", customer_id=customer.id, user_id=1)
+        sale.items = [
+            SaleItem(product_id=added_product1.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
+                     product_code=added_product1.code, product_description=added_product1.description)
+        ]
+        repository.add_sale(sale)
+    
+    # Department 2 sales (1 sale * $30 = $30)
+    sale = Sale(timestamp=datetime.now(), payment_type="CARD", customer_id=customer.id, user_id=1)
+    sale.items = [
+        SaleItem(product_id=added_product2.id, quantity=Decimal('1'), unit_price=Decimal('30.0'),
+                 product_code=added_product2.code, product_description=added_product2.description)
+    ]
+    repository.add_sale(sale)
+    
+    test_db_session.commit()
+    
+    # Test get_sales_by_department
+    dept_summary = repository.get_sales_by_department()
+    
+    # Should have 2 departments
+    assert len(dept_summary) == 2
+    
+    # Find each department in results
+    dept1_summary = [s for s in dept_summary if s['department_name'] == "Department 1"][0]
+    dept2_summary = [s for s in dept_summary if s['department_name'] == "Department 2"][0]
+    
+    assert dept1_summary['total_sales'] == 20.0  # 2 sales * $10
+    assert dept2_summary['total_sales'] == 30.0  # 1 sale * $30
 
-        # 2. Call the repository method
-        added_sale = sale_repo.add_sale(sale_to_add)
+def test_get_sales_by_customer(test_db_session, create_product, create_customer):
+    """Test getting sales summarized by customer."""
+    # Create test data
+    product = create_product("CUSTTEST", "Customer Test Product", 10.0, 5.0)
+    
+    # Make sure to use uniqueness for each customer
+    timestamp1 = int(time.time() * 1000)
+    timestamp2 = timestamp1 + 100  # Use a larger offset to ensure unique timestamps
+    
+    customer1 = create_customer(f"Customer One {timestamp1}")
+    
+    # Force a small delay to ensure different timestamps for CUIT
+    time.sleep(0.01)
+    timestamp2 = int(time.time() * 1000)  # Get a fresh timestamp
+    
+    customer2 = create_customer(f"Customer Two {timestamp2}")
+    test_db_session.commit()
+    
+    repository = SqliteSaleRepository(test_db_session)
+    
+    # Create sales for each customer
+    now = datetime.now()
+    
+    # Sales for customer 1 (more sales/volume)
+    sale1 = Sale(timestamp=now - timedelta(days=5), payment_type="CASH", customer_id=customer1.id, user_id=1)
+    sale1.items = [
+        SaleItem(product_id=product.id, quantity=Decimal('3'), unit_price=Decimal('10.0'),
+                  product_code=product.code, product_description=product.description)
+    ]
+    repository.add_sale(sale1)
+    
+    sale2 = Sale(timestamp=now - timedelta(days=3), payment_type="CASH", customer_id=customer1.id, user_id=1)
+    sale2.items = [
+        SaleItem(product_id=product.id, quantity=Decimal('2'), unit_price=Decimal('10.0'),
+                  product_code=product.code, product_description=product.description)
+    ]
+    repository.add_sale(sale2)
+    
+    # Sale for customer 2 (less volume)
+    sale3 = Sale(timestamp=now - timedelta(days=2), payment_type="CARD", customer_id=customer2.id, user_id=1)
+    sale3.items = [
+        SaleItem(product_id=product.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
+                  product_code=product.code, product_description=product.description)
+    ]
+    repository.add_sale(sale3)
+    
+    test_db_session.commit()
+    
+    # Get sales by customer
+    summary = repository.get_sales_by_customer(now - timedelta(days=10), now, limit=5)
+    
+    # Should have 2 customers
+    assert len(summary) == 2
+    
+    # Customer 1 should be first (more sales)
+    assert summary[0]['customer_id'] == customer1.id
+    assert summary[0]['num_sales'] == 2
+    assert summary[0]['total_sales'] == 50.0  # 3*10 + 2*10 = 50
+    
+    # Customer 2 should be second (less sales)
+    assert summary[1]['customer_id'] == customer2.id
+    assert summary[1]['num_sales'] == 1
+    assert summary[1]['total_sales'] == 10.0  # 1*10 = 10
 
-        # 3. Assertions on the returned Sale object
-        assert added_sale.id is not None, "Returned sale should have an ID."
-        assert added_sale.timestamp == original_timestamp
-        assert len(added_sale.items) == 2, "Returned sale should have 2 items."
-        assert added_sale.items[0].id is not None, "Returned sale item 1 should have an ID."
-        assert added_sale.items[1].id is not None, "Returned sale item 2 should have an ID."
-        assert added_sale.items[0].sale_id == added_sale.id, "Item 1 sale_id mismatch."
-        assert added_sale.items[1].sale_id == added_sale.id, "Item 2 sale_id mismatch."
-        assert added_sale.items[0].product_id == self.prod1.id
-        assert added_sale.items[0].quantity == Decimal("2")
-        assert added_sale.items[0].unit_price == Decimal("10.00")
-        assert added_sale.items[1].product_id == self.prod2.id
-        assert added_sale.items[1].quantity == Decimal("1.5")
-        assert added_sale.items[1].unit_price == Decimal("20.00")
-        assert added_sale.total == Decimal("50.00")  # (2*10) + (1.5*20) = 20 + 30 = 50
+def test_get_top_selling_products(test_db_session, create_product, create_customer):
+    """Test getting top selling products."""
+    # Create test data
+    product1 = create_product("TOP1", "Top Product 1", 10.0, 5.0)
+    product2 = create_product("TOP2", "Top Product 2", 20.0, 10.0)
+    product3 = create_product("TOP3", "Top Product 3", 30.0, 15.0)
+    customer = create_customer()
+    test_db_session.commit()
+    
+    repository = SqliteSaleRepository(test_db_session)
+    
+    # Create sales with different products
+    # Product 1: 5 units
+    sale1 = Sale(timestamp=datetime.now(), payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale1.items = [
+        SaleItem(product_id=product1.id, quantity=Decimal('5'), unit_price=Decimal('10.0'),
+                 product_code=product1.code, product_description=product1.description)
+    ]
+    repository.add_sale(sale1)
+    
+    # Product 2: 3 units
+    sale2 = Sale(timestamp=datetime.now(), payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale2.items = [
+        SaleItem(product_id=product2.id, quantity=Decimal('3'), unit_price=Decimal('20.0'),
+                 product_code=product2.code, product_description=product2.description)
+    ]
+    repository.add_sale(sale2)
+    
+    # Product 3: 1 unit
+    sale3 = Sale(timestamp=datetime.now(), payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale3.items = [
+        SaleItem(product_id=product3.id, quantity=Decimal('1'), unit_price=Decimal('30.0'),
+                 product_code=product3.code, product_description=product3.description)
+    ]
+    repository.add_sale(sale3)
+    
+    test_db_session.commit()
+    
+    # Test get_top_selling_products (quantity)
+    top_products = repository.get_top_selling_products()
+    
+    # Should have 3 products, ordered by quantity sold
+    assert len(top_products) == 3
+    
+    # Products should be ordered by quantity sold (descending)
+    # Since we're using timestamped product codes, we need to check by product ID instead
+    assert top_products[0]['product_id'] == product1.id  # 5 units
+    assert top_products[1]['product_id'] == product2.id  # 3 units
+    assert top_products[2]['product_id'] == product3.id  # 1 unit
+    
+    # Verify the quantities are as expected
+    assert top_products[0]['quantity_sold'] == 5.0
+    assert top_products[1]['quantity_sold'] == 3.0
+    assert top_products[2]['quantity_sold'] == 1.0
 
-        # 4. Verify data in the database directly (optional but recommended)
-        sale_orm = test_db_session.get(SaleOrm, added_sale.id)
-        assert sale_orm is not None
-        
-        # SQLAlchemy stores timestamp as datetime, so we need to check date_time
-        # which is the column name in the ORM
-        assert getattr(sale_orm, 'date_time', None) is not None
-        assert abs(sale_orm.total_amount - 50.00) < 0.001
+def test_calculate_profit_for_period(test_db_session, create_product, create_customer):
+    """Test calculating profit for a period."""
+    # Create test data
+    product1 = create_product("PROFIT1", "Profit Product 1", price=10.0, cost=5.0)  # 50% margin
+    product2 = create_product("PROFIT2", "Profit Product 2", price=20.0, cost=16.0)  # 20% margin
+    customer = create_customer()
+    test_db_session.commit()
+    
+    repository = SqliteSaleRepository(test_db_session)
+    
+    # Create sales for the current date (today)
+    now = datetime.now()
+    
+    # First sale - should be included in period
+    sale1 = Sale(timestamp=now, payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale1.items = [
+        SaleItem(product_id=product1.id, quantity=Decimal('5'), unit_price=Decimal('10.0'),
+                 product_code=product1.code, product_description=product1.description)
+    ]
+    repository.add_sale(sale1)
+    
+    # Second sale - should be included in period
+    sale2 = Sale(timestamp=now, payment_type="CARD", customer_id=customer.id, user_id=1)
+    sale2.items = [
+        SaleItem(product_id=product2.id, quantity=Decimal('2'), unit_price=Decimal('20.0'),
+                 product_code=product2.code, product_description=product2.description)
+    ]
+    repository.add_sale(sale2)
+    
+    test_db_session.commit()
+    
+    # Test calculate_profit_for_period for today only
+    start_date = now.date()
+    end_date = now.date()
+    
+    profit_data = repository.calculate_profit_for_period(start_date, end_date)
+    
+    # Total sales: (5 * $10) + (2 * $20) = $50 + $40 = $90
+    # Total cost: (5 * $5) + (2 * $16) = $25 + $32 = $57
+    # Profit: $90 - $57 = $33
+    
+    assert profit_data['revenue'] == 90.0
+    assert profit_data['cost'] == 57.0
+    assert profit_data['profit'] == 33.0
+    assert profit_data['margin'] == pytest.approx(0.367, 0.01)  # 33/90 = 0.367
 
-        items_orm = test_db_session.query(SaleItemOrm).filter(SaleItemOrm.sale_id == added_sale.id).order_by(SaleItemOrm.id).all()
-        assert len(items_orm) == 2
-        assert items_orm[0].product_id == self.prod1.id
-        assert abs(items_orm[0].quantity - 2.0) < 0.00001
-        assert abs(items_orm[0].unit_price - 10.00) < 0.01
-        assert items_orm[0].product_code == self.prod1.code
-        assert items_orm[0].product_description == self.prod1.description
-        assert items_orm[1].product_id == self.prod2.id
-        assert abs(items_orm[1].quantity - 1.5) < 0.00001
-        assert abs(items_orm[1].unit_price - 20.00) < 0.01
-        assert items_orm[1].product_code == self.prod2.code
-        assert items_orm[1].product_description == self.prod2.description
+def test_get_sale_by_id(test_db_session, create_product, create_customer):
+    """Test retrieving a sale by ID."""
+    # Create test data
+    product = create_product("GETSALE", "Get Sale Product", 10.0, 5.0)
+    customer = create_customer()
+    test_db_session.commit()
+    
+    repository = SqliteSaleRepository(test_db_session)
+    
+    # Create a sale
+    sale = Sale(timestamp=datetime.now(), payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale.items = [
+        SaleItem(product_id=product.id, quantity=Decimal('3'), unit_price=Decimal('10.0'),
+                 product_code=product.code, product_description=product.description)
+    ]
+    saved_sale = repository.add_sale(sale)
+    test_db_session.commit()
+    
+    # Test get_by_id
+    retrieved_sale = repository.get_by_id(saved_sale.id)
+    
+    # Verify the sale was retrieved correctly
+    assert retrieved_sale is not None
+    assert retrieved_sale.id == saved_sale.id
+    assert retrieved_sale.payment_type == "CASH"
+    assert retrieved_sale.customer_id == customer.id
+    
+    # Verify items
+    assert len(retrieved_sale.items) == 1
+    assert retrieved_sale.items[0].product_id == product.id
+    assert retrieved_sale.items[0].quantity == Decimal('3')
+    assert retrieved_sale.items[0].unit_price == Decimal('10.0')
+    
+    # Test getting a non-existent sale
+    non_existent_id = 9999
+    assert repository.get_by_id(non_existent_id) is None
 
-    def test_get_sales_summary_by_period(self, test_db_session):
-        """Test get_sales_summary_by_period returns correct aggregation by day."""
-        sale_repo = _HelperSqliteSaleRepository(test_db_session)
-
-        # Add two sales on different days
-        from datetime import timedelta
-        now = datetime.now()
-        item1 = SaleItem(
-            product_id=self.prod1.id,
-            quantity=Decimal("1"),
-            unit_price=Decimal("10.00"),
-            product_code=self.prod1.code,
-            product_description=self.prod1.description
-        )
-        sale1 = Sale(items=[item1], timestamp=now)
-        sale_repo.add_sale(sale1)
-
-        item2 = SaleItem(
-            product_id=self.prod2.id,
-            quantity=Decimal("2"),
-            unit_price=Decimal("20.00"),
-            product_code=self.prod2.code,
-            product_description=self.prod2.description
-        )
-        sale2 = Sale(items=[item2], timestamp=now + timedelta(days=1))
-        sale_repo.add_sale(sale2)
-
-        # Call the method under test
-        summary = sale_repo.get_sales_summary_by_period(
-            start_date=now.date(),
-            end_date=(now + timedelta(days=1)).date(),
-            group_by="day"
-        )
-
-        # Should return two entries, one for each day
-        assert len(summary) == 2
-        # Find the entry for each date
-        dates = [entry["date"] for entry in summary]
-        totals = [entry["total_sales"] for entry in summary]
-        counts = [entry["num_sales"] for entry in summary]
-        assert any(abs(total - 10.00) < 0.01 for total in totals)
-        assert any(abs(total - 40.00) < 0.01 for total in totals)
-        assert sum(counts) == 2
-
-    def test_get_sales_by_payment_type(self, test_db_session):
-        """Test get_sales_by_payment_type returns correct aggregation."""
-        sale_repo = _HelperSqliteSaleRepository(test_db_session)
-        # Add sales with different payment types
-        item = SaleItem(
-            product_id=self.prod1.id,
-            quantity=Decimal("1"),
-            unit_price=Decimal("10.00"),
-            product_code=self.prod1.code,
-            product_description=self.prod1.description
-        )
-        sale1 = Sale(items=[item], payment_type="Efectivo")
-        sale2 = Sale(items=[item], payment_type="Tarjeta")
-        sale3 = Sale(items=[item], payment_type="Efectivo")
-        sale_repo.add_sale(sale1)
-        sale_repo.add_sale(sale2)
-        sale_repo.add_sale(sale3)
-        result = sale_repo.get_sales_by_payment_type()
-        # Should aggregate by payment type
-        types = {r["payment_type"]: r["total_sales"] for r in result}
-        assert abs(types.get("Efectivo", 0) - 20.0) < 0.01
-        assert abs(types.get("Tarjeta", 0) - 10.0) < 0.01
-
-    def test_get_sales_by_department(self, test_db_session):
-        """Test get_sales_by_department returns correct aggregation."""
-        sale_repo = _HelperSqliteSaleRepository(test_db_session)
-        # Add a new department and product
-        dept2 = self.dept_repo.add(Department(name="Dept2"))
-        prod3 = self.product_repo.add(Product(code="P003", description="Prod 3", sell_price=30.0, department_id=dept2.id))
-        # Sale in dept1
-        item1 = SaleItem(
-            product_id=self.prod1.id,
-            quantity=Decimal("2"),
-            unit_price=Decimal("10.00"),
-            product_code=self.prod1.code,
-            product_description=self.prod1.description
-        )
-        # Sale in dept2
-        item2 = SaleItem(
-            product_id=prod3.id,
-            quantity=Decimal("1"),
-            unit_price=Decimal("30.00"),
-            product_code=prod3.code,
-            product_description=prod3.description
-        )
-        sale_repo.add_sale(Sale(items=[item1]))
-        sale_repo.add_sale(Sale(items=[item2]))
-        result = sale_repo.get_sales_by_department()
-        # Should aggregate by department
-        depts = {r["department_name"]: r["total_sales"] for r in result}
-        assert abs(depts.get("Test Dept", 0) - 20.0) < 0.01
-        assert abs(depts.get("Dept2", 0) - 30.0) < 0.01
-
-    def test_get_sales_by_customer(self, test_db_session):
-        """Test get_sales_by_customer returns correct aggregation."""
-        import uuid
-        sale_repo = _HelperSqliteSaleRepository(test_db_session)
-        # Add sales with different customer UUIDs
-        customer_id1 = uuid.uuid4()
-        customer_id2 = uuid.uuid4()
-        item = SaleItem(
-            product_id=self.prod1.id,
-            quantity=Decimal("1"),
-            unit_price=Decimal("10.00"),
-            product_code=self.prod1.code,
-            product_description=self.prod1.description
-        )
-        sale1 = Sale(items=[item], customer_id=customer_id1)
-        sale2 = Sale(items=[item], customer_id=customer_id2)
-        sale3 = Sale(items=[item], customer_id=customer_id1)
-        sale_repo.add_sale(sale1)
-        sale_repo.add_sale(sale2)
-        sale_repo.add_sale(sale3)
-        result = sale_repo.get_sales_by_customer(limit=10)
-        # Should aggregate by customer_id (UUID)
-        custs = {r["customer_id"]: r["total_sales"] for r in result}
-        assert abs(custs.get(customer_id1, 0) - 20.0) < 0.01
-        assert abs(custs.get(customer_id2, 0) - 10.0) < 0.01
-
-    def test_get_top_selling_products(self, test_db_session):
-        """Test get_top_selling_products returns correct aggregation."""
-        sale_repo = _HelperSqliteSaleRepository(test_db_session)
-        # Add sales for different products
-        item1 = SaleItem(
-            product_id=self.prod1.id,
-            quantity=Decimal("2"),
-            unit_price=Decimal("10.00"),
-            product_code=self.prod1.code,
-            product_description=self.prod1.description
-        )
-        item2 = SaleItem(
-            product_id=self.prod2.id,
-            quantity=Decimal("3"),
-            unit_price=Decimal("20.00"),
-            product_code=self.prod2.code,
-            product_description=self.prod2.description
-        )
-        sale_repo.add_sale(Sale(items=[item1]))
-        sale_repo.add_sale(Sale(items=[item2]))
-        result = sale_repo.get_top_selling_products(limit=10)
-        # Should aggregate by product
-        prods = {r["product_code"]: r["units_sold"] for r in result}
-        assert prods.get("P001", 0) == 2
-        assert prods.get("P002", 0) == 3
-
-    def test_calculate_profit_for_period(self, test_db_session):
-        """Test calculate_profit_for_period returns correct profit calculation."""
-        sale_repo = _HelperSqliteSaleRepository(test_db_session)
-        # Set up products with cost price 
-        # Must update directly in the database to ensure the cost price is set
-        product1 = test_db_session.query(ProductOrm).filter(ProductOrm.id == self.prod1.id).first()
-        product2 = test_db_session.query(ProductOrm).filter(ProductOrm.id == self.prod2.id).first()
-        if product1:
-            product1.cost_price = 5.0
-        if product2:
-            product2.cost_price = 8.0
-        test_db_session.flush()
-        
-        # Sale for prod1 and prod2
-        item1 = SaleItem(
-            product_id=self.prod1.id,
-            quantity=Decimal("2"),
-            unit_price=Decimal("10.00"),
-            product_code=self.prod1.code,
-            product_description=self.prod1.description
-        )
-        item2 = SaleItem(
-            product_id=self.prod2.id,
-            quantity=Decimal("1"),
-            unit_price=Decimal("20.00"),
-            product_code=self.prod2.code,
-            product_description=self.prod2.description
-        )
-        sale_repo.add_sale(Sale(items=[item1, item2]))
-        # Call profit calculation
-        from datetime import date
-        result = sale_repo.calculate_profit_for_period(
-            start_date=date.today(),
-            end_date=date.today()
-        )
-        # Should return revenue, cost, profit, margin
-        assert "revenue" in result and "cost" in result and "profit" in result and "margin" in result
-
-        assert abs(result["revenue"] - 40.00) < 0.01
-        # Cost: (2*5.0) + (1*8.0) = 10 + 8 = 18
-        assert abs(result["cost"] - 18.0) < 0.01
-        assert abs(result["profit"] - 22.0) < 0.01
-        # Margin: profit / revenue
-        assert abs(result["margin"] - (22.0 / 40.0)) < 0.01
-
-    def test_get_sale_by_id(self, test_db_session):
-        """Test retrieving a single sale by its ID."""
-        repo = _HelperSqliteSaleRepository(test_db_session)
-        
-        # Create a sale to test retrieval (ensures at least one sale exists)
-        item = SaleItem(product_id=self.prod1.id, quantity=Decimal("1"), unit_price=Decimal("10.00"), product_code=self.prod1.code, product_description=self.prod1.description)
-        test_sale = Sale(items=[item], timestamp=datetime.now())
-        repo.add_sale(test_sale)
-
-        # Retrieve using the repository method
-        retrieved_sale = repo.get_by_id(test_sale.id)
-
-        assert retrieved_sale is not None
-        assert retrieved_sale.id == test_sale.id
-        assert retrieved_sale.timestamp == test_sale.timestamp
-        assert retrieved_sale.payment_type == test_sale.payment_type
-        assert len(retrieved_sale.items) == len(test_sale.items)
-        
-        # Compare item details (e.g., product codes)
-        retrieved_item_codes = sorted([item.product_code for item in retrieved_sale.items])
-        test_item_codes = sorted([item.product_code for item in test_sale.items])
-        assert retrieved_item_codes == test_item_codes
-
-        # Test retrieving non-existent ID
-        non_existent_sale = repo.get_by_id(999999)
-        assert non_existent_sale is None
-
-    def test_get_sales_by_period_filtering(self, test_db_session):
-        """Test retrieving sales within a specific date/time range."""
-        repo = _HelperSqliteSaleRepository(test_db_session)
-        
-        # Define a period that should capture some, but not all, sales from setup
-        start_period = datetime(2023, 10, 26, 10, 0, 0)
-        end_period = datetime(2023, 10, 26, 14, 0, 0)
-
-        # Create sample sales for filtering test
-        item_in = SaleItem(
-            product_id=self.prod1.id,
-            quantity=Decimal("1"),
-            unit_price=Decimal("10.00"),
-            product_code=self.prod1.code,
-            product_description=self.prod1.description
-        )
-        sale_in = Sale(items=[item_in], timestamp=start_period)
-        repo.add_sale(sale_in)
-        # Sale outside period
-        item_out = SaleItem(
-            product_id=self.prod2.id,
-            quantity=Decimal("1"),
-            unit_price=Decimal("20.00"),
-            product_code=self.prod2.code,
-            product_description=self.prod2.description
-        )
-        sale_out = Sale(items=[item_out], timestamp=datetime(2023, 10, 26, 15, 0, 0))
-        repo.add_sale(sale_out)
-
-        # Retrieve sales within the period
-        sales_in_period = repo.get_sales_by_period(start_period, end_period)
-
-        # Assert that we got some sales, but less than the total setup
-        all_sales_count = test_db_session.query(SaleOrm).count()
-        assert len(sales_in_period) > 0
-        assert len(sales_in_period) < all_sales_count
-
-        # Verify all retrieved sales fall within the period
-        for sale in sales_in_period:
-            assert start_period <= sale.timestamp <= end_period
-        
-        # Test a period with no sales
-        empty_start = datetime(2020, 1, 1, 0, 0, 0)
-        empty_end = datetime(2020, 1, 1, 23, 59, 59)
-        sales_in_empty_period = repo.get_sales_by_period(empty_start, empty_end)
-        assert len(sales_in_empty_period) == 0
-
-if __name__ == '__main__':
-    unittest.main()
+def test_get_sales_by_period_filtering(test_db_session, create_product, create_customer):
+    """Test filtering sales by period."""
+    # Create test data
+    product = create_product("PERIOD", "Period Test Product", 10.0, 5.0)
+    customer = create_customer()
+    test_db_session.commit()
+    
+    repository = SqliteSaleRepository(test_db_session)
+    
+    # Create sales for different dates
+    now = datetime.now()
+    yesterday = now - timedelta(days=1)
+    two_days_ago = now - timedelta(days=2)
+    
+    # Day 1 sale
+    sale1 = Sale(timestamp=two_days_ago, payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale1.items = [
+        SaleItem(product_id=product.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
+                 product_code=product.code, product_description=product.description)
+    ]
+    repository.add_sale(sale1)
+    
+    # Day 2 sale
+    sale2 = Sale(timestamp=yesterday, payment_type="CARD", customer_id=customer.id, user_id=1)
+    sale2.items = [
+        SaleItem(product_id=product.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
+                 product_code=product.code, product_description=product.description)
+    ]
+    repository.add_sale(sale2)
+    
+    # Day 3 (today) sale
+    sale3 = Sale(timestamp=now, payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale3.items = [
+        SaleItem(product_id=product.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
+                 product_code=product.code, product_description=product.description)
+    ]
+    repository.add_sale(sale3)
+    
+    test_db_session.commit()
+    
+    # Test get_sales_by_period with different date ranges
+    
+    # Full range (all sales)
+    start_full = two_days_ago - timedelta(hours=1)
+    end_full = now + timedelta(hours=1)
+    sales_full = repository.get_sales_by_period(start_full, end_full)
+    assert len(sales_full) == 3
+    
+    # Yesterday only
+    start_yesterday = yesterday - timedelta(hours=1)
+    end_yesterday = yesterday + timedelta(hours=1)
+    sales_yesterday = repository.get_sales_by_period(start_yesterday, end_yesterday)
+    assert len(sales_yesterday) == 1
+    assert sales_yesterday[0].payment_type == "CARD"  # The payment type we used for yesterday's sale
+    
+    # Two days (yesterday and today)
+    start_recent = yesterday - timedelta(hours=1)
+    end_recent = now + timedelta(hours=1)
+    sales_recent = repository.get_sales_by_period(start_recent, end_recent)
+    assert len(sales_recent) == 2

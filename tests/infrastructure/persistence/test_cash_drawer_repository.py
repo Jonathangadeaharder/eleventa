@@ -5,7 +5,6 @@ from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
 from infrastructure.persistence.sqlite.cash_drawer_repository import SQLiteCashDrawerRepository
 from infrastructure.persistence.sqlite.models_mapping import CashDrawerEntryOrm
 
-@pytest.mark.usefixtures("clean_db")
 class TestSQLiteCashDrawerRepository:
     def create_entry(self, entry_type, amount, user_id=1, drawer_id=1, description="Test entry", ts=None):
         return CashDrawerEntry(
@@ -17,7 +16,13 @@ class TestSQLiteCashDrawerRepository:
             drawer_id=drawer_id
         )
 
+    def setup_for_test(self, test_db_session):
+        # Individual setup here
+        # Replace with actual per-test setup logic
+        pass
+
     def test_add_and_get_entry_by_id(self, test_db_session):
+        self.setup_for_test(test_db_session)
         repo = SQLiteCashDrawerRepository(test_db_session)
         entry = self.create_entry(CashDrawerEntryType.START, "100.00")
         added = repo.add_entry(entry)
@@ -29,10 +34,12 @@ class TestSQLiteCashDrawerRepository:
         assert fetched.entry_type == CashDrawerEntryType.START
 
     def test_get_entry_by_id_not_found(self, test_db_session):
+        self.setup_for_test(test_db_session)
         repo = SQLiteCashDrawerRepository(test_db_session)
         assert repo.get_entry_by_id(99999) is None
 
     def test_get_entries_by_date_range(self, test_db_session):
+        self.setup_for_test(test_db_session)
         repo = SQLiteCashDrawerRepository(test_db_session)
         today = date.today()
         yesterday = today - timedelta(days=1)
@@ -48,6 +55,7 @@ class TestSQLiteCashDrawerRepository:
         assert CashDrawerEntryType.OUT in types
 
     def test_get_entries_by_drawer_id(self, test_db_session):
+        self.setup_for_test(test_db_session)
         repo = SQLiteCashDrawerRepository(test_db_session)
         entry1 = self.create_entry(CashDrawerEntryType.SALE, "30.00", drawer_id=1)
         entry2 = self.create_entry(CashDrawerEntryType.RETURN, "10.00", drawer_id=2)
@@ -59,6 +67,7 @@ class TestSQLiteCashDrawerRepository:
         assert any(e.entry_type == CashDrawerEntryType.SALE for e in results)
 
     def test_get_current_balance(self, test_db_session):
+        self.setup_for_test(test_db_session)
         # Ensure the table is empty
         test_db_session.query(CashDrawerEntryOrm).delete()
         test_db_session.commit()
@@ -86,6 +95,7 @@ class TestSQLiteCashDrawerRepository:
         assert balance == expected_balance, f"Expected {expected_balance}, got {balance}"
 
     def test_get_current_balance_no_entries(self, test_db_session):
+        self.setup_for_test(test_db_session)
         # Ensure the table is empty
         test_db_session.query(CashDrawerEntryOrm).delete()
         test_db_session.commit()
@@ -95,6 +105,7 @@ class TestSQLiteCashDrawerRepository:
         assert balance == Decimal("0.00")
 
     def test_is_drawer_open(self, test_db_session):
+        self.setup_for_test(test_db_session)
         repo = SQLiteCashDrawerRepository(test_db_session)
         assert not repo.is_drawer_open()
         repo.add_entry(self.create_entry(CashDrawerEntryType.START, "100.00"))
@@ -103,6 +114,7 @@ class TestSQLiteCashDrawerRepository:
         assert not repo.is_drawer_open()
 
     def test_get_today_entries(self, test_db_session):
+        self.setup_for_test(test_db_session)
         repo = SQLiteCashDrawerRepository(test_db_session)
         today = datetime.now()
         yesterday = today - timedelta(days=1)
@@ -113,6 +125,7 @@ class TestSQLiteCashDrawerRepository:
         assert all(e.timestamp.date() == today.date() for e in today_entries)
 
     def test_get_entries_by_type(self, test_db_session):
+        self.setup_for_test(test_db_session)
         repo = SQLiteCashDrawerRepository(test_db_session)
         # Add various entry types
         repo.add_entry(self.create_entry(CashDrawerEntryType.START, "100"))
@@ -136,6 +149,7 @@ class TestSQLiteCashDrawerRepository:
         assert len(close_entries) == 0
 
     def test_get_last_start_entry(self, test_db_session):
+        self.setup_for_test(test_db_session)
         repo = SQLiteCashDrawerRepository(test_db_session)
         now = datetime.now()
         start1 = self.create_entry(CashDrawerEntryType.START, "100", ts=now - timedelta(hours=1))
@@ -153,6 +167,7 @@ class TestSQLiteCashDrawerRepository:
         assert last_start.amount == Decimal("150.00")
 
     def test_get_last_start_entry_none(self, test_db_session):
+        self.setup_for_test(test_db_session)
         repo = SQLiteCashDrawerRepository(test_db_session)
         # Add only non-start entries
         repo.add_entry(self.create_entry(CashDrawerEntryType.SALE, "50"))

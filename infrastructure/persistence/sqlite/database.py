@@ -2,6 +2,7 @@ import os
 import sys
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm import sessionmaker, declarative_base
+import sqlalchemy.pool
 
 # Import SessionScopeProvider
 from infrastructure.persistence.utils import session_scope_provider
@@ -23,11 +24,22 @@ except ImportError:
 # Create a declarative base directly
 Base = declarative_base()
 
+# Determine if we're using an in-memory database (typically for testing)
+is_memory_db = ':memory:' in DATABASE_URL or 'mode=memory' in DATABASE_URL
+
 # Use check_same_thread=False only for SQLite!
 # It allows the connection to be shared across threads, which is fine for this
 # simple setup but might require careful handling in complex multithreaded apps.
 # For production with other DBs, you wouldn't need this.
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+engine_args = {}
+if 'sqlite' in DATABASE_URL:
+    engine_args["connect_args"] = {"check_same_thread": False}
+    
+    # For in-memory SQLite, set pooling behavior to maintain the same connection
+    if is_memory_db:
+        engine_args["poolclass"] = sqlalchemy.pool.StaticPool
+
+engine = create_engine(DATABASE_URL, **engine_args)
 
 # Each instance of SessionLocal will be a database session.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -60,6 +72,10 @@ def init_db():
     # First ensure all models are properly mapped by virtue of being imported
     # and inheriting from Base before this point.
     ensure_all_models_mapped() # Keep the verification step
+    
+    # Register table creation event hooks to control table order
+    from infrastructure.persistence.sqlite.table_deps import register_table_creation_events
+    register_table_creation_events(Base.metadata)
 
     # Create tables using SQLAlchemy metadata
     print(f"Creating/updating database tables defined in Base metadata ({len(Base.metadata.tables)} tables)...")
@@ -73,6 +89,12 @@ def init_db():
 def create_all_tables(engine_instance):
     """Helper function to ensure all models are loaded before creating tables."""
     ensure_all_models_mapped()
-    print(f"Creating all database tables with {len(Base.metadata.tables)} tables registered...")
+    
+    # Register table creation event hooks
+    from infrastructure.persistence.sqlite.table_deps import register_table_creation_events
+    register_table_creation_events(Base.metadata)
+    
+    registered_tables = list(Base.metadata.tables.keys())
+    print(f"Creating all database tables with {len(registered_tables)} tables registered: {registered_tables}") # Log registered table names
     Base.metadata.create_all(bind=engine_instance)
-    print("Database tables created successfully.") 
+    print("Database tables created successfully.")

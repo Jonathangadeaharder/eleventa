@@ -1,281 +1,284 @@
-import unittest
+import pytest
 import uuid
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-# Assuming Base is defined in your ORM setup and CustomerOrm in models_mapping
-from infrastructure.persistence.sqlite.database import Base
 from infrastructure.persistence.sqlite.models_mapping import CustomerOrm
 from infrastructure.persistence.sqlite.repositories import SqliteCustomerRepository
 from core.models.customer import Customer
 
-# Use an in-memory SQLite database for testing
-DATABASE_URL = "sqlite:///:memory:"
+@pytest.fixture
+def repository(test_db_session):
+    """Get a repository instance with a test session."""
+    return SqliteCustomerRepository(test_db_session)
 
-class TestSqliteCustomerRepository(unittest.TestCase):
+def _add_sample_customer(session, name="Test Customer", cuit="12345678", **kwargs) -> Customer:
+    """Helper function to add a sample customer."""
+    email = kwargs.pop("email", f"{name.lower().replace(' ', '.')}@test.com")
+    customer_repo = SqliteCustomerRepository(session)
+    customer = Customer(name=name, cuit=cuit, email=email, **kwargs)
+    return customer_repo.add(customer)
 
-    @classmethod
-    def setUpClass(cls):
-        """Set up the in-memory database and tables once for the test class."""
-        cls.engine = create_engine(DATABASE_URL)
-        Base.metadata.create_all(cls.engine) # Create tables based on ORM models
-        cls.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=cls.engine)
+# Define the test functions
+def test_add_customer(repository, test_db_session):
+    """Test adding a new customer."""
+    customer_data = Customer(name="New Customer", cuit="11223344", phone="555-1234")
+    added_customer = repository.add(customer_data)
 
-    @classmethod
-    def tearDownClass(cls):
-        """Clean up the database after all tests in the class."""
-        Base.metadata.drop_all(cls.engine)
+    assert added_customer is not None
+    assert added_customer.id is not None
+    assert added_customer.name == "New Customer"
+    assert added_customer.cuit == "11223344"
+    assert added_customer.phone == "555-1234"
 
-    def setUp(self):
-        """Create a new session and repository for each test."""
-        self.session = self.SessionLocal()
-        self.repository = SqliteCustomerRepository(self.session)
-        # Start a transaction for each test
-        self.transaction = self.session.begin_nested()
+    # Verify it's in the database directly
+    db_customer = test_db_session.query(CustomerOrm).filter_by(id=added_customer.id).first()
+    assert db_customer is not None
+    assert db_customer.name == "New Customer"
 
-    def tearDown(self):
-        """Rollback the transaction and close the session after each test."""
-        self.transaction.rollback() # Rollback changes made during the test
-        self.session.close()
+def test_add_customer_duplicate_cuit(repository, test_db_session):
+    """Test adding a customer with a duplicate CUIT raises ValueError."""
+    # First add a customer with a specific CUIT
+    _add_sample_customer(test_db_session, cuit="99887766")
+    test_db_session.commit()
+    
+    # Create another customer with the same CUIT
+    duplicate_customer = Customer(name="Another Customer", cuit="99887766")
+    
+    # Try to add the duplicate customer - this should raise an exception
+    with pytest.raises(ValueError):
+        repository.add(duplicate_customer)
 
-    def _add_sample_customer(self, name="Test Customer", cuit="12345678", **kwargs) -> Customer:
-        email = kwargs.pop("email", f"{name.lower().replace(' ', '.')}@test.com")
-        customer = Customer(name=name, cuit=cuit, email=email, **kwargs)
-        return self.repository.add(customer)
+def test_add_customer_duplicate_email(repository, test_db_session):
+    """Test adding a customer with a duplicate email raises ValueError."""
+    # Add a customer with a specific email
+    email_to_test = "unique.email@example.com"
+    customer1 = Customer(name="First User", cuit="10101010", email=email_to_test)
+    repository.add(customer1)
+    test_db_session.commit()
+    
+    # Create another customer with a different CUIT but the same email
+    duplicate_customer = Customer(name="Second User", cuit="20202020", email=email_to_test)
+    
+    # Expect a ValueError (or potentially IntegrityError wrapped as ValueError)
+    with pytest.raises(ValueError):
+        repository.add(duplicate_customer)
 
-    def test_add_customer(self):
-        """Test adding a new customer."""
-        customer_data = Customer(name="New Customer", cuit="11223344", phone="555-1234")
-        added_customer = self.repository.add(customer_data)
+def test_get_customer_by_id(repository, test_db_session):
+    """Test retrieving a customer by ID."""
+    added_customer = _add_sample_customer(test_db_session)
+    test_db_session.commit()
+    
+    retrieved_customer = repository.get_by_id(added_customer.id)
 
-        self.assertIsNotNone(added_customer.id)
-        self.assertEqual(added_customer.name, "New Customer")
-        self.assertEqual(added_customer.cuit, "11223344")
-        self.assertEqual(added_customer.phone, "555-1234")
+    assert retrieved_customer is not None
+    assert retrieved_customer.id == added_customer.id
+    assert retrieved_customer.name == added_customer.name
 
-        # Verify it's in the database directly
-        db_customer = self.session.query(CustomerOrm).filter_by(id=added_customer.id).first()
-        self.assertIsNotNone(db_customer)
-        self.assertEqual(db_customer.name, "New Customer")
+def test_get_customer_by_id_not_found(repository):
+    """Test retrieving a non-existent customer ID returns None."""
+    non_existent_id = uuid.uuid4()
+    retrieved_customer = repository.get_by_id(non_existent_id)
+    assert retrieved_customer is None
 
-    def test_add_customer_duplicate_cuit(self):
-        """Test adding a customer with a duplicate CUIT raises an error (or handles it)."""
-        # First add a customer with a specific CUIT
-        self._add_sample_customer(cuit="99887766")
-        
-        # Create another customer with the same CUIT
-        duplicate_customer = Customer(name="Another Customer", cuit="99887766")
-        
-        # Try to add the duplicate customer - this should raise an exception
-        # We don't need to rollback here as the repository will handle that
-        with self.assertRaises(ValueError):
-            self.repository.add(duplicate_customer)
-        
-        # Since the repository already rolled back, our transaction is now closed
-        # We need to start a new one for the test to continue
-        self.transaction = self.session.begin_nested()
+def test_get_customer_by_cuit(repository, test_db_session):
+    """Test retrieving a customer by CUIT."""
+    cuit = "55667788"
+    added_customer = _add_sample_customer(test_db_session, cuit=cuit)
+    test_db_session.commit()
+    
+    retrieved_customer = repository.get_by_cuit(cuit)
 
-    def test_add_customer_duplicate_email(self):
-        """Test adding a customer with a duplicate email raises ValueError."""
-        # Add a customer with a specific email
-        email_to_test = "unique.email@example.com"
-        customer1 = Customer(name="First User", cuit="10101010", email=email_to_test)
-        self.repository.add(customer1)
-        
-        # Create another customer with a different CUIT but the same email
-        duplicate_customer = Customer(name="Second User", cuit="20202020", email=email_to_test)
-        
-        # Expect a ValueError (or potentially IntegrityError wrapped as ValueError)
-        with self.assertRaises(ValueError):
-            self.repository.add(duplicate_customer)
-        
-        # Re-establish transaction similar to duplicate CUIT test
-        self.transaction = self.session.begin_nested()
+    assert retrieved_customer is not None
+    assert retrieved_customer.id == added_customer.id
+    assert retrieved_customer.cuit == cuit
 
-    def test_get_customer_by_id(self):
-        """Test retrieving a customer by ID."""
-        added_customer = self._add_sample_customer()
-        retrieved_customer = self.repository.get_by_id(added_customer.id)
+def test_get_customer_by_cuit_not_found(repository):
+    """Test retrieving a non-existent CUIT returns None."""
+    retrieved_customer = repository.get_by_cuit("00000000")
+    assert retrieved_customer is None
 
-        self.assertIsNotNone(retrieved_customer)
-        self.assertEqual(retrieved_customer.id, added_customer.id)
-        self.assertEqual(retrieved_customer.name, added_customer.name)
+def test_get_all_customers(repository, test_db_session):
+    """Test retrieving all customers."""
+    _add_sample_customer(test_db_session, name="Customer Alpha", cuit="1")
+    _add_sample_customer(test_db_session, name="Customer Beta", cuit="2")
+    _add_sample_customer(test_db_session, name="Customer Gamma", cuit="3")
+    test_db_session.commit()
 
-    def test_get_customer_by_id_not_found(self):
-        """Test retrieving a non-existent customer ID returns None."""
-        non_existent_id = uuid.uuid4()
-        retrieved_customer = self.repository.get_by_id(non_existent_id)
-        self.assertIsNone(retrieved_customer)
+    all_customers = repository.get_all()
+    assert len(all_customers) == 3
+    
+    # Check if names are present (order might vary)
+    names = {c.name for c in all_customers}
+    assert "Customer Alpha" in names
+    assert "Customer Beta" in names
+    assert "Customer Gamma" in names
 
-    def test_get_customer_by_cuit(self):
-        """Test retrieving a customer by CUIT."""
-        cuit = "55667788"
-        added_customer = self._add_sample_customer(cuit=cuit)
-        retrieved_customer = self.repository.get_by_cuit(cuit)
+def test_update_customer(repository, test_db_session):
+    """Test updating an existing customer."""
+    added_customer = _add_sample_customer(test_db_session)
+    test_db_session.commit()
+    
+    updated_data = Customer(
+        id=added_customer.id,
+        name="Updated Name",
+        phone="555-9999",
+        email="updated@example.com",
+        address="456 Updated Ave",
+        cuit=added_customer.cuit, # CUIT might not be updatable easily due to unique constraint
+        iva_condition="Monotributista",
+        credit_limit=5000.0,
+        credit_balance=100.0,
+        is_active=False
+    )
+    updated_customer = repository.update(updated_data)
 
-        self.assertIsNotNone(retrieved_customer)
-        self.assertEqual(retrieved_customer.id, added_customer.id)
-        self.assertEqual(retrieved_customer.cuit, cuit)
+    assert updated_customer is not None
+    assert updated_customer.name == "Updated Name"
+    assert updated_customer.phone == "555-9999"
+    assert updated_customer.email == "updated@example.com"
+    assert updated_customer.address == "456 Updated Ave"
+    assert updated_customer.iva_condition == "Monotributista"
+    assert updated_customer.credit_limit == 5000.0
+    assert updated_customer.credit_balance == 100.0
+    assert not updated_customer.is_active
 
-    def test_get_customer_by_cuit_not_found(self):
-        """Test retrieving a non-existent CUIT returns None."""
-        retrieved_customer = self.repository.get_by_cuit("00000000")
-        self.assertIsNone(retrieved_customer)
+    # Verify changes in DB
+    db_customer = test_db_session.query(CustomerOrm).filter_by(id=added_customer.id).first()
+    assert db_customer.name == "Updated Name"
+    assert not db_customer.is_active
 
-    def test_get_all_customers(self):
-        """Test retrieving all customers."""
-        self._add_sample_customer(name="Customer Alpha", cuit="1")
-        self._add_sample_customer(name="Customer Beta", cuit="2")
-        self._add_sample_customer(name="Customer Gamma", cuit="3")
+def test_update_customer_not_found(repository):
+    """Test updating a non-existent customer returns None."""
+    non_existent_customer = Customer(id=uuid.uuid4(), name="Ghost")
+    updated_customer = repository.update(non_existent_customer)
+    assert updated_customer is None
 
-        all_customers = self.repository.get_all()
-        self.assertEqual(len(all_customers), 3)
-        # Check if names are present (order might vary)
-        names = {c.name for c in all_customers}
-        self.assertIn("Customer Alpha", names)
-        self.assertIn("Customer Beta", names)
-        self.assertIn("Customer Gamma", names)
+def test_delete_customer(repository, test_db_session):
+    """Test deleting a customer."""
+    added_customer = _add_sample_customer(test_db_session)
+    test_db_session.commit()
+    
+    success = repository.delete(added_customer.id)
+    assert success is True
+    
+    # Verify it's gone from DB
+    db_customer = test_db_session.query(CustomerOrm).filter_by(id=added_customer.id).first()
+    assert db_customer is None
 
-    def test_update_customer(self):
-        """Test updating an existing customer."""
-        added_customer = self._add_sample_customer()
-        updated_data = Customer(
-            id=added_customer.id,
-            name="Updated Name",
-            phone="555-9999",
-            email="updated@example.com",
-            address="456 Updated Ave",
-            cuit=added_customer.cuit, # CUIT might not be updatable easily due to unique constraint
-            iva_condition="Monotributista",
-            credit_limit=5000.0,
-            credit_balance=100.0,
-            is_active=False
-        )
-        updated_customer = self.repository.update(updated_data)
+def test_delete_customer_not_found(repository):
+    """Test deleting a non-existent customer returns False."""
+    non_existent_id = uuid.uuid4()
+    success = repository.delete(non_existent_id)
+    assert success is False
 
-        self.assertIsNotNone(updated_customer)
-        self.assertEqual(updated_customer.name, "Updated Name")
-        self.assertEqual(updated_customer.phone, "555-9999")
-        self.assertEqual(updated_customer.email, "updated@example.com")
-        self.assertEqual(updated_customer.address, "456 Updated Ave")
-        self.assertEqual(updated_customer.iva_condition, "Monotributista")
-        self.assertEqual(updated_customer.credit_limit, 5000.0)
-        self.assertEqual(updated_customer.credit_balance, 100.0)
-        self.assertFalse(updated_customer.is_active)
+def test_search_customer_by_name(repository, test_db_session):
+    """Test searching customers by name."""
+    _add_sample_customer(test_db_session, name="John Smith", cuit="101")
+    _add_sample_customer(test_db_session, name="John Doe", cuit="102")
+    _add_sample_customer(test_db_session, name="Jane Smith", cuit="103")
+    _add_sample_customer(test_db_session, name="Bob Johnson", cuit="104")
+    test_db_session.commit()
 
-        # Verify changes in DB
-        db_customer = self.session.query(CustomerOrm).filter_by(id=added_customer.id).first()
-        self.assertEqual(db_customer.name, "Updated Name")
-        self.assertFalse(db_customer.is_active)
+    # Search for "John" - notes: "Johnson" also contains "John" (partial match)
+    results = repository.search(search_term="John")
+    # Check that at least the two "John X" results are included
+    john_matches = [c for c in results if c.name.startswith("John")]
+    assert len(john_matches) == 2
+    john_names = sorted([c.name for c in john_matches])
+    assert john_names == ["John Doe", "John Smith"]
+    
+    # Ensure Bob Johnson is also found (because "John" is a substring)
+    bob_matches = [c for c in results if c.name == "Bob Johnson"]
+    assert len(bob_matches) == 1
+    
+    # Search for "Smith"
+    results = repository.search(search_term="Smith")
+    # Validate that both "Smith" results are found
+    smith_customers = [c for c in results if "Smith" in c.name]
+    assert len(smith_customers) == 2
+    smith_names = sorted([c.name for c in smith_customers])
+    assert smith_names == ["Jane Smith", "John Smith"]
 
-    def test_update_customer_not_found(self):
-        """Test updating a non-existent customer returns None."""
-        non_existent_customer = Customer(id=uuid.uuid4(), name="Ghost")
-        updated_customer = self.repository.update(non_existent_customer)
-        self.assertIsNone(updated_customer)
+def test_get_all_customers_pagination(repository, test_db_session):
+    """Test retrieving customers with pagination."""
+    # Add 25 customers
+    for i in range(25):
+        _add_sample_customer(test_db_session, name=f"Customer {i}", cuit=str(i+1000))
+    test_db_session.commit()
+    
+    # Test first page (10 results by default)
+    page1 = repository.get_all(page=1)
+    assert len(page1) == 10
+    
+    # Test second page (10 more)
+    page2 = repository.get_all(page=2)
+    assert len(page2) == 10
+    
+    # Test third page (5 remaining)
+    page3 = repository.get_all(page=3)
+    assert len(page3) == 5
+    
+    # Test custom page size
+    custom_page = repository.get_all(page=1, page_size=15)
+    assert len(custom_page) == 15
+    
+    # Test page beyond data range
+    empty_page = repository.get_all(page=4)
+    assert len(empty_page) == 0
 
-    def test_delete_customer(self):
-        """Test deleting an existing customer."""
-        added_customer = self._add_sample_customer()
-        result = self.repository.delete(added_customer.id)
-        self.assertTrue(result)
+def test_search_customers_filtering_and_sorting(repository, test_db_session):
+    """Test advanced filtering and sorting of customers."""
+    # Add test customers with varied attributes
+    _add_sample_customer(
+        test_db_session,
+        name="Gold Customer",
+        cuit="1001",
+        credit_limit=10000.0,
+        iva_condition="Responsable Inscripto"
+    )
+    _add_sample_customer(
+        test_db_session,
+        name="Silver Customer",
+        cuit="1002",
+        credit_limit=5000.0,
+        iva_condition="Monotributista"
+    )
+    _add_sample_customer(
+        test_db_session,
+        name="Bronze Customer",
+        cuit="1003",
+        credit_limit=1000.0,
+        iva_condition="Consumidor Final"
+    )
+    _add_sample_customer(
+        test_db_session,
+        name="Inactive Customer",
+        cuit="1004",
+        is_active=False
+    )
+    test_db_session.commit()
 
-        # Verify deleted from DB
-        db_customer = self.session.query(CustomerOrm).filter_by(id=added_customer.id).first()
-        self.assertIsNone(db_customer)
+    # Test filtering by IVA condition
+    resp_inscriptos = repository.search(iva_condition="Responsable Inscripto")
+    assert len(resp_inscriptos) == 1
+    assert resp_inscriptos[0].name == "Gold Customer"
 
-    def test_delete_customer_not_found(self):
-        """Test deleting a non-existent customer returns False."""
-        non_existent_id = uuid.uuid4()
-        result = self.repository.delete(non_existent_id)
-        self.assertFalse(result)
-
-    def test_search_customer_by_name(self):
-        """Test searching customers by name (case-insensitive, partial)."""
-        self._add_sample_customer(name="John Doe", cuit="1")
-        self._add_sample_customer(name="Jane Doe", cuit="2")
-        self._add_sample_customer(name="Peter Jones", cuit="3")
-
-        results_doe = self.repository.search_by_name("doe")
-        self.assertEqual(len(results_doe), 2)
-        names_doe = {c.name for c in results_doe}
-        self.assertIn("John Doe", names_doe)
-        self.assertIn("Jane Doe", names_doe)
-
-        results_peter = self.repository.search_by_name("Peter")
-        self.assertEqual(len(results_peter), 1)
-        self.assertEqual(results_peter[0].name, "Peter Jones")
-
-        results_no_match = self.repository.search_by_name("xyz")
-        self.assertEqual(len(results_no_match), 0)
-
-    def test_get_all_customers_pagination(self):
-        """Test retrieving customers with pagination."""
-        # Add more customers than the limit
-        self._add_sample_customer(name="Customer P1", cuit="p1")
-        self._add_sample_customer(name="Customer P2", cuit="p2")
-        self._add_sample_customer(name="Customer P3", cuit="p3")
-        self._add_sample_customer(name="Customer P4", cuit="p4")
-
-        # Assume get_all supports limit and offset
-        # Get first page (limit 2)
-        page1 = self.repository.get_all(limit=2, offset=0)
-        self.assertEqual(len(page1), 2)
-
-        # Get second page (limit 2, offset 2)
-        page2 = self.repository.get_all(limit=2, offset=2)
-        self.assertEqual(len(page2), 2)
-
-        # Ensure pages have different customers (simple check based on IDs)
-        page1_ids = {c.id for c in page1}
-        page2_ids = {c.id for c in page2}
-        self.assertFalse(page1_ids.intersection(page2_ids))
-
-        # Get page beyond results
-        page3 = self.repository.get_all(limit=2, offset=4)
-        self.assertEqual(len(page3), 0)
-
-    def test_search_customers_filtering_and_sorting(self):
-        """Test searching customers with filtering and sorting."""
-        # Add customers with varying properties
-        cust_a = self._add_sample_customer(name="Alice Active", cuit="f1", is_active=True)
-        cust_b = self._add_sample_customer(name="Bob Inactive", cuit="f2", is_active=False)
-        cust_c = self._add_sample_customer(name="Charlie Active", cuit="f3", is_active=True)
-
-        # Assume a search method exists: search(filters={}, sort_by=None, limit=None, offset=None)
-        
-        # Filter by is_active=True
-        active_customers = self.repository.search(filters={"is_active": True})
-        self.assertEqual(len(active_customers), 2)
-        active_names = {c.name for c in active_customers}
-        self.assertIn("Alice Active", active_names)
-        self.assertIn("Charlie Active", active_names)
-
-        # Filter by is_active=False
-        inactive_customers = self.repository.search(filters={"is_active": False})
-        self.assertEqual(len(inactive_customers), 1)
-        self.assertEqual(inactive_customers[0].name, "Bob Inactive")
-
-        # Sort by name ascending
-        sorted_asc = self.repository.search(sort_by="name_asc") # Assuming 'name_asc' convention
-        self.assertEqual(len(sorted_asc), 3)
-        self.assertEqual(sorted_asc[0].name, "Alice Active")
-        self.assertEqual(sorted_asc[1].name, "Bob Inactive")
-        self.assertEqual(sorted_asc[2].name, "Charlie Active")
-
-        # Sort by name descending
-        sorted_desc = self.repository.search(sort_by="name_desc") # Assuming 'name_desc' convention
-        self.assertEqual(len(sorted_desc), 3)
-        self.assertEqual(sorted_desc[0].name, "Charlie Active")
-        self.assertEqual(sorted_desc[1].name, "Bob Inactive")
-        self.assertEqual(sorted_desc[2].name, "Alice Active")
-
-        # Combined filter and sort
-        active_sorted_desc = self.repository.search(filters={"is_active": True}, sort_by="name_desc")
-        self.assertEqual(len(active_sorted_desc), 2)
-        self.assertEqual(active_sorted_desc[0].name, "Charlie Active")
-        self.assertEqual(active_sorted_desc[1].name, "Alice Active")
-
-
-if __name__ == '__main__':
-    unittest.main() 
+    # Test filtering by active status with filters parameter
+    active_customers = repository.search(filters={"is_active": True})
+    assert len(active_customers) == 3
+    active_names = sorted([c.name for c in active_customers])
+    assert "Inactive Customer" not in active_names
+    
+    # Test searching with name pattern
+    cust_with_customer = repository.search(search_term="Customer")
+    assert len(cust_with_customer) >= 3
+    
+    # Test sorting
+    credit_sorted = repository.search(
+        filters={"is_active": True}, 
+        sort_by="credit_limit_desc"
+    )
+    # Should be sorted by credit limit (highest first)
+    sorted_names = [c.name for c in credit_sorted]
+    assert "Gold Customer" == sorted_names[0]
+    assert "Silver Customer" == sorted_names[1]
+    assert "Bronze Customer" == sorted_names[2]

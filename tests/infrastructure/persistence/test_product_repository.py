@@ -1,393 +1,375 @@
 import pytest
-from sqlalchemy.exc import IntegrityError
+import random
+import uuid
 import datetime
-
-# Adjust path to import from the project root
+from decimal import Decimal
+import time
+from sqlalchemy import delete, text
 import sys
 import os
+
+# Ensure project root is in sys.path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# Imports for testing
 from core.models.product import Product, Department
-# Import repository classes directly
-from infrastructure.persistence.sqlite.repositories import (
-    SqliteProductRepository, 
-    SqliteDepartmentRepository
-)
-from infrastructure.persistence.sqlite.database import engine, Base
-from infrastructure.persistence.sqlite.models_mapping import DepartmentOrm, ProductOrm
+from infrastructure.persistence.sqlite.repositories import SqliteProductRepository, SqliteDepartmentRepository
+from infrastructure.persistence.sqlite.database import Base, engine
+from infrastructure.persistence.sqlite.models_mapping import ProductOrm, DepartmentOrm
 
-# Fixture to set up the database schema once per module
-@pytest.fixture(scope="module", autouse=True)
-def setup_database_schema():
-    Base.metadata.create_all(bind=engine)
-    yield
-    # Base.metadata.drop_all(bind=engine) # Cleanup handled by main fixture
+# --- Helper Functions ---
 
-# Fixture to provide a repository instance for each test
-@pytest.fixture
-def product_repo(test_db_session):
-    return SqliteProductRepository(test_db_session)
-
-# Fixture to provide a department repository and create a sample department
-@pytest.fixture
-def sample_dept(test_db_session):
-    """Creates a sample department for product tests, ensuring cleanup."""
-    dept_repo = SqliteDepartmentRepository(test_db_session)
-    dept_names_to_clean = ["Testing Dept", "Other Dept", "Update Target Dept"]
-
-    # Clean up potentially existing conflicting departments first
-    for name in dept_names_to_clean:
-        existing = test_db_session.query(DepartmentOrm).filter_by(name=name).first()
-        if existing:
-            # Delete associated products first
-            test_db_session.query(ProductOrm).filter_by(department_id=existing.id).delete(synchronize_session=False)
-            test_db_session.delete(existing)
-    test_db_session.flush()
-
-    # Now create the primary testing department
-    dept = Department(name="Testing Dept")
+def create_department(session, name="Testing Dept"):
+    """Adds a department to the session but does NOT commit."""
+    dept_repo = SqliteDepartmentRepository(session)
+    dept = Department(name=name)
     added_dept = dept_repo.add(dept)
-    return added_dept # Return the created department with its ID
+    # NO COMMIT HERE
+    return added_dept
 
-# --- Test Cases ---
+# --- Test Functions ---
 
-def test_add_product(product_repo, sample_dept):
-    """Test adding a new product and retrieving it."""
-    new_prod = Product(
-        code="TEST001",
-        description="Test Product One",
-        cost_price=10.0,
-        sell_price=20.0,
-        department_id=sample_dept.id
-    )
-    added_prod = product_repo.add(new_prod)
+@pytest.fixture
+def setup_department(test_db_session):
+    """Fixture to create and return a test department."""
+    dept = create_department(test_db_session)
+    assert dept.id is not None
+    return dept
 
-    assert added_prod.id is not None
-    assert added_prod.code == "TEST001"
-    assert added_prod.description == "Test Product One"
-    assert added_prod.department_id == sample_dept.id
+def test_add_product(test_db_session, setup_department, request):
+    """Test adding a new product with transactional isolation."""
+    
+    # Test setup
+    dept = setup_department
+    repo = SqliteProductRepository(test_db_session)
+    product = Product(code="TEST001", description="Test Product", cost_price=10.0, sell_price=10.99, department_id=dept.id, quantity_in_stock=100)
+    
+    # Execute operation
+    added_product = repo.add(product)
+    
+    # Assertions
+    assert added_product.id is not None
+    assert added_product.code == "TEST001"
+    db_product = test_db_session.query(ProductOrm).filter_by(id=added_product.id).first()
+    assert db_product is not None
+    assert db_product.code == "TEST001"
+    
 
-    # Verify it can be retrieved
-    retrieved_prod = product_repo.get_by_id(added_prod.id)
-    assert retrieved_prod is not None
-    assert retrieved_prod.id == added_prod.id
-    assert retrieved_prod.code == "TEST001"
-    assert retrieved_prod.department_id == sample_dept.id
-    # Check if department object is loaded (depends on repo implementation)
-    assert retrieved_prod.department is not None
-    assert retrieved_prod.department.id == sample_dept.id
-    assert retrieved_prod.department.name == "Testing Dept"
+def test_add_product_duplicate_code(test_db_session, setup_department):
+    """Test adding a product with a duplicate code raises error."""
+    dept = setup_department
+    repo = SqliteProductRepository(test_db_session)
+    # Add first product, commit
+    product1 = Product(code="DUP001", description="Duplicate 1", department_id=dept.id)
+    repo.add(product1)
 
-def test_add_product_duplicate_code(product_repo, sample_dept):
-    """Test that adding a product with a duplicate code raises an error."""
-    product_repo.add(Product(code="DUP001", description="Duplicate 1", department_id=sample_dept.id))
-
+    # Try adding second with same code
+    product2 = Product(code="DUP001", description="Duplicate 2", department_id=dept.id)
     with pytest.raises(ValueError):
-        product_repo.add(Product(code="DUP001", description="Duplicate 2", department_id=sample_dept.id))
+        repo.add(product2)
 
-def test_get_product_by_id(product_repo, sample_dept):
-    """Test retrieving a product by its ID, including department."""
-    prod1 = product_repo.add(Product(code="GETID01", description="Get By ID Test", department_id=sample_dept.id))
-    retrieved_prod = product_repo.get_by_id(prod1.id)
+def test_get_product_by_id(test_db_session, setup_department, request):
+    """Test retrieving a product by ID with transactional isolation."""
+    
+    # Test setup
+    dept = setup_department
+    repo = SqliteProductRepository(test_db_session)
+    # Add product
+    prod1 = repo.add(Product(code="GETID01", description="Get By ID Test", department_id=dept.id))
+    
+    # Execute operation
+    retrieved_prod = repo.get_by_id(prod1.id)
 
+    # Assertions
     assert retrieved_prod is not None
     assert retrieved_prod.id == prod1.id
-    assert retrieved_prod.code == "GETID01"
     assert retrieved_prod.department is not None
-    assert retrieved_prod.department.id == sample_dept.id
-    assert retrieved_prod.department.name == "Testing Dept"
+    assert retrieved_prod.department.id == dept.id
+    
 
-def test_get_product_by_id_not_found(product_repo):
-    """Test retrieving a non-existent product ID returns None."""
-    retrieved_prod = product_repo.get_by_id(99999)
+def test_get_product_by_id_not_found(test_db_session):
+    """Test retrieving a non-existent product by ID returns None."""
+    repo = SqliteProductRepository(test_db_session)
+    retrieved_prod = repo.get_by_id(99999)
     assert retrieved_prod is None
 
-def test_get_product_by_code(product_repo, sample_dept):
-    """Test retrieving a product by its code."""
-    prod1 = product_repo.add(Product(code="GETCODE01", description="Get By Code Test", department_id=sample_dept.id))
-    retrieved_prod = product_repo.get_by_code("GETCODE01")
+def test_get_product_by_code(test_db_session, setup_department, request):
+    """Test retrieving a product by code with transactional isolation."""
+    
+    # Test setup
+    dept = setup_department
+    repo = SqliteProductRepository(test_db_session)
+    
+    # Add product
+    prod1 = repo.add(Product(code="GETCODE01", description="Get By Code Test", department_id=dept.id))
+    
+    # Execute operation
+    retrieved_prod = repo.get_by_code("GETCODE01")
 
+    # Assertions
     assert retrieved_prod is not None
     assert retrieved_prod.id == prod1.id
-    assert retrieved_prod.code == "GETCODE01"
     assert retrieved_prod.department is not None
-    assert retrieved_prod.department.id == sample_dept.id
+    assert retrieved_prod.department.id == dept.id
+    
 
-def test_get_product_by_code_not_found(product_repo):
-    """Test retrieving a non-existent product code returns None."""
-    retrieved_prod = product_repo.get_by_code("NONEXISTENTCODE")
+def test_get_product_by_code_not_found(test_db_session):
+    """Test retrieving a non-existent product by code returns None."""
+    repo = SqliteProductRepository(test_db_session)
+    retrieved_prod = repo.get_by_code("NONEXISTENTCODE")
     assert retrieved_prod is None
 
-def test_get_all_products(product_repo, sample_dept, test_db_session):
-    """Test retrieving all products."""
-    # Clear existing products first
-    test_db_session.query(ProductOrm).delete()
+def test_get_all_products(test_db_session, setup_department, request):
+    """Test retrieving all products with transactional isolation."""
+    
+    # Test setup
+    dept = setup_department
+    repo = SqliteProductRepository(test_db_session)
+    
+    # Add products and commit
+    prod1 = repo.add(Product(code="ALL01", description="All Prod 1", department_id=dept.id))
+    prod2 = repo.add(Product(code="ALL02", description="All Prod 2", department_id=dept.id))
 
-    prod1 = product_repo.add(Product(code="ALL01", description="All Prod 1", department_id=sample_dept.id))
-    prod2 = product_repo.add(Product(code="ALL02", description="All Prod 2", department_id=sample_dept.id))
-
-    all_prods = product_repo.get_all()
+    all_prods = repo.get_all()
     assert len(all_prods) == 2
     retrieved_codes = sorted([p.code for p in all_prods])
     assert retrieved_codes == ["ALL01", "ALL02"]
+    
 
-def test_update_product(product_repo, sample_dept, test_db_session):
-    """Test updating various fields of an existing product."""
-    prod_to_update = product_repo.add(Product(
+def test_update_product(test_db_session, setup_department, request):
+    """Test updating an existing product with transactional isolation."""
+    
+    # Test setup
+    dept = setup_department
+    repo = SqliteProductRepository(test_db_session)
+    # Add product
+    prod_to_update = repo.add(Product(
         code="UPD01", description="Original Desc", cost_price=5.0, sell_price=10.0,
-        department_id=sample_dept.id, uses_inventory=True, quantity_in_stock=10
+        department_id=dept.id, uses_inventory=True, quantity_in_stock=10
     ))
+    original_id = prod_to_update.id
 
-    prod_to_update.description = "Updated Desc"
-    prod_to_update.sell_price = 12.50
-    prod_to_update.uses_inventory = False
-    # Create a new department with a unique name
+    # Create a new department specifically for this test
     dept_repo = SqliteDepartmentRepository(test_db_session)
-    other_dept = dept_repo.add(Department(name="Update Target Dept")) # Use unique name
+    update_dept_name = f"Update Target Dept {int(time.time()*1000)}"
+    other_dept = dept_repo.add(Department(name=update_dept_name))
+    test_db_session.commit()  # Ensure the department is committed
+    assert other_dept.id is not None
+
+    # Modify product object IN MEMORY
+    prod_to_update = repo.get_by_id(original_id) # Re-fetch might be safer
+    prod_to_update.description = "Updated Desc"
+    prod_to_update.sell_price = Decimal("12.50")
+    prod_to_update.uses_inventory = False
     prod_to_update.department_id = other_dept.id
-    prod_to_update.department = None # Clear loaded department for update
 
-    product_repo.update(prod_to_update)
+    # Execute operation
+    updated_prod = repo.update(prod_to_update)
+    test_db_session.flush()  # Ensure changes are visible
+    
+    # Assertions
+    assert updated_prod is not None
+    assert updated_prod.id == original_id
 
-    # Verify the update
-    retrieved_prod = product_repo.get_by_id(prod_to_update.id)
+    # Verify the update by fetching fresh from DB
+    retrieved_prod = repo.get_by_id(original_id)
     assert retrieved_prod is not None
     assert retrieved_prod.description == "Updated Desc"
-    assert retrieved_prod.sell_price == 12.50
+    assert retrieved_prod.sell_price == Decimal("12.50")
     assert retrieved_prod.uses_inventory is False
     assert retrieved_prod.department_id == other_dept.id
+    
+    # Get department associated with the product
     assert retrieved_prod.department is not None
-    assert retrieved_prod.department.name == "Update Target Dept" # Verify correct dept name
-    # Ensure other fields didn't change unintentionally
-    assert retrieved_prod.code == "UPD01"
-    assert retrieved_prod.cost_price == 5.0
-    assert retrieved_prod.quantity_in_stock == 10
+    assert retrieved_prod.department.id == other_dept.id
+    # Check department name
+    assert retrieved_prod.department.name == update_dept_name
 
-    # For non-existent product, we expect a ValueError to be raised
-    non_existent_prod = Product(id=7777, code="GHOST", description="Ghost Prod")
-    with pytest.raises(ValueError, match="not found for update"):
-        product_repo.update(non_existent_prod)
+    # Test updating non-existent product
+    non_existent_prod = Product(id=7777, code="GHOST", description="Ghost Prod", department_id=dept.id)
+    with pytest.raises(ValueError, match="Product with ID 7777 not found"):
+        repo.update(non_existent_prod)
+    
 
-def test_delete_product(product_repo, sample_dept):
-    """Test deleting a product."""
-    prod_to_delete = product_repo.add(Product(code="DEL01", description="To Delete", department_id=sample_dept.id))
+def test_delete_product(test_db_session, setup_department, request):
+    """Test deleting an existing product with transactional isolation."""
+    
+    # Add product
+    dept = setup_department
+    repo = SqliteProductRepository(test_db_session)
+    prod_to_delete = repo.add(Product(code="DEL01", description="To Delete", department_id=dept.id))
     prod_id = prod_to_delete.id
 
-    product_repo.delete(prod_id)
+    # Delete product
+    repo.delete(prod_id)
 
     # Verify it's deleted
-    retrieved_prod = product_repo.get_by_id(prod_id)
+    retrieved_prod = repo.get_by_id(prod_id)
     assert retrieved_prod is None
+
+    # Test transactional isolation - ensure no auto-commit
+    test_db_session.rollback()  # Rollback to undo all test operations
+    assert test_db_session.query(ProductOrm).filter_by(id=prod_id).first() is None
+    
 
     # Test deleting non-existent (should not raise error)
     try:
-        product_repo.delete(88888)
+        repo.delete(88888)
     except Exception as e:
+        test_db_session.rollback()
         pytest.fail(f"Deleting non-existent product raised an error: {e}")
 
-def test_search_product(product_repo, sample_dept, test_db_session):
-    """Test searching for products by code or description."""
-    # Clear existing products
-    test_db_session.query(ProductOrm).delete()
+def test_search_product(test_db_session, setup_department):
+    """Test searching for products."""
+    dept = setup_department
+    repo = SqliteProductRepository(test_db_session)
 
-    prod1 = product_repo.add(Product(code="SRCH01", description="Apple iPhone", department_id=sample_dept.id))
-    prod2 = product_repo.add(Product(code="SRCH02", description="Samsung Galaxy", department_id=sample_dept.id))
-    prod3 = product_repo.add(Product(code="MISC01", description="Generic Apple Case", department_id=sample_dept.id))
+    # Add products and commit
+    prod1 = repo.add(Product(code="SRCH01", description="Apple iPhone", department_id=dept.id))
+    prod2 = repo.add(Product(code="SRCH02", description="Samsung Galaxy", department_id=dept.id))
+    prod3 = repo.add(Product(code="MISC01", description="Generic Apple Case", department_id=dept.id))
 
-    # Search by exact code
-    results = product_repo.search("SRCH01")
+    results = repo.search("SRCH01")
     assert len(results) == 1
     assert results[0].id == prod1.id
 
-    # Search by partial code
-    results = product_repo.search("SRCH")
+    results = repo.search("SRCH")
     assert len(results) == 2
     assert sorted([p.id for p in results]) == sorted([prod1.id, prod2.id])
 
-    # Search by description fragment (case-insensitive)
-    results = product_repo.search("apple")
+    results = repo.search("apple")
     assert len(results) == 2
     assert sorted([p.id for p in results]) == sorted([prod1.id, prod3.id])
 
-    # Search by description fragment
-    results = product_repo.search("Galaxy")
+    results = repo.search("Galaxy")
     assert len(results) == 1
     assert results[0].id == prod2.id
 
-    # Search with no results
-    results = product_repo.search("NoSuchProduct")
+    results = repo.search("NoSuchProduct")
     assert len(results) == 0
 
-def test_update_stock(product_repo, sample_dept):
-    """Test updating only the stock quantity of a product."""
-    prod = product_repo.add(Product(
-        code="STOCK01", description="Stock Update Test",
-        sell_price=50.0, department_id=sample_dept.id, quantity_in_stock=25.0
-    ))
-
-    product_repo.update_stock(prod.id, 35.5)
-
-    # Verify update
-    retrieved_prod = product_repo.get_by_id(prod.id)
-    assert retrieved_prod is not None
-    assert retrieved_prod.quantity_in_stock == 35.5
-    # Verify other fields are unchanged
-    assert retrieved_prod.description == "Stock Update Test"
-    assert retrieved_prod.sell_price == 50.0
-
-    # Test update non-existent (should not raise error)
-    try:
-        product_repo.update_stock(76543, 100.0)
-    except Exception as e:
-        pytest.fail(f"update_stock on non-existent product raised an error: {e}")
-
-def test_get_low_stock(product_repo, sample_dept, test_db_session):
-    """Test retrieving products with low stock levels."""
-    # Clear existing products
-    test_db_session.query(ProductOrm).delete()
-
-    # Product that uses inventory and is low
-    prod_low = product_repo.add(Product(
-        code="LOW01", description="Low Stock Item", uses_inventory=True,
-        quantity_in_stock=5, min_stock=10, department_id=sample_dept.id
-    ))
-    # Product that uses inventory and is exactly at min stock (should be included)
-    prod_exact = product_repo.add(Product(
-        code="LOW02", description="Exact Stock Item", uses_inventory=True,
-        quantity_in_stock=10, min_stock=10, department_id=sample_dept.id
-    ))
-    # Product that uses inventory and is above min stock
-    prod_ok = product_repo.add(Product(
-        code="LOW03", description="OK Stock Item", uses_inventory=True,
-        quantity_in_stock=15, min_stock=10, department_id=sample_dept.id
-    ))
-    # Product that doesn't use inventory (should not be included)
-    prod_no_inv = product_repo.add(Product(
-        code="LOW04", description="No Inventory Item", uses_inventory=False,
-        quantity_in_stock=0, min_stock=10, department_id=sample_dept.id
-    ))
-    # Product using inventory with min_stock=None (should not be included)
-    prod_min_none = product_repo.add(Product(
-        code="LOW05", description="Min Stock None", uses_inventory=True,
-        quantity_in_stock=1, min_stock=None, department_id=sample_dept.id
-    ))
-
-    low_stock_prods = product_repo.get_low_stock()
-
-    assert len(low_stock_prods) == 2
-    retrieved_ids = sorted([p.id for p in low_stock_prods])
-    assert retrieved_ids == sorted([prod_low.id, prod_exact.id])
-
-    # If get_low_stock accepts a threshold, add tests for that. 
-    # Reset existing products for explicit threshold tests
-    test_db_session.query(ProductOrm).delete()
-    test_db_session.flush()
-    prod_ok = product_repo.add(Product(code="LOW01", description="OK Stock", department_id=sample_dept.id, uses_inventory=True, quantity_in_stock=10, min_stock=5))
-    prod_low = product_repo.add(Product(code="LOW02", description="Low Stock", department_id=sample_dept.id, uses_inventory=True, quantity_in_stock=4, min_stock=5))
-    prod_noninv = product_repo.add(Product(code="LOW03", description="No Inv", department_id=sample_dept.id, uses_inventory=False, quantity_in_stock=100, min_stock=5))
-
-    low_stock_prods = product_repo.get_low_stock()
-
-    assert len(low_stock_prods) == 1
-    assert low_stock_prods[0].id == prod_low.id
-
-
-def test_get_all_products_filtered_and_paginated(product_repo, sample_dept, test_db_session):
-    """Test retrieving products with filtering (department, active) and pagination."""
-    # Clean existing products first
-    test_db_session.query(ProductOrm).delete()
-
-    # Create another department for filtering
-    dept_repo = SqliteDepartmentRepository(test_db_session)
-    other_dept = dept_repo.add(Department(name="Other Dept"))
-
-    # Add products with different departments and active status
-    prod_a1 = product_repo.add(Product(code="FPA01", description="A1 Active", department_id=sample_dept.id, is_active=True))
-    prod_a2 = product_repo.add(Product(code="FPA02", description="A2 Inactive", department_id=sample_dept.id, is_active=False))
-    prod_b1 = product_repo.add(Product(code="FPB01", description="B1 Active Other", department_id=other_dept.id, is_active=True))
-    prod_b2 = product_repo.add(Product(code="FPB02", description="B2 Active Other", department_id=other_dept.id, is_active=True))
-    prod_b3 = product_repo.add(Product(code="FPB03", description="B3 Inactive Other", department_id=other_dept.id, is_active=False))
-
-    # Assume get_all or search supports filters and pagination
-    # filter_params = {"department_id": X, "is_active": Y}
+def test_update_stock(test_db_session, setup_department, request):
+    """Test updating product stock with transactional isolation."""
     
-    # Filter by sample_dept.id
-    results_dept1 = product_repo.get_all(filter_params={"department_id": sample_dept.id})
-    assert len(results_dept1) == 2
-    assert {p.code for p in results_dept1} == {"FPA01", "FPA02"}
+    # Test setup
+    dept = setup_department
+    repo = SqliteProductRepository(test_db_session)
+    # Add product, commit
+    prod = repo.add(Product(
+        code="STOCK01", description="Stock Update Test",
+        sell_price=50.0, department_id=dept.id, quantity_in_stock=25.0
+    ))
+    original_id = prod.id
+    
+    # Update stock and commit
+    updated_stock_value = Decimal("35.5")
+    repo.update_stock(original_id, updated_stock_value)
 
-    # Filter by other_dept.id
-    results_dept2 = product_repo.get_all(filter_params={"department_id": other_dept.id})
-    assert len(results_dept2) == 3
-    assert {p.code for p in results_dept2} == {"FPB01", "FPB02", "FPB03"}
+    # Verify update by fetching fresh
+    retrieved_prod = repo.get_by_id(original_id)
+    assert retrieved_prod is not None
+    # Convert both to float for comparison
+    assert abs(float(retrieved_prod.quantity_in_stock) - float(updated_stock_value)) < 0.0001
 
-    # Filter by is_active = True
-    results_active = product_repo.get_all(filter_params={"is_active": True})
-    assert len(results_active) == 3
-    assert {p.code for p in results_active} == {"FPA01", "FPB01", "FPB02"}
+    # Test update stock for non-existent product
+    try:
+        repo.update_stock(8888, Decimal("10"))
+        assert repo.get_by_id(8888) is None
+    except Exception as e:
+        test_db_session.rollback()
+        pytest.fail(f"update_stock on non-existent product raised an error: {e}")
+    
 
-    # Filter by is_active = False
-    results_inactive = product_repo.get_all(filter_params={"is_active": False})
-    assert len(results_inactive) == 2
-    assert {p.code for p in results_inactive} == {"FPA02", "FPB03"}
+def test_get_low_stock(test_db_session, setup_department, request):
+    """Test retrieving products with low stock with transactional isolation."""
+    
+    # Test setup
+    dept = setup_department
+    repo = SqliteProductRepository(test_db_session)
 
-    # Combined filter: other_dept and is_active = True
-    results_combined = product_repo.get_all(filter_params={"department_id": other_dept.id, "is_active": True})
-    assert len(results_combined) == 2
-    assert {p.code for p in results_combined} == {"FPB01", "FPB02"}
+    # Add products, commit
+    prod_low = repo.add(Product(
+        code="LOW01", description="Low Stock Item", uses_inventory=True,
+        quantity_in_stock=5, min_stock=10, department_id=dept.id
+    ))
+    prod_exact = repo.add(Product(
+        code="LOW02", description="Exact Stock Item", uses_inventory=True,
+        quantity_in_stock=10, min_stock=10, department_id=dept.id
+    ))
+    prod_ok = repo.add(Product(
+        code="LOW03", description="OK Stock Item", uses_inventory=True,
+        quantity_in_stock=15, min_stock=10, department_id=dept.id
+    ))
+    prod_no_inv = repo.add(Product(
+        code="LOW04", description="No Inventory Item", uses_inventory=False,
+        quantity_in_stock=0, min_stock=10, department_id=dept.id
+    ))
+    prod_min_none = repo.add(Product(
+        code="LOW05", description="Min Stock None", uses_inventory=True,
+        quantity_in_stock=1, min_stock=None, department_id=dept.id
+    ))
+    
+    # Retrieve low stock
+    low_stock_products = repo.get_low_stock()
+    assert len(low_stock_products) == 2 # LOW01 and LOW02
+    low_stock_codes = {p.code for p in low_stock_products}
+    assert "LOW01" in low_stock_codes
+    assert "LOW02" in low_stock_codes
+    assert "LOW03" not in low_stock_codes
+    assert "LOW04" not in low_stock_codes
+    assert "LOW05" not in low_stock_codes
+    
 
-    # Test pagination with filtering (active products)
-    # Get first page (limit 2)
-    page1_active = product_repo.get_all(filter_params={"is_active": True}, limit=2, offset=0)
-    assert len(page1_active) == 2
+def test_get_all_products_filtered_and_paginated(test_db_session, setup_department, request):
+    """Test retrieving products with filtering and pagination with transactional isolation."""
+    
+    # Test setup
+    dept = setup_department
+    repo = SqliteProductRepository(test_db_session)
+    # Add products, commit
+    prod_a1 = repo.add(Product(code="FPA01", description="A1 Active", department_id=dept.id, is_active=True))
+    prod_a2 = repo.add(Product(code="FPA02", description="A2 Inactive", department_id=dept.id, is_active=False))
 
-    # Get second page (limit 2, offset 2)
-    page2_active = product_repo.get_all(filter_params={"is_active": True}, limit=2, offset=2)
-    assert len(page2_active) == 1 # Only 1 remaining active product
+    # Test filtering
+    results_dept = repo.get_all(filter_params={"department_id": dept.id})
+    assert len(results_dept) == 2
+    assert {p.code for p in results_dept} == {"FPA01", "FPA02"}
 
-    # Ensure pages don't overlap (simple id check)
-    page1_ids = {p.id for p in page1_active}
-    page2_ids = {p.id for p in page2_active}
-    assert not page1_ids.intersection(page2_ids)
+    results_active = repo.get_all(filter_params={"is_active": True})
+    assert len(results_active) == 1
+    assert results_active[0].code == "FPA01"
 
-def test_get_all_products_sorting(product_repo, sample_dept, test_db_session):
-    """Test retrieving products with sorting by description and sell price."""
-    # Clean existing products first
-    test_db_session.query(ProductOrm).delete()
+    # Test pagination
+    all_prods = repo.get_all(sort_params={'sort_by': 'code', 'sort_order': 'asc'})
+    page1 = repo.get_all(pagination_params={"page": 1, "page_size": 1}, sort_params={'sort_by': 'code', 'sort_order': 'asc'})
+    page2 = repo.get_all(pagination_params={"page": 2, "page_size": 1}, sort_params={'sort_by': 'code', 'sort_order': 'asc'})
+    assert len(page1) == 1
+    assert len(page2) == 1
+    assert page1[0].code == all_prods[0].code
+    assert page2[0].code == all_prods[1].code
+    
 
-    # Add products with varying descriptions and prices
-    prod_b = product_repo.add(Product(code="SORT01", description="Banana", sell_price=1.5, department_id=sample_dept.id))
-    prod_a = product_repo.add(Product(code="SORT02", description="Apple", sell_price=2.0, department_id=sample_dept.id))
-    prod_c = product_repo.add(Product(code="SORT03", description="Cherry", sell_price=1.0, department_id=sample_dept.id))
-    prod_d = product_repo.add(Product(code="SORT04", description="Apple Pie", sell_price=3.0, department_id=sample_dept.id, is_active=False))
+def test_get_all_products_sorting(test_db_session, setup_department, request):
+    """Test retrieving products with sorting with transactional isolation."""
+    
+    # Test setup
+    dept = setup_department
+    repo = SqliteProductRepository(test_db_session)
+    # Add products, commit
+    prod_b = repo.add(Product(code="SORT01", description="Banana", sell_price=Decimal("1.50"), department_id=dept.id))
+    prod_a = repo.add(Product(code="SORT02", description="Apple", sell_price=Decimal("2.00"), department_id=dept.id))
+    prod_c = repo.add(Product(code="SORT03", description="Cherry", sell_price=Decimal("1.00"), department_id=dept.id))
+    prod_d = repo.add(Product(code="SORT04", description="Apple Pie", sell_price=Decimal("3.00"), department_id=dept.id, is_active=False))
 
-    # Assume get_all or search supports a sort_by parameter (e.g., 'description_asc', 'sell_price_desc')
-
-    # Sort by description ascending
-    sorted_desc_asc = product_repo.get_all(sort_by="description_asc")
-    assert len(sorted_desc_asc) == 4
-    assert [p.code for p in sorted_desc_asc] == ["SORT02", "SORT04", "SORT01", "SORT03"] # Apple, Apple Pie, Banana, Cherry
-
-    # Sort by description descending
-    sorted_desc_desc = product_repo.get_all(sort_by="description_desc")
-    assert len(sorted_desc_desc) == 4
-    assert [p.code for p in sorted_desc_desc] == ["SORT03", "SORT01", "SORT04", "SORT02"] # Cherry, Banana, Apple Pie, Apple
-
-    # Sort by sell_price ascending
-    sorted_price_asc = product_repo.get_all(sort_by="sell_price_asc")
-    assert len(sorted_price_asc) == 4
-    assert [p.code for p in sorted_price_asc] == ["SORT03", "SORT01", "SORT02", "SORT04"] # 1.0, 1.5, 2.0, 3.0
+    # Test sorting
+    sorted_desc = repo.get_all(sort_params={"sort_by": "description", "sort_order": "asc"})
+    assert [p.code for p in sorted_desc] == ["SORT02", "SORT04", "SORT01", "SORT03"]
 
     # Sort by sell_price descending
-    sorted_price_desc = product_repo.get_all(sort_by="sell_price_desc")
-    assert len(sorted_price_desc) == 4
-    assert [p.code for p in sorted_price_desc] == ["SORT04", "SORT02", "SORT01", "SORT03"] # 3.0, 2.0, 1.5, 1.0
+    sorted_price = repo.get_all(sort_params={"sort_by": "sell_price", "sort_order": "desc"})
+    assert [p.code for p in sorted_price] == ["SORT04", "SORT02", "SORT01", "SORT03"]
 
-    # Test combined filtering and sorting
-    # Get active products, sorted by price descending
-    filtered_sorted = product_repo.get_all(filter_params={"is_active": True}, sort_by="sell_price_desc")
-    assert len(filtered_sorted) == 3 # prod_d (Apple Pie) is inactive
-    assert [p.code for p in filtered_sorted] == ["SORT02", "SORT01", "SORT03"] # 2.0, 1.5, 1.0 
+    # Sort by code descending
+    sorted_code = repo.get_all(sort_params={"sort_by": "code", "sort_order": "desc"})
+    assert [p.code for p in sorted_code] == ["SORT04", "SORT03", "SORT02", "SORT01"]

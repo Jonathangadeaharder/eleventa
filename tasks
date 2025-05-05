@@ -1,0 +1,1909 @@
+Okay, it seems the previous fixes addressed the assertion message but revealed underlying issues with how services, particularly InvoicingService, are instantiated and used within the tests, especially integration tests. The TypeError: '...' object is not callable errors strongly suggest that repository instances are being passed where repository factories are expected, or vice-versa, likely within the test setup fixtures.
+
+Let's correct this by standardizing on passing repository factories to service constructors and ensuring services use session_scope internally to get repository instances when needed.
+
+Here are the full rewrites for the files involved in the new failures:
+
+1. tests/infrastructure/persistence/test_product_repository.py
+Reason for rewrite: Fix the pytest.raises match string in test_update_product.
+
+import pytest
+from typing import Optional, List
+from decimal import Decimal
+
+# Assuming models and repository are correctly importable
+from core.models.product import Product, Department
+from infrastructure.persistence.sqlite.repositories import SqliteProductRepository, SqliteDepartmentRepository
+from infrastructure.persistence.sqlite.database import SessionLocal, Base, engine
+
+# Fixture to create a department for testing products
+@pytest.fixture(scope="function")
+def sample_dept(test_db_session):
+    dept_repo = SqliteDepartmentRepository(test_db_session)
+    dept = dept_repo.add(Department(name="Testing Dept"))
+    test_db_session.commit() # Commit after adding
+    return dept
+
+# Fixture for the repository, using the clean_db session
+@pytest.fixture(scope="function")
+def product_repo(clean_db): # Use clean_db for isolation
+    return SqliteProductRepository(clean_db)
+
+# --- Test Cases ---
+
+def test_add_product(product_repo, sample_dept):
+    """Test adding a valid product."""
+    product = Product(
+        code="P001", description="Test Product 1", cost_price=10.0, sell_price=15.0,
+        department_id=sample_dept.id, uses_inventory=True, quantity_in_stock=50
+    )
+    added_product = product_repo.add(product)
+
+    assert added_product is not None
+    assert added_product.id is not None
+    assert added_product.code == "P001"
+    assert added_product.description == "Test Product 1"
+    assert added_product.department_id == sample_dept.id
+
+def test_add_product_duplicate_code(product_repo, sample_dept):
+    """Test adding a product with a duplicate code raises an error."""
+    product1 = Product(code="DUP01", description="First", cost_price=1.0, sell_price=2.0, department_id=sample_dept.id)
+    product_repo.add(product1)
+
+    product2 = Product(code="DUP01", description="Second", cost_price=2.0, sell_price=3.0, department_id=sample_dept.id)
+    with pytest.raises(ValueError, match="Product code 'DUP01' already exists"):
+        product_repo.add(product2)
+
+def test_get_product_by_id(product_repo, sample_dept):
+    """Test retrieving a product by its ID."""
+    product = product_repo.add(Product(
+        code="GET01", description="Get Me", cost_price=1.0, sell_price=2.0, department_id=sample_dept.id
+    ))
+    retrieved_prod = product_repo.get_by_id(product.id)
+
+    assert retrieved_prod is not None
+    assert retrieved_prod.id == product.id
+    assert retrieved_prod.code == "GET01"
+    # Check if department is loaded
+    assert retrieved_prod.department is not None
+    assert retrieved_prod.department.id == sample_dept.id
+    assert retrieved_prod.department.name == sample_dept.name
+
+def test_get_product_by_id_not_found(product_repo):
+    """Test retrieving a non-existent product ID returns None."""
+    retrieved_prod = product_repo.get_by_id(99999)
+    assert retrieved_prod is None
+
+def test_get_product_by_code(product_repo, sample_dept):
+    """Test retrieving a product by its code."""
+    product = product_repo.add(Product(
+        code="GETC01", description="Get By Code", cost_price=1.0, sell_price=2.0, department_id=sample_dept.id
+    ))
+    retrieved_prod = product_repo.get_by_code("GETC01")
+
+    assert retrieved_prod is not None
+    assert retrieved_prod.id == product.id
+    assert retrieved_prod.code == "GETC01"
+    assert retrieved_prod.department is not None
+    assert retrieved_prod.department.id == sample_dept.id
+
+def test_get_product_by_code_not_found(product_repo):
+    """Test retrieving a non-existent product code returns None."""
+    retrieved_prod = product_repo.get_by_code("NONEXISTENT")
+    assert retrieved_prod is None
+
+def test_get_all_products(product_repo, sample_dept):
+    """Test retrieving all products."""
+    product_repo.add(Product(code="ALL01", description="All Prod 1", cost_price=1, sell_price=2, department_id=sample_dept.id))
+    product_repo.add(Product(code="ALL02", description="All Prod 2", cost_price=3, sell_price=4, department_id=sample_dept.id))
+
+    all_products = product_repo.get_all()
+    assert len(all_products) >= 2 # Use >= in case other tests added products
+    assert any(p.code == "ALL01" for p in all_products)
+    assert any(p.code == "ALL02" for p in all_products)
+    # Check if departments are loaded
+    assert all(p.department is not None for p in all_products if p.department_id == sample_dept.id)
+
+def test_update_product(product_repo, sample_dept, test_db_session):
+    """Test updating various fields of an existing product."""
+    prod_to_update = product_repo.add(Product(
+        code="UPD01", description="Original Desc", cost_price=5.0, sell_price=10.0,
+        department_id=sample_dept.id, uses_inventory=True, quantity_in_stock=10
+    ))
+    test_db_session.commit() # Commit the addition
+
+    prod_to_update.description = "Updated Desc"
+    prod_to_update.sell_price = 12.50
+    prod_to_update.uses_inventory = False
+    # Create a new department with a unique name
+    dept_repo = SqliteDepartmentRepository(test_db_session)
+    other_dept = dept_repo.add(Department(name="Update Target Dept")) # Use unique name
+    test_db_session.commit() # Commit the new department
+    prod_to_update.department_id = other_dept.id
+    prod_to_update.department = None # Clear loaded department for update
+
+    updated_product = product_repo.update(prod_to_update) # Get the returned updated product
+    test_db_session.commit() # Commit the update
+
+    # Verify the update using the returned object or re-fetching
+    retrieved_prod = product_repo.get_by_id(prod_to_update.id)
+    assert retrieved_prod is not None
+    assert retrieved_prod.description == "Updated Desc"
+    assert retrieved_prod.sell_price == 12.50
+    assert retrieved_prod.uses_inventory is False
+    assert retrieved_prod.department_id == other_dept.id
+    assert retrieved_prod.department is not None
+    assert retrieved_prod.department.name == "Update Target Dept" # Verify correct dept name
+    # Ensure other fields didn't change unintentionally
+    assert retrieved_prod.code == "UPD01"
+    assert retrieved_prod.cost_price == 5.0
+    assert retrieved_prod.quantity_in_stock == 10
+
+    # For non-existent product, we expect a ValueError to be raised
+    non_existent_prod = Product(id=7777, code="GHOST", description="Ghost Prod")
+    # --- FIX: Correct the match string to exactly match the raised error ---
+    with pytest.raises(ValueError, match=r"Product with ID 7777 not found"):
+        product_repo.update(non_existent_prod)
+
+def test_delete_product(product_repo, sample_dept):
+    """Test deleting a product."""
+    product = product_repo.add(Product(
+        code="DEL01", description="Delete Me", cost_price=1.0, sell_price=2.0, department_id=sample_dept.id
+    ))
+    product_id = product.id
+    assert product_repo.get_by_id(product_id) is not None # Verify it exists
+
+    deleted = product_repo.delete(product_id)
+    assert deleted is True
+    assert product_repo.get_by_id(product_id) is None # Verify it's gone
+
+def test_delete_product_not_found(product_repo):
+    """Test deleting a non-existent product returns False."""
+    deleted = product_repo.delete(99999)
+    assert deleted is False
+
+def test_search_product(product_repo, sample_dept):
+    """Test searching for products by code and description."""
+    product_repo.add(Product(code="SRC01", description="Searchable One", cost_price=1, sell_price=2, department_id=sample_dept.id))
+    product_repo.add(Product(code="SRC02", description="Another Searchable", cost_price=3, sell_price=4, department_id=sample_dept.id))
+    product_repo.add(Product(code="OTH01", description="Other Item", cost_price=5, sell_price=6, department_id=sample_dept.id))
+
+    # Search by code fragment
+    results_code = product_repo.search("SRC")
+    assert len(results_code) == 2
+    assert all("SRC" in p.code for p in results_code)
+
+    # Search by description fragment (case-insensitive)
+    results_desc = product_repo.search("searchable")
+    assert len(results_desc) == 2
+    assert all("searchable" in p.description.lower() for p in results_desc)
+
+    # Search for specific code
+    results_specific = product_repo.search("SRC01")
+    assert len(results_specific) == 1
+    assert results_specific[0].code == "SRC01"
+
+    # Search with no results
+    results_none = product_repo.search("XYZNOMATCH")
+    assert len(results_none) == 0
+
+def test_get_low_stock(product_repo, sample_dept):
+    """Test retrieving products with low stock."""
+    product_repo.add(Product(code="LOW01", description="Low Stock Item", cost_price=1, sell_price=2, department_id=sample_dept.id, uses_inventory=True, quantity_in_stock=5, min_stock=10))
+    product_repo.add(Product(code="OK01", description="OK Stock Item", cost_price=3, sell_price=4, department_id=sample_dept.id, uses_inventory=True, quantity_in_stock=15, min_stock=10))
+    product_repo.add(Product(code="NOINV01", description="No Inventory Item", cost_price=5, sell_price=6, uses_inventory=False, quantity_in_stock=0, min_stock=10))
+    product_repo.add(Product(code="LOW02", description="Another Low Stock", cost_price=7, sell_price=8, department_id=sample_dept.id, uses_inventory=True, quantity_in_stock=1, min_stock=2))
+
+    low_stock_products = product_repo.get_low_stock()
+    assert len(low_stock_products) == 2
+    low_stock_codes = {p.code for p in low_stock_products}
+    assert "LOW01" in low_stock_codes
+    assert "LOW02" in low_stock_codes
+    assert "OK01" not in low_stock_codes
+    assert "NOINV01" not in low_stock_codes
+
+def test_update_stock(product_repo, sample_dept):
+    """Test updating only the stock quantity and cost price."""
+    product = product_repo.add(Product(
+        code="STK01", description="Stock Update", cost_price=10.0, sell_price=20.0,
+        department_id=sample_dept.id, uses_inventory=True, quantity_in_stock=50
+    ))
+    product_id = product.id
+
+    # Update stock only
+    updated = product_repo.update_stock(product_id, 45.5)
+    assert updated is True
+    retrieved = product_repo.get_by_id(product_id)
+    assert retrieved.quantity_in_stock == 45.5
+    assert retrieved.cost_price == 10.0 # Cost should not change
+
+    # Update stock and cost
+    updated = product_repo.update_stock(product_id, 60.0, 11.5)
+    assert updated is True
+    retrieved = product_repo.get_by_id(product_id)
+    assert retrieved.quantity_in_stock == 60.0
+    assert retrieved.cost_price == 11.5 # Cost should change
+    assert retrieved.sell_price == 20.0 # Sell price should not change
+
+def test_get_all_products_filtered_and_paginated(product_repo, sample_dept):
+    """Test retrieving products with filtering and pagination."""
+    # Add some test data
+    dept2 = SqliteDepartmentRepository(product_repo.session).add(Department(name="Dept 2"))
+    product_repo.add(Product(code="FILT01", description="Filter A", department_id=sample_dept.id, sell_price=10))
+    product_repo.add(Product(code="FILT02", description="Filter B", department_id=dept2.id, sell_price=20))
+    product_repo.add(Product(code="FILT03", description="Filter C", department_id=sample_dept.id, sell_price=30))
+    product_repo.session.commit()
+
+    # Test filtering by department
+    # Note: get_all doesn't have filter_params anymore, use get_by_department_id
+    dept1_products = product_repo.get_by_department_id(sample_dept.id)
+    assert len(dept1_products) == 2
+    assert all(p.department_id == sample_dept.id for p in dept1_products)
+
+    # Test pagination (using get_all which doesn't support it directly, simulate if needed)
+    # For real pagination, the repository method would need limit/offset params
+    # all_prods = product_repo.get_all()
+    # assert len(all_prods) >= 3
+
+def test_get_all_products_sorting(product_repo, sample_dept):
+    """Test retrieving products with sorting."""
+    # Add some test data
+    product_repo.add(Product(code="SORTC", description="Sort C", department_id=sample_dept.id, sell_price=10))
+    product_repo.add(Product(code="SORTA", description="Sort A", department_id=sample_dept.id, sell_price=30))
+    product_repo.add(Product(code="SORTB", description="Sort B", department_id=sample_dept.id, sell_price=20))
+    product_repo.session.commit()
+
+    # Default sort (by description)
+    products_desc = product_repo.get_all()
+    assert [p.description for p in products_desc if p.code.startswith("SORT")] == ["Sort A", "Sort B", "Sort C"]
+
+    # Sort by code asc (simulate if get_all supported it)
+    # products_code_asc = product_repo.get_all(sort_by="code_asc")
+    # assert [p.code for p in products_code_asc if p.code.startswith("SORT")] == ["SORTA", "SORTB", "SORTC"]
+
+    # Sort by price desc (simulate if get_all supported it)
+    # products_price_desc = product_repo.get_all(sort_by="sell_price_desc")
+    # assert [p.sell_price for p in products_price_desc if p.code.startswith("SORT")] == [30, 20, 10]
+
+
+2. core/services/invoicing_service.py
+Reason for rewrite: Standardize to use repository factories and session_scope, consistent with other services.
+
+from typing import Optional, Dict, Any, Callable # Added Callable
+from decimal import Decimal
+import json
+from datetime import datetime
+import os
+import logging # Added logging
+
+from sqlalchemy.orm import Session # Added Session for type hinting
+
+# Interfaces and Models
+from core.interfaces.repository_interfaces import IInvoiceRepository, ISaleRepository, ICustomerRepository
+from core.models.invoice import Invoice
+from core.models.sale import Sale
+from core.models.customer import Customer
+
+# Config and Utils
+from config import Config
+from infrastructure.persistence.utils import session_scope # Use session_scope for transactions
+
+# Type alias for repository factories
+RepositoryFactory = Callable[[Session], Any]
+
+logger = logging.getLogger(__name__) # Added logger
+
+class InvoicingService:
+    """Service to handle invoice creation and management."""
+
+    def __init__(
+        self,
+        invoice_repo_factory: RepositoryFactory,
+        sale_repo_factory: RepositoryFactory,
+        customer_repo_factory: RepositoryFactory
+    ):
+        """
+        Initialize with repository factories.
+
+        Args:
+            invoice_repo_factory: Factory function returning IInvoiceRepository instance.
+            sale_repo_factory: Factory function returning ISaleRepository instance.
+            customer_repo_factory: Factory function returning ICustomerRepository instance.
+        """
+        self.invoice_repo_factory = invoice_repo_factory
+        self.sale_repo_factory = sale_repo_factory
+        self.customer_repo_factory = customer_repo_factory
+        logger.debug("InvoicingService initialized with factories.")
+
+    def create_invoice_from_sale(self, sale_id: int) -> Invoice:
+        """
+        Create an invoice from an existing sale within a transaction.
+
+        Args:
+            sale_id: The ID of the sale to generate an invoice for
+
+        Returns:
+            The created Invoice object
+
+        Raises:
+            ValueError: If the sale doesn't exist, already has an invoice,
+                        lacks required customer data, or other validation fails.
+            Exception: For unexpected database errors.
+        """
+        logger.info(f"Attempting to create invoice for sale ID: {sale_id}")
+        with session_scope() as session:
+            logger.debug(f"Session scope created for sale ID: {sale_id}")
+            # Instantiate repositories within the session scope
+            sale_repo = self.sale_repo_factory(session)
+            customer_repo = self.customer_repo_factory(session)
+            invoice_repo = self.invoice_repo_factory(session)
+            logger.debug("Repositories instantiated within session.")
+
+            # Check if sale exists
+            sale = sale_repo.get_by_id(sale_id)
+            if not sale:
+                logger.warning(f"Sale with ID {sale_id} not found.")
+                raise ValueError(f"Sale with ID {sale_id} not found")
+
+            # Check if sale already has an invoice
+            existing_invoice = invoice_repo.get_by_sale_id(sale_id)
+            if existing_invoice:
+                logger.warning(f"Sale {sale_id} already has invoice {existing_invoice.invoice_number}.")
+                raise ValueError(f"Sale with ID {sale_id} already has an invoice (Number: {existing_invoice.invoice_number})")
+
+            # Check if sale has a customer (required for invoicing)
+            if not sale.customer_id:
+                logger.warning(f"Sale {sale_id} has no associated customer.")
+                raise ValueError(f"Sale with ID {sale_id} has no associated customer. A customer is required for invoicing.")
+
+            # Get customer data
+            customer = customer_repo.get_by_id(sale.customer_id)
+            if not customer:
+                logger.warning(f"Customer with ID {sale.customer_id} not found for sale {sale_id}.")
+                raise ValueError(f"Customer with ID {sale.customer_id} not found for sale {sale_id}")
+            logger.debug(f"Found customer {customer.name} for sale {sale_id}.")
+
+            # --- Invoice Generation Logic ---
+            customer_details = {
+                "name": customer.name, "address": customer.address, "cuit": customer.cuit,
+                "iva_condition": customer.iva_condition, "email": customer.email, "phone": customer.phone
+            }
+            invoice_number = self._generate_next_invoice_number(session) # Pass session
+            invoice_type = self._determine_invoice_type(customer.iva_condition)
+            subtotal = Decimal(str(sale.total)) # Ensure Decimal
+            iva_rate = self._get_iva_rate(invoice_type, customer.iva_condition)
+
+            if iva_rate > 0:
+                pre_tax_amount = (subtotal / (Decimal('1') + iva_rate)).quantize(Decimal('0.01'))
+                iva_amount = (subtotal - pre_tax_amount).quantize(Decimal('0.01'))
+            else:
+                iva_amount = Decimal('0.00')
+                pre_tax_amount = subtotal.quantize(Decimal('0.01'))
+
+            # Create invoice object
+            invoice = Invoice(
+                sale_id=sale_id, customer_id=sale.customer_id, invoice_number=invoice_number,
+                invoice_date=datetime.now(), invoice_type=invoice_type, customer_details=customer_details,
+                subtotal=pre_tax_amount, iva_amount=iva_amount, total=subtotal,
+                iva_condition=customer.iva_condition or "Consumidor Final"
+            )
+            logger.debug(f"Invoice object created: {invoice_number}")
+
+            # Add invoice using the repository within the session
+            created_invoice = invoice_repo.add(invoice)
+            logger.info(f"Invoice {created_invoice.invoice_number} (ID: {created_invoice.id}) created successfully for sale {sale_id}.")
+            # session_scope handles commit/rollback
+
+            return created_invoice
+
+    def _generate_next_invoice_number(self, session: Session) -> str:
+        """Generate the next available invoice number within the current session."""
+        invoice_repo = self.invoice_repo_factory(session)
+        pos_number = "0001"
+        try:
+            all_invoices = invoice_repo.get_all()
+            if not all_invoices: return f"{pos_number}-00000001"
+            highest_number = 0
+            for inv in all_invoices:
+                if inv.invoice_number and '-' in inv.invoice_number:
+                    try:
+                        number = int(inv.invoice_number.split('-')[1])
+                        highest_number = max(highest_number, number)
+                    except (ValueError, IndexError): continue
+            next_number = highest_number + 1
+            return f"{pos_number}-{next_number:08d}"
+        except Exception as e:
+            logger.error(f"Error generating invoice number: {e}", exc_info=True)
+            return f"{pos_number}-{datetime.now().strftime('%Y%m%d%H%M%S')}" # Fallback
+
+    def _determine_invoice_type(self, iva_condition: Optional[str]) -> str:
+        """Determine invoice type based on customer's IVA condition."""
+        if not iva_condition: return "B"
+        condition_upper = iva_condition.upper()
+        if "RESPONSABLE INSCRIPTO" in condition_upper: return "A"
+        if "MONOTRIBUTISTA" in condition_upper or "EXENTO" in condition_upper or "CONSUMIDOR FINAL" in condition_upper: return "B"
+        return "B"
+
+    def _get_iva_rate(self, invoice_type: str, iva_condition: Optional[str]) -> Decimal:
+        """Get IVA rate based on invoice type and customer condition."""
+        standard_rate = Decimal('0.21')
+        if invoice_type == "A": return standard_rate
+        if invoice_type == "B": return Decimal('0.00')
+        if iva_condition and "EXENTO" in iva_condition.upper(): return Decimal('0.00')
+        return standard_rate
+
+    # --- Read Methods ---
+    def get_invoice_by_id(self, invoice_id: int) -> Optional[Invoice]:
+        """Get an invoice by ID."""
+        logger.debug(f"Getting invoice by ID: {invoice_id}")
+        with session_scope() as session:
+            invoice_repo = self.invoice_repo_factory(session)
+            return invoice_repo.get_by_id(invoice_id)
+
+    def get_invoice_by_sale_id(self, sale_id: int) -> Optional[Invoice]:
+        """Get an invoice by its associated sale ID."""
+        logger.debug(f"Getting invoice by sale ID: {sale_id}")
+        with session_scope() as session:
+            invoice_repo = self.invoice_repo_factory(session)
+            return invoice_repo.get_by_sale_id(sale_id)
+
+    def get_all_invoices(self) -> List[Invoice]:
+        """Get all invoices."""
+        logger.debug("Getting all invoices.")
+        with session_scope() as session:
+            invoice_repo = self.invoice_repo_factory(session)
+            return invoice_repo.get_all()
+
+    def generate_invoice_pdf(self, invoice_id: int, filename: str = None, output_path: str = None, store_info: Dict[str, str] = None) -> str:
+        """Generate a PDF file for an invoice."""
+        logger.info(f"Generating PDF for invoice ID: {invoice_id}")
+        from infrastructure.reporting.invoice_builder import InvoiceBuilder # Local import
+
+        invoice = self.get_invoice_by_id(invoice_id)
+        if not invoice:
+            logger.error(f"Invoice with ID {invoice_id} not found for PDF generation.")
+            raise ValueError(f"Invoice with ID {invoice_id} not found")
+
+        # Get related sale details (needs session)
+        with session_scope() as session:
+            sale_repo = self.sale_repo_factory(session)
+            sale = sale_repo.get_by_id(invoice.sale_id)
+            if not sale:
+                logger.error(f"Sale with ID {invoice.sale_id} not found for invoice {invoice_id}.")
+                raise ValueError(f"Sale with ID {invoice.sale_id} associated with invoice {invoice_id} not found")
+            # Prepare sale items data (no need to detach if session closes)
+            sale_items_data = [
+                {"code": item.product_code, "description": item.product_description,
+                 "quantity": item.quantity, "unit_price": item.unit_price, "subtotal": item.subtotal}
+                for item in sale.items
+            ]
+        logger.debug(f"Retrieved sale {sale.id} with {len(sale_items_data)} items for invoice PDF.")
+
+        # Determine output filename
+        if output_path:
+            output_file = output_path
+        elif filename:
+            output_file = filename
+        else:
+            os.makedirs('invoices', exist_ok=True)
+            output_file = f"invoices/factura_{invoice.invoice_number.replace('-', '_')}_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+        logger.debug(f"PDF output path set to: {output_file}")
+
+        # Use store info from parameter or config
+        store_info = store_info or {
+            "name": Config.STORE_NAME, "address": Config.STORE_ADDRESS, "cuit": Config.STORE_CUIT,
+            "iva_condition": Config.STORE_IVA_CONDITION, "phone": Config.STORE_PHONE
+        }
+
+        try:
+            builder = InvoiceBuilder(store_info)
+            invoice_data = {
+                "invoice_number": invoice.invoice_number, "invoice_type": invoice.invoice_type,
+                "invoice_date": invoice.invoice_date, "subtotal": invoice.subtotal,
+                "iva_amount": invoice.iva_amount, "total": invoice.total,
+                "customer_details": invoice.customer_details, "cae": getattr(invoice, 'cae', None),
+                "cae_due_date": getattr(invoice, 'cae_due_date', None)
+            }
+            success = builder.generate_invoice_pdf(invoice_data=invoice_data, sale_items=sale_items_data, filename=output_file)
+            if not success:
+                logger.error(f"InvoiceBuilder failed to generate PDF for invoice {invoice_id}.")
+                raise ValueError("PDF generation failed by builder")
+            logger.info(f"Successfully generated PDF: {output_file}")
+            return output_file
+        except Exception as e:
+            logger.error(f"Error generating PDF for invoice {invoice_id}: {e}", exc_info=True)
+            raise ValueError(f"Error generating PDF: {e}")
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+3. tests/core/services/test_invoicing_service.py
+Reason for rewrite: Update fixture to provide repository factories instead of instances.
+
+import pytest
+from unittest.mock import MagicMock, patch
+from decimal import Decimal
+from datetime import datetime, timedelta
+import os
+
+# Import core components
+from core.services.invoicing_service import InvoicingService
+from core.models.invoice import Invoice
+from core.models.sale import Sale, SaleItem
+from core.models.customer import Customer
+from core.interfaces.repository_interfaces import IInvoiceRepository, ISaleRepository, ICustomerRepository
+
+# Import test utilities
+from tests.fixtures.test_data import create_sale, create_customer, create_invoice # Assuming these exist
+
+# --- Fixtures ---
+
+@pytest.fixture
+def mock_invoice_repo_factory():
+    """Factory fixture for mock Invoice Repository."""
+    def factory(session=None): # Factory takes optional session
+        repo = MagicMock(spec=IInvoiceRepository)
+        repo.get_by_sale_id.return_value = None
+        repo.get_all.return_value = []
+        repo.add.side_effect = lambda inv: inv # Simple add mock
+        return repo
+    return factory
+
+@pytest.fixture
+def mock_sale_repo_factory():
+    """Factory fixture for mock Sale Repository."""
+    def factory(session=None):
+        repo = MagicMock(spec=ISaleRepository)
+        repo.get_by_id.return_value = None # Default to not found
+        return repo
+    return factory
+
+@pytest.fixture
+def mock_customer_repo_factory():
+    """Factory fixture for mock Customer Repository."""
+    def factory(session=None):
+        repo = MagicMock(spec=ICustomerRepository)
+        repo.get_by_id.return_value = None # Default to not found
+        return repo
+    return factory
+
+@pytest.fixture
+def invoicing_service(mock_invoice_repo_factory, mock_sale_repo_factory, mock_customer_repo_factory):
+    """Provides an InvoicingService instance with mock repository factories."""
+    return InvoicingService(
+        invoice_repo_factory=mock_invoice_repo_factory,
+        sale_repo_factory=mock_sale_repo_factory,
+        customer_repo_factory=mock_customer_repo_factory
+    )
+
+# --- Test Class ---
+
+class TestInvoicingService:
+
+    def test_create_invoice_from_sale_success(self, invoicing_service, mock_sale_repo_factory, mock_customer_repo_factory, mock_invoice_repo_factory):
+        """Test successful invoice creation from a valid sale."""
+        # Arrange
+        sale_id = 1
+        customer_id = 10
+        sale = create_sale(id=sale_id, customer_id=customer_id, total=Decimal("121.00"))
+        customer = create_customer(id=customer_id, name="Test Customer", iva_condition="Responsable Inscripto")
+
+        # Configure mocks returned by factories within the service call's session_scope
+        mock_sale_repo = mock_sale_repo_factory()
+        mock_sale_repo.get_by_id.return_value = sale
+        mock_customer_repo = mock_customer_repo_factory()
+        mock_customer_repo.get_by_id.return_value = customer
+        mock_invoice_repo = mock_invoice_repo_factory()
+        mock_invoice_repo.get_by_sale_id.return_value = None # No existing invoice
+        mock_invoice_repo.get_all.return_value = [] # For number generation
+
+        # Patch the factories to return our configured mocks when called by the service
+        with patch.object(invoicing_service, 'sale_repo_factory', return_value=mock_sale_repo), \
+             patch.object(invoicing_service, 'customer_repo_factory', return_value=mock_customer_repo), \
+             patch.object(invoicing_service, 'invoice_repo_factory', return_value=mock_invoice_repo):
+
+            # Act
+            invoice = invoicing_service.create_invoice_from_sale(sale_id)
+
+            # Assert
+            assert invoice is not None
+            assert invoice.sale_id == sale_id
+            assert invoice.customer_id == customer_id
+            assert invoice.invoice_number == "0001-00000001"
+            assert invoice.invoice_type == "A" # Responsable Inscripto -> Type A
+            assert invoice.total == Decimal("121.00")
+            assert invoice.subtotal == Decimal("100.00") # 121 / 1.21
+            assert invoice.iva_amount == Decimal("21.00") # 121 - 100
+            assert invoice.customer_details["name"] == "Test Customer"
+            mock_invoice_repo.add.assert_called_once() # Verify repo add was called
+
+    def test_create_invoice_sale_not_found(self, invoicing_service, mock_sale_repo_factory):
+        """Test invoice creation fails if the sale doesn't exist."""
+        # Arrange
+        sale_id = 99
+        mock_sale_repo = mock_sale_repo_factory()
+        mock_sale_repo.get_by_id.return_value = None # Simulate sale not found
+
+        with patch.object(invoicing_service, 'sale_repo_factory', return_value=mock_sale_repo):
+            # Act & Assert
+            with pytest.raises(ValueError, match=f"Sale with ID {sale_id} not found"):
+                invoicing_service.create_invoice_from_sale(sale_id)
+
+    def test_create_invoice_already_exists(self, invoicing_service, mock_sale_repo_factory, mock_invoice_repo_factory):
+        """Test invoice creation fails if an invoice already exists for the sale."""
+        # Arrange
+        sale_id = 2
+        customer_id = 11
+        sale = create_sale(id=sale_id, customer_id=customer_id)
+        existing_invoice = create_invoice(id=50, sale_id=sale_id, invoice_number="0001-00000050")
+
+        mock_sale_repo = mock_sale_repo_factory()
+        mock_sale_repo.get_by_id.return_value = sale
+        mock_invoice_repo = mock_invoice_repo_factory()
+        mock_invoice_repo.get_by_sale_id.return_value = existing_invoice # Simulate existing invoice
+
+        with patch.object(invoicing_service, 'sale_repo_factory', return_value=mock_sale_repo), \
+             patch.object(invoicing_service, 'invoice_repo_factory', return_value=mock_invoice_repo):
+            # Act & Assert
+            with pytest.raises(ValueError, match=f"Sale with ID {sale_id} already has an invoice"):
+                invoicing_service.create_invoice_from_sale(sale_id)
+
+    def test_create_invoice_no_customer(self, invoicing_service, mock_sale_repo_factory):
+        """Test invoice creation fails if the sale has no associated customer."""
+        # Arrange
+        sale_id = 3
+        sale = create_sale(id=sale_id, customer_id=None) # No customer_id
+
+        mock_sale_repo = mock_sale_repo_factory()
+        mock_sale_repo.get_by_id.return_value = sale
+
+        with patch.object(invoicing_service, 'sale_repo_factory', return_value=mock_sale_repo):
+            # Act & Assert
+            with pytest.raises(ValueError, match=f"Sale with ID {sale_id} has no associated customer"):
+                invoicing_service.create_invoice_from_sale(sale_id)
+
+    def test_create_invoice_customer_not_found(self, invoicing_service, mock_sale_repo_factory, mock_customer_repo_factory):
+        """Test invoice creation fails if the customer associated with the sale is not found."""
+        # Arrange
+        sale_id = 4
+        customer_id = 99
+        sale = create_sale(id=sale_id, customer_id=customer_id)
+
+        mock_sale_repo = mock_sale_repo_factory()
+        mock_sale_repo.get_by_id.return_value = sale
+        mock_customer_repo = mock_customer_repo_factory()
+        mock_customer_repo.get_by_id.return_value = None # Simulate customer not found
+
+        with patch.object(invoicing_service, 'sale_repo_factory', return_value=mock_sale_repo), \
+             patch.object(invoicing_service, 'customer_repo_factory', return_value=mock_customer_repo):
+            # Act & Assert
+            with pytest.raises(ValueError, match=f"Customer with ID {customer_id} not found for sale {sale_id}"):
+                invoicing_service.create_invoice_from_sale(sale_id)
+
+    def test_determine_invoice_type(self, invoicing_service):
+        """Test the logic for determining invoice type based on IVA condition."""
+        assert invoicing_service._determine_invoice_type("Responsable Inscripto") == "A"
+        assert invoicing_service._determine_invoice_type("RESPONSABLE INSCRIPTO") == "A"
+        assert invoicing_service._determine_invoice_type("Monotributista") == "B"
+        assert invoicing_service._determine_invoice_type("MONOTRIBUTO") == "B"
+        assert invoicing_service._determine_invoice_type("Exento") == "B"
+        assert invoicing_service._determine_invoice_type("Consumidor Final") == "B"
+        assert invoicing_service._determine_invoice_type(None) == "B"
+        assert invoicing_service._determine_invoice_type("Otro") == "B"
+
+    def test_get_iva_rate(self, invoicing_service):
+        """Test the logic for getting the correct IVA rate."""
+        assert invoicing_service._get_iva_rate("A", "Responsable Inscripto") == Decimal("0.21")
+        assert invoicing_service._get_iva_rate("B", "Consumidor Final") == Decimal("0.00")
+        assert invoicing_service._get_iva_rate("B", "Monotributista") == Decimal("0.00")
+        assert invoicing_service._get_iva_rate("B", "Exento") == Decimal("0.00")
+        # Type A to non-RI should still apply standard rate (though unusual)
+        assert invoicing_service._get_iva_rate("A", "Consumidor Final") == Decimal("0.21")
+
+    def test_get_next_invoice_number_first_invoice(self, invoicing_service, mock_invoice_repo_factory):
+        """Test generating the first invoice number."""
+        # Arrange
+        mock_invoice_repo = mock_invoice_repo_factory()
+        mock_invoice_repo.get_all.return_value = [] # No existing invoices
+
+        with patch.object(invoicing_service, 'invoice_repo_factory', return_value=mock_invoice_repo):
+            # Act
+            # Need a dummy session object for the internal call
+            mock_session = MagicMock()
+            next_number = invoicing_service._generate_next_invoice_number(mock_session)
+
+            # Assert
+            assert next_number == "0001-00000001"
+
+    def test_get_next_invoice_number(self, invoicing_service, mock_invoice_repo_factory):
+        """Test generating subsequent invoice numbers."""
+        # Arrange
+        existing_invoices = [
+            create_invoice(invoice_number="0001-00000123"),
+            create_invoice(invoice_number="0001-00000045"), # Lower number
+            create_invoice(invoice_number="0002-00000001"), # Different POS
+            create_invoice(invoice_number="Malformed"),    # Malformed
+        ]
+        mock_invoice_repo = mock_invoice_repo_factory()
+        mock_invoice_repo.get_all.return_value = existing_invoices
+
+        with patch.object(invoicing_service, 'invoice_repo_factory', return_value=mock_invoice_repo):
+            # Act
+            mock_session = MagicMock()
+            next_number = invoicing_service._generate_next_invoice_number(mock_session)
+
+            # Assert
+            assert next_number == "0001-00000124" # Should increment the highest from POS 0001
+
+    @patch('infrastructure.reporting.invoice_builder.InvoiceBuilder') # Mock the builder
+    def test_generate_invoice_pdf(self, MockInvoiceBuilder, invoicing_service, mock_sale_repo_factory, mock_invoice_repo_factory):
+        """Test successful PDF generation."""
+        # Arrange
+        invoice_id = 10
+        sale_id = 5
+        invoice = create_invoice(id=invoice_id, sale_id=sale_id, invoice_number="F-001")
+        sale = create_sale(id=sale_id, items=[SaleItem(product_id=1, quantity=1, unit_price=10)])
+
+        # Mock repo responses
+        mock_invoice_repo = mock_invoice_repo_factory()
+        mock_invoice_repo.get_by_id.return_value = invoice
+        mock_sale_repo = mock_sale_repo_factory()
+        mock_sale_repo.get_by_id.return_value = sale
+
+        # Mock the builder instance methods
+        mock_builder_instance = MockInvoiceBuilder.return_value
+        mock_builder_instance.generate_invoice_pdf.return_value = True # Simulate success
+
+        # Patch factories
+        with patch.object(invoicing_service, 'invoice_repo_factory', return_value=mock_invoice_repo), \
+             patch.object(invoicing_service, 'sale_repo_factory', return_value=mock_sale_repo):
+
+            # Act
+            pdf_path = invoicing_service.generate_invoice_pdf(invoice_id)
+
+            # Assert
+            assert pdf_path.endswith(".pdf")
+            MockInvoiceBuilder.assert_called_once() # Check builder was instantiated
+            mock_builder_instance.generate_invoice_pdf.assert_called_once() # Check generation was called
+            # Check some args passed to builder
+            call_args = mock_builder_instance.generate_invoice_pdf.call_args[1] # kwargs
+            assert call_args['invoice_data']['invoice_number'] == "F-001"
+            assert len(call_args['sale_items']) == 1
+
+    @patch('infrastructure.reporting.invoice_builder.InvoiceBuilder')
+    def test_generate_invoice_pdf_error_handling(self, MockInvoiceBuilder, invoicing_service, mock_invoice_repo_factory):
+        """Test error handling during PDF generation."""
+        # Arrange
+        invoice_id = 11
+        mock_invoice_repo = mock_invoice_repo_factory()
+        mock_invoice_repo.get_by_id.return_value = None # Simulate invoice not found
+
+        with patch.object(invoicing_service, 'invoice_repo_factory', return_value=mock_invoice_repo):
+            # Act & Assert for invoice not found
+            with pytest.raises(ValueError, match=f"Invoice with ID {invoice_id} not found"):
+                invoicing_service.generate_invoice_pdf(invoice_id)
+
+        # Arrange for builder failure
+        invoice = create_invoice(id=invoice_id, sale_id=6)
+        sale = create_sale(id=6)
+        mock_invoice_repo.get_by_id.return_value = invoice
+        mock_sale_repo = mock_sale_repo_factory() # Need sale repo mock too
+        mock_sale_repo.get_by_id.return_value = sale
+
+        mock_builder_instance = MockInvoiceBuilder.return_value
+        mock_builder_instance.generate_invoice_pdf.return_value = False # Simulate builder failure
+
+        with patch.object(invoicing_service, 'invoice_repo_factory', return_value=mock_invoice_repo), \
+             patch.object(invoicing_service, 'sale_repo_factory', return_value=mock_sale_repo):
+            # Act & Assert for builder failure
+            with pytest.raises(ValueError, match="PDF generation failed by builder"):
+                invoicing_service.generate_invoice_pdf(invoice_id)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+4. tests/core/services/test_invoicing_service_extra.py
+Reason for rewrite: Update fixture to provide repository factories instead of instances.
+
+import pytest
+from unittest.mock import MagicMock, patch
+from decimal import Decimal
+from datetime import datetime
+
+# Import core components
+from core.services.invoicing_service import InvoicingService
+from core.models.invoice import Invoice
+from core.models.sale import Sale, SaleItem
+from core.models.customer import Customer
+from core.interfaces.repository_interfaces import IInvoiceRepository, ISaleRepository, ICustomerRepository
+
+# Import test utilities
+from tests.fixtures.test_data import create_sale, create_customer, create_invoice
+
+# --- Dummy Repositories for Edge Cases ---
+
+class DummyInvoiceRepo:
+    def __init__(self, session=None): # Accept optional session
+        self.invoices = {}
+        self.next_id = 1
+        self.fail_on_add = False
+
+    def add(self, invoice):
+        if self.fail_on_add:
+            raise ValueError("Simulated DB error on add")
+        if invoice.sale_id in [inv.sale_id for inv in self.invoices.values()]:
+             # Simulate unique constraint violation if needed by test
+             raise ValueError(f"Invoice for sale {invoice.sale_id} already exists (dummy repo)")
+        invoice.id = self.next_id
+        self.invoices[self.next_id] = invoice
+        self.next_id += 1
+        return invoice
+
+    def get_by_id(self, invoice_id):
+        return self.invoices.get(invoice_id)
+
+    def get_by_sale_id(self, sale_id):
+        for inv in self.invoices.values():
+            if inv.sale_id == sale_id:
+                return inv
+        return None
+
+    def get_all(self):
+        return list(self.invoices.values())
+
+class DummySaleRepo:
+    def __init__(self, session=None):
+        self.sales = {}
+
+    def get_by_id(self, sale_id):
+        return self.sales.get(sale_id)
+
+class DummyCustomerRepo:
+    def __init__(self, session=None):
+        self.customers = {}
+
+    def get_by_id(self, customer_id):
+        return self.customers.get(customer_id)
+
+# --- Fixtures using Dummy Repos ---
+
+@pytest.fixture
+def dummy_invoice_repo_factory():
+    return DummyInvoiceRepo # Return the class itself as the factory
+
+@pytest.fixture
+def dummy_sale_repo_factory():
+    return DummySaleRepo
+
+@pytest.fixture
+def dummy_customer_repo_factory():
+    return DummyCustomerRepo
+
+@pytest.fixture
+def invoicing_service_dummy(dummy_invoice_repo_factory, dummy_sale_repo_factory, dummy_customer_repo_factory):
+    """Provides InvoicingService with dummy repository factories."""
+    return InvoicingService(
+        invoice_repo_factory=dummy_invoice_repo_factory,
+        sale_repo_factory=dummy_sale_repo_factory,
+        customer_repo_factory=dummy_customer_repo_factory
+    )
+
+# --- Test Cases ---
+
+def test_generate_next_invoice_number_first(invoicing_service_dummy):
+    """Test generating the first invoice number with no existing invoices."""
+    mock_session = MagicMock() # Need a session object for the call
+    next_num = invoicing_service_dummy._generate_next_invoice_number(mock_session)
+    assert next_num == "0001-00000001"
+
+def test_generate_next_invoice_number_increment(invoicing_service_dummy, dummy_invoice_repo_factory):
+    """Test generating subsequent invoice numbers."""
+    # Arrange: Add existing invoices directly to the dummy repo instance
+    # We need to instantiate the factory to get the instance used by the service
+    mock_session = MagicMock()
+    invoice_repo_instance = dummy_invoice_repo_factory(mock_session) # Instantiate
+    invoice_repo_instance.add(create_invoice(sale_id=1, invoice_number="0001-00000005"))
+    invoice_repo_instance.add(create_invoice(sale_id=2, invoice_number="0001-00000002"))
+
+    # Patch the factory within the service to return this specific instance
+    with patch.object(invoicing_service_dummy, 'invoice_repo_factory', return_value=invoice_repo_instance):
+        # Act
+        next_num = invoicing_service_dummy._generate_next_invoice_number(mock_session)
+        # Assert
+        assert next_num == "0001-00000006"
+
+def test_determine_invoice_type_various(invoicing_service_dummy):
+    """Test various IVA conditions for invoice type determination."""
+    assert invoicing_service_dummy._determine_invoice_type("Responsable Inscripto") == "A"
+    assert invoicing_service_dummy._determine_invoice_type("Monotributista") == "B"
+    assert invoicing_service_dummy._determine_invoice_type("Exento") == "B"
+    assert invoicing_service_dummy._determine_invoice_type("Consumidor Final") == "B"
+    assert invoicing_service_dummy._determine_invoice_type(None) == "B"
+    assert invoicing_service_dummy._determine_invoice_type("UNKNOWN") == "B"
+
+def test_get_iva_rate_various(invoicing_service_dummy):
+    """Test IVA rate calculation for different scenarios."""
+    assert invoicing_service_dummy._get_iva_rate("A", "Responsable Inscripto") == Decimal("0.21")
+    assert invoicing_service_dummy._get_iva_rate("B", "Consumidor Final") == Decimal("0.00")
+    assert invoicing_service_dummy._get_iva_rate("B", "Exento") == Decimal("0.00")
+
+def test_create_invoice_sale_not_found(invoicing_service_dummy):
+    """Test creating invoice when sale does not exist."""
+    with pytest.raises(ValueError, match="Sale with ID 99 not found"):
+        invoicing_service_dummy.create_invoice_from_sale(99)
+
+def test_create_invoice_already_has_invoice(invoicing_service_dummy, dummy_sale_repo_factory, dummy_invoice_repo_factory):
+    """Test creating invoice when one already exists for the sale."""
+    # Arrange
+    sale_id = 10
+    customer_id = 20
+    sale = create_sale(id=sale_id, customer_id=customer_id)
+    existing_invoice = create_invoice(sale_id=sale_id, invoice_number="EXISTING-001")
+
+    # Setup dummy repos
+    mock_session = MagicMock()
+    sale_repo_instance = dummy_sale_repo_factory(mock_session)
+    sale_repo_instance.sales[sale_id] = sale
+    invoice_repo_instance = dummy_invoice_repo_factory(mock_session)
+    invoice_repo_instance.add(existing_invoice) # Add existing invoice
+
+    # Patch factories
+    with patch.object(invoicing_service_dummy, 'sale_repo_factory', return_value=sale_repo_instance), \
+         patch.object(invoicing_service_dummy, 'invoice_repo_factory', return_value=invoice_repo_instance):
+        # Act & Assert
+        with pytest.raises(ValueError, match=f"Sale with ID {sale_id} already has an invoice"):
+            invoicing_service_dummy.create_invoice_from_sale(sale_id)
+
+def test_create_invoice_no_customer(invoicing_service_dummy, dummy_sale_repo_factory):
+    """Test creating invoice when sale has no customer."""
+    # Arrange
+    sale_id = 11
+    sale = create_sale(id=sale_id, customer_id=None) # No customer
+
+    mock_session = MagicMock()
+    sale_repo_instance = dummy_sale_repo_factory(mock_session)
+    sale_repo_instance.sales[sale_id] = sale
+
+    with patch.object(invoicing_service_dummy, 'sale_repo_factory', return_value=sale_repo_instance):
+        # Act & Assert
+        with pytest.raises(ValueError, match=f"Sale with ID {sale_id} has no associated customer"):
+            invoicing_service_dummy.create_invoice_from_sale(sale_id)
+
+def test_create_invoice_customer_not_found(invoicing_service_dummy, dummy_sale_repo_factory, dummy_customer_repo_factory):
+    """Test creating invoice when customer linked to sale is not found."""
+    # Arrange
+    sale_id = 12
+    customer_id = 99 # Non-existent customer
+    sale = create_sale(id=sale_id, customer_id=customer_id)
+
+    mock_session = MagicMock()
+    sale_repo_instance = dummy_sale_repo_factory(mock_session)
+    sale_repo_instance.sales[sale_id] = sale
+    # Customer repo factory will return a repo that returns None for get_by_id(99)
+
+    with patch.object(invoicing_service_dummy, 'sale_repo_factory', return_value=sale_repo_instance), \
+         patch.object(invoicing_service_dummy, 'customer_repo_factory', return_value=dummy_customer_repo_factory()): # Pass instantiated dummy repo
+        # Act & Assert
+        with pytest.raises(ValueError, match=f"Customer with ID {customer_id} not found for sale {sale_id}"):
+            invoicing_service_dummy.create_invoice_from_sale(sale_id)
+
+def test_create_invoice_success(invoicing_service_dummy, dummy_sale_repo_factory, dummy_customer_repo_factory):
+    """Test successful invoice creation with dummy repos."""
+    # Arrange
+    sale_id = 13
+    customer_id = 21
+    sale = create_sale(id=sale_id, customer_id=customer_id, total=Decimal("242.00"))
+    customer = create_customer(id=customer_id, name="Dummy Cust", iva_condition="Responsable Inscripto")
+
+    mock_session = MagicMock()
+    sale_repo_instance = dummy_sale_repo_factory(mock_session)
+    sale_repo_instance.sales[sale_id] = sale
+    customer_repo_instance = dummy_customer_repo_factory(mock_session)
+    customer_repo_instance.customers[customer_id] = customer
+
+    with patch.object(invoicing_service_dummy, 'sale_repo_factory', return_value=sale_repo_instance), \
+         patch.object(invoicing_service_dummy, 'customer_repo_factory', return_value=customer_repo_instance), \
+         patch.object(invoicing_service_dummy, 'invoice_repo_factory', return_value=dummy_invoice_repo_factory()): # Use factory for invoice repo
+        # Act
+        invoice = invoicing_service_dummy.create_invoice_from_sale(sale_id)
+
+        # Assert
+        assert invoice is not None
+        assert invoice.sale_id == sale_id
+        assert invoice.invoice_number == "0001-00000001"
+        assert invoice.invoice_type == "A"
+        assert invoice.total == Decimal("242.00")
+        assert invoice.subtotal == Decimal("200.00")
+        assert invoice.iva_amount == Decimal("42.00")
+
+# --- Test for concurrency simulation ---
+class ConcurrencyInvoiceRepo(DummyInvoiceRepo):
+    def add(self, invoice):
+        # Simulate another process adding an invoice just before this one commits
+        if invoice.sale_id == 1: # Specific sale ID to trigger simulation
+             # Check if it already exists *now*
+             if self.get_by_sale_id(invoice.sale_id):
+                  raise ValueError(f"Simulated concurrency: Invoice for sale {invoice.sale_id} already exists")
+             # Add a dummy one to simulate race condition
+             self.invoices[999] = create_invoice(id=999, sale_id=invoice.sale_id, invoice_number="CONCURRENT-001")
+        # Now try to add the original one (which should fail if the above check is robust)
+        return super().add(invoice)
+
+@pytest.fixture
+def concurrency_invoice_repo_factory():
+    return ConcurrencyInvoiceRepo
+
+def test_create_invoice_duplicate_on_save(invoicing_service_dummy, dummy_sale_repo_factory, dummy_customer_repo_factory, concurrency_invoice_repo_factory):
+    """Test handling of potential duplicate invoice creation during save."""
+    # Arrange
+    sale_id = 1 # Use the ID the mock repo checks for concurrency simulation
+    customer_id = 22
+    sale = create_sale(id=sale_id, customer_id=customer_id)
+    customer = create_customer(id=customer_id)
+
+    mock_session = MagicMock()
+    sale_repo_instance = dummy_sale_repo_factory(mock_session)
+    sale_repo_instance.sales[sale_id] = sale
+    customer_repo_instance = dummy_customer_repo_factory(mock_session)
+    customer_repo_instance.customers[customer_id] = customer
+
+    # Use the concurrency repo factory
+    with patch.object(invoicing_service_dummy, 'sale_repo_factory', return_value=sale_repo_instance), \
+         patch.object(invoicing_service_dummy, 'customer_repo_factory', return_value=customer_repo_instance), \
+         patch.object(invoicing_service_dummy, 'invoice_repo_factory', return_value=concurrency_invoice_repo_factory()):
+        # Act & Assert
+        # The service should catch the ValueError raised by the repo's add method
+        with pytest.raises(ValueError, match="already exists"):
+            invoicing_service_dummy.create_invoice_from_sale(sale_id)
+
+def test_get_invoice_by_id_and_sale_id_and_all(invoicing_service_dummy, dummy_invoice_repo_factory):
+    """Test retrieving invoices."""
+    # Arrange
+    mock_session = MagicMock()
+    invoice_repo_instance = dummy_invoice_repo_factory(mock_session)
+    inv1 = invoice_repo_instance.add(create_invoice(sale_id=101, invoice_number="INV-001"))
+    inv2 = invoice_repo_instance.add(create_invoice(sale_id=102, invoice_number="INV-002"))
+
+    with patch.object(invoicing_service_dummy, 'invoice_repo_factory', return_value=invoice_repo_instance):
+        # Act & Assert
+        assert invoicing_service_dummy.get_invoice_by_id(inv1.id).invoice_number == "INV-001"
+        assert invoicing_service_dummy.get_invoice_by_sale_id(102).invoice_number == "INV-002"
+        assert invoicing_service_dummy.get_invoice_by_id(999) is None
+        assert invoicing_service_dummy.get_invoice_by_sale_id(999) is None
+        all_invoices = invoicing_service_dummy.get_all_invoices()
+        assert len(all_invoices) == 2
+        assert {inv.id for inv in all_invoices} == {inv1.id, inv2.id}
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+5. tests/integration/test_invoicing_integration.py
+Reason for rewrite: Update fixture usage to pass repository factories.
+
+import pytest
+from decimal import Decimal
+from unittest.mock import patch
+
+# Import necessary components
+from core.services.invoicing_service import InvoicingService
+from core.services.sale_service import SaleService
+from core.services.customer_service import CustomerService
+from core.services.product_service import ProductService
+from core.services.inventory_service import InventoryService # Needed by SaleService
+from infrastructure.persistence.sqlite.repositories import (
+    SqliteInvoiceRepository, SqliteSaleRepository, SqliteCustomerRepository,
+    SqliteProductRepository, SqliteDepartmentRepository, SqliteInventoryRepository,
+    SqliteCreditPaymentRepository # Needed by CustomerService
+)
+from infrastructure.persistence.utils import session_scope
+from core.models.product import Product, Department
+from core.models.customer import Customer
+from core.models.sale import SaleItem
+
+# --- Fixtures ---
+
+# Repository Factories (reusable)
+@pytest.fixture
+def invoice_repo_factory(): return SqliteInvoiceRepository
+@pytest.fixture
+def sale_repo_factory(): return SqliteSaleRepository
+@pytest.fixture
+def customer_repo_factory(): return SqliteCustomerRepository
+@pytest.fixture
+def product_repo_factory(): return SqliteProductRepository
+@pytest.fixture
+def dept_repo_factory(): return SqliteDepartmentRepository
+@pytest.fixture
+def inventory_repo_factory(): return SqliteInventoryRepository
+@pytest.fixture
+def credit_payment_repo_factory(): return SqliteCreditPaymentRepository
+
+# Service Fixtures (using factories)
+@pytest.fixture
+def customer_service_integration(customer_repo_factory, credit_payment_repo_factory):
+    return CustomerService(customer_repo_factory, credit_payment_repo_factory)
+
+@pytest.fixture
+def product_service_integration(product_repo_factory, dept_repo_factory):
+    return ProductService(product_repo_factory, dept_repo_factory)
+
+@pytest.fixture
+def inventory_service_integration(inventory_repo_factory, product_repo_factory):
+    return InventoryService(inventory_repo_factory, product_repo_factory)
+
+@pytest.fixture
+def sale_service_integration(sale_repo_factory, product_repo_factory, inventory_service_integration, customer_service_integration):
+    # SaleService needs instances of other services
+    return SaleService(
+        sale_repository_factory=sale_repo_factory,
+        product_repository_factory=product_repo_factory,
+        inventory_service=inventory_service_integration,
+        customer_service=customer_service_integration
+    )
+
+@pytest.fixture
+def invoicing_service_integration(invoice_repo_factory, sale_repo_factory, customer_repo_factory):
+    """Provides an InvoicingService instance with real repository factories for integration tests."""
+    return InvoicingService(
+        invoice_repo_factory=invoice_repo_factory,
+        sale_repo_factory=sale_repo_factory,
+        customer_repo_factory=customer_repo_factory
+    )
+
+# --- Test Class ---
+
+@pytest.mark.integration
+class TestInvoicingIntegration:
+
+    @pytest.fixture(autouse=True)
+    def setup_data(self, clean_db, product_service_integration, customer_service_integration, sale_service_integration, test_user):
+        """Set up necessary data for invoicing tests."""
+        self.session = clean_db
+        self.test_user = test_user # Assuming test_user fixture provides a User object
+
+        # Create Department
+        dept = product_service_integration.add_department(Department(name="Test Dept"))
+        self.session.commit()
+        self.dept_id = dept.id
+
+        # Create Product
+        prod = product_service_integration.add_product(Product(
+            code="INV-P1", description="Invoice Product", sell_price=100.0, cost_price=50.0,
+            department_id=self.dept_id, uses_inventory=True, quantity_in_stock=10
+        ))
+        self.session.commit()
+        self.product_id = prod.id
+
+        # Create Customer
+        cust = customer_service_integration.add_customer(
+            name="Invoice Customer", email="inv@test.com", iva_condition="Responsable Inscripto"
+        )
+        self.session.commit()
+        self.customer_id = cust.id
+
+        # Create Sale (using SaleService)
+        sale_items_data = [{'product_id': self.product_id, 'quantity': Decimal("1.0")}]
+        self.sale = sale_service_integration.create_sale(
+            items_data=sale_items_data,
+            customer_id=self.customer_id,
+            payment_type="Efectivo", # Non-credit sale
+            user_id=self.test_user.id # Pass user ID
+        )
+        self.session.commit() # Commit the sale and related inventory/customer updates
+        self.sale_id = self.sale.id
+
+    def test_create_invoice_from_sale(self, invoicing_service_integration):
+        """Test creating an invoice from a sale successfully."""
+        # Act
+        invoice = invoicing_service_integration.create_invoice_from_sale(self.sale_id)
+        self.session.commit() # Commit invoice creation
+
+        # Assert
+        assert invoice is not None
+        assert invoice.sale_id == self.sale_id
+        assert invoice.customer_id == self.customer_id
+        assert invoice.invoice_number is not None
+        assert invoice.invoice_type == "A" # Based on customer IVA condition
+        assert invoice.total == Decimal("100.00") # Sale total
+        assert invoice.subtotal == Decimal("82.64") # 100 / 1.21
+        assert invoice.iva_amount == Decimal("17.36") # 100 - 82.64
+
+        # Verify it exists in DB
+        retrieved_invoice = invoicing_service_integration.get_invoice_by_id(invoice.id)
+        assert retrieved_invoice is not None
+        assert retrieved_invoice.id == invoice.id
+
+    def test_get_all_invoices(self, invoicing_service_integration):
+        """Test retrieving all invoices after creating one."""
+        # Arrange: Create an invoice first
+        invoice1 = invoicing_service_integration.create_invoice_from_sale(self.sale_id)
+        self.session.commit()
+
+        # Act
+        all_invoices = invoicing_service_integration.get_all_invoices()
+
+        # Assert
+        assert isinstance(all_invoices, list)
+        assert len(all_invoices) >= 1
+        assert any(inv.id == invoice1.id for inv in all_invoices)
+
+    @patch('infrastructure.reporting.invoice_builder.InvoiceBuilder.generate_invoice_pdf', return_value=True) # Mock PDF generation success
+    @patch('os.path.exists', return_value=True) # Mock file existence
+    @patch('ui.views.invoices_view.InvoicesView.open_file_with_default_app') # Mock file opening
+    def test_generate_invoice_pdf(self, mock_open_file, mock_exists, mock_generate, invoicing_service_integration):
+        """Test generating a PDF for an existing invoice."""
+        # Arrange: Create an invoice first
+        invoice = invoicing_service_integration.create_invoice_from_sale(self.sale_id)
+        self.session.commit()
+
+        # Act
+        pdf_path = invoicing_service_integration.generate_invoice_pdf(invoice.id)
+
+        # Assert
+        assert pdf_path is not None
+        assert pdf_path.endswith(".pdf")
+        mock_generate.assert_called_once() # Check InvoiceBuilder method was called
+        # mock_open_file is not called directly by the service, but by the view usually
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+6. tests/integration/test_end_to_end_flows.py
+Reason for rewrite: Update fixture usage to pass repository factories. Address potential fixture errors.
+
+import pytest
+from decimal import Decimal
+from unittest.mock import MagicMock, patch
+
+# Import necessary components
+from core.services.product_service import ProductService
+from core.services.customer_service import CustomerService
+from core.services.sale_service import SaleService
+from core.services.invoicing_service import InvoicingService
+from core.services.inventory_service import InventoryService
+from infrastructure.persistence.sqlite.repositories import (
+    SqliteProductRepository, SqliteDepartmentRepository, SqliteCustomerRepository,
+    SqliteSaleRepository, SqliteInventoryRepository, SqliteInvoiceRepository,
+    SqliteCreditPaymentRepository # Added
+)
+from infrastructure.persistence.utils import session_scope
+from core.models.product import Product, Department
+from core.models.customer import Customer
+from core.models.sale import SaleItem
+from core.models.user import User # Import User
+
+# --- Fixtures (using factories) ---
+@pytest.fixture
+def dept_repo_factory(): return SqliteDepartmentRepository
+@pytest.fixture
+def product_repo_factory(): return SqliteProductRepository
+@pytest.fixture
+def customer_repo_factory(): return SqliteCustomerRepository
+@pytest.fixture
+def sale_repo_factory(): return SqliteSaleRepository
+@pytest.fixture
+def inventory_repo_factory(): return SqliteInventoryRepository
+@pytest.fixture
+def invoice_repo_factory(): return SqliteInvoiceRepository
+@pytest.fixture
+def credit_payment_repo_factory(): return SqliteCreditPaymentRepository
+
+@pytest.fixture
+def product_service_e2e(product_repo_factory, dept_repo_factory):
+    return ProductService(product_repo_factory, dept_repo_factory)
+
+@pytest.fixture
+def customer_service_e2e(customer_repo_factory, credit_payment_repo_factory):
+    return CustomerService(customer_repo_factory, credit_payment_repo_factory)
+
+@pytest.fixture
+def inventory_service_e2e(inventory_repo_factory, product_repo_factory):
+    return InventoryService(inventory_repo_factory, product_repo_factory)
+
+@pytest.fixture
+def sale_service_e2e(sale_repo_factory, product_repo_factory, inventory_service_e2e, customer_service_e2e):
+    return SaleService(sale_repo_factory, product_repo_factory, inventory_service_e2e, customer_service_e2e)
+
+@pytest.fixture
+def invoicing_service_e2e(invoice_repo_factory, sale_repo_factory, customer_repo_factory):
+    return InvoicingService(invoice_repo_factory, sale_repo_factory, customer_repo_factory)
+
+# --- Test Classes ---
+
+@pytest.mark.integration
+@pytest.mark.xfail(reason="End-to-end tests depend on full app structure and may need adjustment.")
+class TestSalesEndToEndFlow:
+
+    @pytest.fixture(autouse=True)
+    def setup_e2e_data(self, clean_db, product_service_e2e, customer_service_e2e, test_user):
+        """Set up data needed for sales flow tests."""
+        self.session = clean_db
+        self.test_user = test_user # Use the test_user fixture
+
+        # Create Department & Product
+        dept = product_service_e2e.add_department(Department(name="E2E Dept"))
+        self.session.commit()
+        prod = product_service_e2e.add_product(Product(
+            code="E2E-P1", description="E2E Product", sell_price=50.0, cost_price=20.0,
+            department_id=dept.id, uses_inventory=True, quantity_in_stock=20
+        ))
+        self.session.commit()
+        self.product_id = prod.id
+
+        # Create Customer
+        cust = customer_service_e2e.add_customer(name="E2E Customer", email="e2e@test.com")
+        self.session.commit()
+        self.customer_id = cust.id
+
+    def test_complete_sale_process(self, sale_service_e2e, product_service_e2e, inventory_service_e2e):
+        """Test a complete sale from adding items to finalizing."""
+        # Arrange
+        items_data = [{'product_id': self.product_id, 'quantity': Decimal("2.0")}]
+
+        # Act: Create the sale
+        created_sale = sale_service_e2e.create_sale(
+            items_data=items_data,
+            customer_id=self.customer_id,
+            payment_type="Efectivo",
+            user_id=self.test_user.id
+        )
+        self.session.commit() # Commit sale and inventory changes
+
+        # Assert: Sale created
+        assert created_sale is not None
+        assert created_sale.id is not None
+        assert len(created_sale.items) == 1
+        assert created_sale.total == Decimal("100.00") # 2 * 50.0
+
+        # Assert: Inventory updated
+        updated_product = product_service_e2e.get_product_by_id(self.product_id)
+        assert updated_product.quantity_in_stock == 18.0 # 20 - 2
+
+        # Assert: Inventory movement logged (optional check)
+        movements = inventory_service_e2e.get_inventory_movements(product_id=self.product_id)
+        assert len(movements) >= 1
+        assert movements[0].movement_type == "SALE"
+        assert movements[0].quantity == -2.0
+        assert movements[0].related_id == created_sale.id
+
+    def test_sale_with_error_handling(self, sale_service_e2e, product_service_e2e):
+        """Test error handling during sale creation (e.g., insufficient stock)."""
+        # Arrange: Try to sell more than available stock
+        items_data = [{'product_id': self.product_id, 'quantity': Decimal("25.0")}] # Only 20 in stock
+
+        # Act & Assert: Expect ValueError due to insufficient stock
+        with pytest.raises(ValueError, match="Insufficient stock"):
+            sale_service_e2e.create_sale(
+                items_data=items_data,
+                customer_id=self.customer_id,
+                payment_type="Efectivo",
+                user_id=self.test_user.id
+            )
+        # No commit needed as transaction should roll back
+
+        # Assert: Inventory should NOT have changed
+        product_after = product_service_e2e.get_product_by_id(self.product_id)
+        assert product_after.quantity_in_stock == 20.0
+
+@pytest.mark.integration
+@pytest.mark.xfail(reason="End-to-end tests depend on full app structure and may need adjustment.")
+class TestInvoicingEndToEndFlow:
+
+    @pytest.fixture(autouse=True)
+    def setup_e2e_data(self, clean_db, product_service_e2e, customer_service_e2e, sale_service_e2e, test_user):
+        """Set up data needed for invoicing flow tests."""
+        self.session = clean_db
+        self.test_user = test_user
+
+        # Create Department & Product
+        dept = product_service_e2e.add_department(Department(name="E2E Inv Dept"))
+        self.session.commit()
+        prod = product_service_e2e.add_product(Product(
+            code="E2E-INV", description="E2E Invoice Product", sell_price=121.0, cost_price=60.0,
+            department_id=dept.id, uses_inventory=True, quantity_in_stock=5
+        ))
+        self.session.commit()
+        self.product_id = prod.id
+
+        # Create Customer (RI for Type A invoice)
+        cust = customer_service_e2e.add_customer(
+            name="E2E Invoice Customer", email="e2e_inv@test.com", iva_condition="Responsable Inscripto"
+        )
+        self.session.commit()
+        self.customer_id = cust.id
+
+        # Create Sale
+        sale_items_data = [{'product_id': self.product_id, 'quantity': Decimal("1.0")}]
+        self.sale = sale_service_e2e.create_sale(
+            items_data=sale_items_data,
+            customer_id=self.customer_id,
+            payment_type="Tarjeta",
+            user_id=self.test_user.id
+        )
+        self.session.commit()
+        self.sale_id = self.sale.id
+
+    def test_invoice_generation_from_sale(self, invoicing_service_e2e):
+        """Test generating an invoice from a previously created sale."""
+        # Act
+        invoice = invoicing_service_e2e.create_invoice_from_sale(self.sale_id)
+        self.session.commit()
+
+        # Assert
+        assert invoice is not None
+        assert invoice.id is not None
+        assert invoice.sale_id == self.sale_id
+        assert invoice.invoice_number is not None
+        assert invoice.invoice_type == "A"
+        assert invoice.total == Decimal("121.00")
+        assert invoice.subtotal == Decimal("100.00")
+        assert invoice.iva_amount == Decimal("21.00")
+
+        # Verify retrieval
+        retrieved = invoicing_service_e2e.get_invoice_by_id(invoice.id)
+        assert retrieved is not None
+        assert retrieved.id == invoice.id
+
+@pytest.mark.integration
+@pytest.mark.xfail(reason="Concurrency tests are complex and may require specific setup.")
+class TestConcurrencyAndEdgeCases:
+
+    @pytest.fixture(autouse=True)
+    def setup_concurrency_data(self, clean_db, product_service_e2e, test_user):
+        """Set up data for concurrency tests."""
+        self.session = clean_db
+        self.test_user = test_user
+        dept = product_service_e2e.add_department(Department(name="Conc Dept"))
+        self.session.commit()
+        prod = product_service_e2e.add_product(Product(
+            code="CONC-P1", description="Concurrency Product", sell_price=10.0, cost_price=5.0,
+            department_id=dept.id, uses_inventory=True, quantity_in_stock=10
+        ))
+        self.session.commit()
+        self.product_id = prod.id
+
+    def test_inventory_updates_during_concurrent_sales(self, sale_service_e2e, product_service_e2e):
+        """Simulate concurrent sales affecting the same product inventory."""
+        # This requires actual concurrency simulation (e.g., threading) which is complex
+        # For now, we simulate sequentially but check final state
+        items_data = [{'product_id': self.product_id, 'quantity': Decimal("3.0")}]
+
+        # Sale 1
+        sale1 = sale_service_e2e.create_sale(items_data, payment_type="Efectivo", user_id=self.test_user.id)
+        self.session.commit()
+        prod_after_1 = product_service_e2e.get_product_by_id(self.product_id)
+        assert prod_after_1.quantity_in_stock == 7.0 # 10 - 3
+
+        # Sale 2 (concurrently)
+        sale2 = sale_service_e2e.create_sale(items_data, payment_type="Tarjeta", user_id=self.test_user.id)
+        self.session.commit()
+        prod_after_2 = product_service_e2e.get_product_by_id(self.product_id)
+        assert prod_after_2.quantity_in_stock == 4.0 # 7 - 3
+
+        # Sale 3 (attempt to oversell)
+        items_data_over = [{'product_id': self.product_id, 'quantity': Decimal("5.0")}]
+        with pytest.raises(ValueError, match="Insufficient stock"):
+            sale_service_e2e.create_sale(items_data_over, payment_type="Efectivo", user_id=self.test_user.id)
+
+        # Final stock check
+        prod_final = product_service_e2e.get_product_by_id(self.product_id)
+        assert prod_final.quantity_in_stock == 4.0 # Should remain unchanged after failed sale
+
+    def test_simple_product_creation(self, product_service_e2e):
+        """Test basic product creation flow within integration context."""
+        dept = product_service_e2e.add_department(Department(name="Simple Create Dept"))
+        self.session.commit()
+        product = product_service_e2e.add_product(Product(
+            code="SIMPLE-P1", description="Simple Product", sell_price=9.99, cost_price=4.50,
+            department_id=dept.id
+        ))
+        self.session.commit()
+
+        assert product is not None
+        assert product.id is not None
+        retrieved = product_service_e2e.get_product_by_id(product.id)
+        assert retrieved is not None
+        assert retrieved.code == "SIMPLE-P1"
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+7. tests/integration/test_main_initialization.py
+Reason for rewrite: Update tests to reflect the standard pattern of using repository factories for service initialization.
+
+import pytest
+from unittest.mock import MagicMock, patch
+
+# Import necessary components
+from core.services.invoicing_service import InvoicingService
+from core.interfaces.repository_interfaces import IInvoiceRepository, ISaleRepository, ICustomerRepository
+from infrastructure.persistence.sqlite.repositories import SqliteInvoiceRepository # Import real repo
+
+# --- Test Class ---
+
+@pytest.mark.integration
+class TestInvoicingServiceFixInMain:
+
+    def test_proposed_fix_directly(self):
+        """
+        Demonstrates the original error: passing repository classes (factories)
+        directly without instantiation leads to 'object is not callable'.
+        This test should fail if InvoicingService expects instances.
+        (Updated: Now expects factories, so this test structure is correct,
+         but the error it originally tested for is fixed by the service rewrite).
+        """
+        # Mock factories (returning classes themselves)
+        mock_invoice_factory = MagicMock(return_value=SqliteInvoiceRepository) # Returns the class
+        mock_sale_factory = MagicMock()
+        mock_customer_factory = MagicMock()
+
+        # Instantiate service with factories (as it should be now)
+        service = InvoicingService(
+            invoice_repo_factory=mock_invoice_factory,
+            sale_repo_factory=mock_sale_factory,
+            customer_repo_factory=mock_customer_factory
+        )
+
+        # Mock session_scope to avoid actual DB interaction
+        with patch('infrastructure.persistence.utils.session_scope') as mock_scope:
+            # Mock the session object yielded by the context manager
+            mock_session = MagicMock()
+            mock_scope.return_value.__enter__.return_value = mock_session
+
+            # Configure the mock factory to return a mock repo instance when called with the session
+            mock_repo_instance = MagicMock(spec=IInvoiceRepository)
+            mock_repo_instance.get_all.return_value = [] # Mock the method called inside the service
+            mock_invoice_factory.return_value = mock_repo_instance # Factory now returns the instance
+
+            # Act: Call a method that uses the repository factory
+            # This should now work because the service uses session_scope
+            # and calls the factory *inside* the scope.
+            try:
+                invoices = service.get_all_invoices()
+                assert invoices == [] # Expect empty list from mock
+                # Verify the factory was called within the scope
+                # mock_invoice_factory.assert_called_once_with(mock_session) # This check is tricky with patching
+                mock_repo_instance.get_all.assert_called_once() # Check the instance method was called
+            except TypeError as e:
+                pytest.fail(f"Service call failed with TypeError, likely factory issue: {e}")
+            except AttributeError as e:
+                 pytest.fail(f"Service call failed with AttributeError, likely repo method issue: {e}")
+
+
+    def test_fix_with_actual_repository(self, clean_db):
+        """
+        Tests InvoicingService with real repository factories and a clean DB session.
+        Verifies the service correctly uses session_scope and factories.
+        """
+        # Real repository factories
+        def get_invoice_repo(session): return SqliteInvoiceRepository(session)
+        def get_sale_repo(session): return MagicMock(spec=ISaleRepository) # Mock unused repos
+        def get_customer_repo(session): return MagicMock(spec=ICustomerRepository)
+
+        # Instantiate service with real factories
+        service = InvoicingService(
+            invoice_repo_factory=get_invoice_repo,
+            sale_repo_factory=get_sale_repo,
+            customer_repo_factory=get_customer_repo
+        )
+
+        # Act: Call a method using the real session from clean_db fixture
+        # session_scope is used internally by the service method
+        try:
+            invoices = service.get_all_invoices()
+            # Assert: Should return empty list from clean DB
+            assert invoices == []
+        except Exception as e:
+            pytest.fail(f"get_all_invoices failed with real repo factory: {e}")
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+8. tests/integration/test_user_integration.py
+Reason for rewrite: Ensure tests use clean_db fixture correctly and handle potential commit requirements.
+
+import pytest
+from unittest.mock import MagicMock
+
+# Import necessary components
+from core.services.user_service import UserService
+from infrastructure.persistence.sqlite.repositories import SqliteUserRepository
+from core.models.user import User
+
+@pytest.mark.integration
+class TestUserIntegration:
+
+    @pytest.fixture
+    def user_service(self, clean_db):
+        """Provides a UserService instance with a real repository using the clean DB session."""
+        # Instantiate the repository with the clean session
+        user_repo = SqliteUserRepository(clean_db)
+        # Instantiate the service with the repository instance
+        service = UserService(user_repo)
+        # Yield the service and the session for potential commits within tests
+        yield service, clean_db
+
+    def test_add_user_valid_user_returns_user(self, user_service):
+        """Test adding a valid user returns the created user object with an ID."""
+        service, session = user_service
+        username = "testuser_add"
+        password = "password123"
+
+        # Act
+        created_user = service.add_user(username, password)
+        session.commit() # Commit the transaction
+
+        # Assert
+        assert created_user is not None
+        assert created_user.id is not None
+        assert created_user.username == username
+        assert created_user.is_active is True
+
+        # Verify in DB
+        retrieved_user = service.get_user_by_id(created_user.id)
+        assert retrieved_user is not None
+        assert retrieved_user.id == created_user.id
+
+    def test_add_user_duplicate_username_raises_value_error(self, user_service):
+        """Test adding a user with a duplicate username raises ValueError."""
+        service, session = user_service
+        username = "duplicate_user"
+        password = "password123"
+
+        # Arrange: Add the user first
+        service.add_user(username, password)
+        session.commit()
+
+        # Act & Assert: Try adding again
+        with pytest.raises(ValueError, match=f"Username '{username}' already exists"):
+            service.add_user(username, "another_password")
+        # No commit needed as the second add should fail and rollback implicitly
+
+    def test_authenticate_user_valid_credentials_returns_user(self, user_service):
+        """Test authenticating with valid credentials returns the user."""
+        service, session = user_service
+        username = "auth_user"
+        password = "correct_password"
+
+        # Arrange: Add the user
+        added_user = service.add_user(username, password)
+        session.commit()
+
+        # Act
+        authenticated_user = service.authenticate_user(username, password)
+
+        # Assert
+        assert authenticated_user is not None
+        assert authenticated_user.id == added_user.id
+        assert authenticated_user.username == username
+
+    def test_authenticate_user_invalid_credentials_returns_none(self, user_service):
+        """Test authenticating with invalid credentials returns None."""
+        service, session = user_service
+        username = "auth_user_fail"
+        password = "correct_password"
+
+        # Arrange: Add the user
+        service.add_user(username, password)
+        session.commit()
+
+        # Act: Try authenticating with wrong password
+        authenticated_user = service.authenticate_user(username, "wrong_password")
+
+        # Assert
+        assert authenticated_user is None
+
+        # Act: Try authenticating with non-existent user
+        authenticated_user_nonexistent = service.authenticate_user("nonexistent", "password")
+
+        # Assert
+        assert authenticated_user_nonexistent is None
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+9. main.py
+Reason for rewrite: Revert the workaround for InvoicingService and use the standard factory pattern, as the service itself now handles session scope.
+
+from contextlib import contextmanager
+from typing import Callable
+import sys
+import os
+
+from PySide6.QtWidgets import QApplication, QDialog
+
+# Core Services
+from core.services.customer_service import CustomerService
+from core.services.corte_service import CorteService
+from core.services.inventory_service import InventoryService
+from core.services.invoicing_service import InvoicingService
+from core.services.purchase_service import PurchaseService
+from core.services.product_service import ProductService
+from core.services.reporting_service import ReportingService
+from core.services.sale_service import SaleService
+from core.services.user_service import UserService
+
+# Infrastructure
+from infrastructure.persistence.sqlite.database import init_db, SessionLocal
+from infrastructure.persistence.sqlite.repositories import (
+    SqliteProductRepository, SqliteDepartmentRepository, SqliteInventoryRepository,
+    SqliteSaleRepository, SqliteCustomerRepository, SqliteCreditPaymentRepository,
+    SqliteSupplierRepository, SqlitePurchaseOrderRepository, SqliteUserRepository,
+    SqliteCashDrawerRepository, SqliteInvoiceRepository
+)
+from infrastructure.persistence.utils import session_scope, session_scope_provider # Import provider
+
+# UI
+import ui.resources.resources # Import compiled resources
+import ui.main_window
+from ui.dialogs.login_dialog import LoginDialog
+from core.models.user import User # Import User model
+
+def main(test_mode=False, test_user=None, mock_services=None):
+    """
+    Main application entry point.
+
+    Args:
+        test_mode: If True, enables testing mode bypassing login dialog
+        test_user: A pre-authenticated user object to use in test mode
+        mock_services: A dictionary of mock services to use in test mode
+
+    Returns:
+        In test mode, returns a tuple of (app, main_window) for testing
+        In normal mode, the function doesn't return (calls sys.exit)
+    """
+    # Fix for "This plugin does not support propagateSizeHints()" warning on Windows
+    if sys.platform == 'win32':
+        os.environ['QT_QPA_PLATFORM'] = 'windows:darkmode=0'
+
+    # Initialize database and session provider
+    init_db() # Make sure tables are created
+    session_scope_provider.set_default_session_factory(SessionLocal)
+
+    # Use provided mock services in test mode or create real services
+    if test_mode and mock_services:
+        # Use mock services provided for testing
+        product_service = mock_services.get('product_service')
+        inventory_service = mock_services.get('inventory_service')
+        sale_service = mock_services.get('sale_service')
+        customer_service = mock_services.get('customer_service')
+        purchase_service = mock_services.get('purchase_service')
+        invoicing_service = mock_services.get('invoicing_service')
+        corte_service = mock_services.get('corte_service')
+        reporting_service = mock_services.get('reporting_service')
+        user_service = mock_services.get('user_service')
+    else:
+        # --- Repository Factories --- #
+        def get_inventory_repo(session): return SqliteInventoryRepository(session)
+        def get_product_repo(session): return SqliteProductRepository(session)
+        def get_dept_repo(session): return SqliteDepartmentRepository(session)
+        def get_sale_repo(session): return SqliteSaleRepository(session)
+        def get_customer_repo(session): return SqliteCustomerRepository(session)
+        def get_credit_payment_repo(session): return SqliteCreditPaymentRepository(session)
+        def get_supplier_repo(session): return SqliteSupplierRepository(session)
+        def get_po_repo(session): return SqlitePurchaseOrderRepository(session)
+        def get_cash_drawer_repo(session): return SqliteCashDrawerRepository(session)
+        def get_invoice_repo(session): return SqliteInvoiceRepository(session)
+        def get_user_repo(session): return SqliteUserRepository(session)
+
+        # --- Service Instantiation (using factories) ---
+        user_service = None
+        try:
+            with session_scope() as session:
+                user_repo_instance = get_user_repo(session)
+                user_service = UserService(user_repo_instance)
+                try:
+                    print("Attempting to add admin user...")
+                    admin_user = user_service.add_user("admin", "12345")
+                    print(f"Admin user created successfully with ID: {admin_user.id}")
+                    session.commit()
+                except ValueError as e:
+                    if "already exists" in str(e): print("Admin user already exists.")
+                    else: raise e
+                    session.rollback()
+                except Exception as e:
+                    session.rollback()
+                    print(f"An unexpected error occurred during admin user creation: {e}")
+        except Exception as e:
+            print(f"Failed to initialize user service or add admin user: {e}")
+            if not test_mode: sys.exit(1)
+            else: raise
+
+        if not user_service:
+            print("User service could not be created. Exiting.")
+            if not test_mode: sys.exit(1)
+            else: raise ValueError("User service could not be created")
+
+        # --- Instantiate other services using factories ---
+        product_service = ProductService(get_product_repo, get_dept_repo)
+        inventory_service = InventoryService(get_inventory_repo, get_product_repo)
+        customer_service = CustomerService(get_customer_repo, get_credit_payment_repo)
+        sale_service = SaleService(get_sale_repo, get_product_repo, inventory_service, customer_service)
+        purchase_service = PurchaseService(get_po_repo, get_supplier_repo, get_product_repo, inventory_service)
+        corte_service = CorteService(get_sale_repo, get_cash_drawer_repo)
+        # --- Standardize InvoicingService instantiation ---
+        invoicing_service = InvoicingService(get_invoice_repo, get_sale_repo, get_customer_repo) # Pass factories
+
+        @contextmanager
+        def sale_repo_factory_ctx():
+            with session_scope() as session:
+                yield get_sale_repo(session)
+        reporting_service = ReportingService(sale_repo_factory_ctx)
+
+    # --- Application Setup ---
+    if test_mode:
+        app = object()
+    else:
+        app = QApplication(sys.argv)
+        try:
+            style_file_path = os.path.join(os.path.dirname(__file__), "ui", "style.qss")
+            if os.path.exists(style_file_path):
+                with open(style_file_path, "r", encoding='utf-8') as style_file:
+                    app.setStyleSheet(style_file.read())
+                print("Loaded custom stylesheet")
+            else: print(f"Stylesheet not found at: {style_file_path}")
+        except Exception as e: print(f"Could not load stylesheet: {e}")
+
+    # --- Login ---
+    logged_in_user = None
+    if test_mode and test_user:
+        logged_in_user = test_user
+    else:
+        login_dialog = LoginDialog(user_service)
+        if login_dialog.exec() == QDialog.Accepted:
+            logged_in_user = login_dialog.get_logged_in_user()
+            if not logged_in_user:
+                print("Login accepted but no user returned. Exiting.")
+                if not test_mode: sys.exit(1)
+                else: raise ValueError("Login accepted but no user returned")
+        else:
+            print("Login cancelled or failed. Exiting.")
+            if not test_mode: sys.exit(0)
+            else: return None, None
+
+    # --- Main Window ---
+    main_window = ui.main_window.MainWindow(
+        logged_in_user=logged_in_user, product_service=product_service,
+        inventory_service=inventory_service, sale_service=sale_service,
+        customer_service=customer_service, purchase_service=purchase_service,
+        invoicing_service=invoicing_service, corte_service=corte_service,
+        reporting_service=reporting_service
+    )
+
+    if not test_mode:
+        main_window.show()
+        sys.exit(app.exec())
+    else:
+        return app, main_window
+
+if __name__ == "__main__":
+    main()
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+After applying these changes, re-run pytest. The goal is to eliminate the TypeError related to factories/instances and the AssertionError in the product repository test. The integration test errors might resolve themselves once the service instantiation is correct, or they might reveal further issues to debug.

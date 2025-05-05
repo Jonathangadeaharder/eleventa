@@ -48,9 +48,10 @@ class DirectMethodTester:
         with patch.object(QMessageBox, 'information') as mock_info:
             # Create a CashDrawerView instance but patch its __init__ to do nothing
             view = CashDrawerView.__new__(CashDrawerView)
-            view.cash_drawer_service = self.cash_drawer_service
-            view.current_drawer_id = None
-            view.user_id = 1
+            # Properly initialize the view with the needed attributes
+            view.service = self.cash_drawer_service  # matches the attribute name in the class
+            view.current_drawer_id = self.current_drawer_id
+            view.user_id = self.user_id
             
             # Call the method directly
             result = CashDrawerView._handle_open_drawer(view)
@@ -62,12 +63,12 @@ class DirectMethodTester:
             
     def test_add_cash_to_closed_drawer(self):
         """Test _handle_add_cash when drawer is closed."""
-        with patch.object(QMessageBox, 'warning') as mock_warning:
+        with patch('ui.views.cash_drawer_view.QMessageBox.warning') as mock_warning:
             # Create a CashDrawerView instance but patch its __init__ to do nothing
             view = CashDrawerView.__new__(CashDrawerView)
-            view.cash_drawer_service = self.cash_drawer_service
-            view.current_drawer_id = None
-            view.user_id = 1
+            view.service = self.cash_drawer_service
+            view.current_drawer_id = self.current_drawer_id
+            view.user_id = self.user_id
             
             # Call the method directly
             result = CashDrawerView._handle_add_cash(view)
@@ -79,12 +80,12 @@ class DirectMethodTester:
             
     def test_remove_cash_from_closed_drawer(self):
         """Test _handle_remove_cash when drawer is closed."""
-        with patch.object(QMessageBox, 'warning') as mock_warning:
+        with patch('ui.views.cash_drawer_view.QMessageBox.warning') as mock_warning:
             # Create a CashDrawerView instance but patch its __init__ to do nothing
             view = CashDrawerView.__new__(CashDrawerView)
-            view.cash_drawer_service = self.cash_drawer_service
-            view.current_drawer_id = None
-            view.user_id = 1
+            view.service = self.cash_drawer_service
+            view.current_drawer_id = self.current_drawer_id
+            view.user_id = self.user_id
             
             # Call the method directly
             result = CashDrawerView._handle_remove_cash(view)

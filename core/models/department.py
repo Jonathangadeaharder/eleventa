@@ -5,7 +5,11 @@ This module defines the Department class used for categorizing products.
 """
 
 
-class Department:
+from sqlalchemy import Column, Integer, String
+from sqlalchemy.orm import relationship
+from core.database import Base
+
+class Department(Base):
     """
     Department model for product categorization.
     
@@ -14,16 +18,25 @@ class Department:
         name (str): Name of the department.
         description (str, optional): Description of the department.
     """
+    __tablename__ = 'departments'
     
-    def __init__(self, id=None, name=None, description=None):
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False)
+    description = Column(String(255))
+    
+    # Add the relationship to fix the bidirectional reference
+    products = relationship("Product", back_populates="department")
+
+    def __init__(self, name="", description=None, id=None):
         """
         Initialize a new Department.
         
         Args:
-            id (int, optional): Unique identifier for the department.
-            name (str, optional): Name of the department.
+            name (str, optional): Name of the department. Defaults to an empty string.
             description (str, optional): Description of the department.
+            id (int, optional): The department ID (typically set by the database).
         """
-        self.id = id
         self.name = name
-        self.description = description 
+        self.description = description
+        if id is not None:
+            self.id = id

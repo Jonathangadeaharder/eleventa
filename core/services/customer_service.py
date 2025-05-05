@@ -105,10 +105,25 @@ class CustomerService:
             repo = self._customer_repo_factory(session)
             return repo.search(search_term)
 
-    def get_customer_by_id(self, customer_id: int) -> Customer | None:
+    def get_customer_by_id(self, customer_id: Any) -> Customer | None:
+        """
+        Get a customer by ID, supports both integer and UUID customer IDs.
+        
+        Args:
+            customer_id: Customer ID (can be int or UUID)
+            
+        Returns:
+            Customer object if found, None otherwise
+        """
         with session_scope() as session:
             repo = self._customer_repo_factory(session)
-            return repo.get_by_id(customer_id)
+            customer = repo.get_by_id(customer_id)
+            if customer:
+                return customer
+                
+            # Log the failure for debugging
+            logger.debug(f"Customer with ID {customer_id} (type={type(customer_id)}) not found")
+            return None
 
     def get_all_customers(self) -> list[Customer]:
          with session_scope() as session:

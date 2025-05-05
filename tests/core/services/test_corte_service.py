@@ -26,7 +26,6 @@ class TestCorteService(unittest.TestCase):
         """Test the calculate_corte_data method with mock sales and cash drawer entries."""
         # Mock starting balance entry (created before start_time)
         starting_entry = CashDrawerEntry(
-            id=1,
             timestamp=datetime(2025, 4, 13, 7, 45),  # Before start_time
             entry_type=CashDrawerEntryType.START,
             amount=Decimal("1000.00"),
@@ -71,7 +70,6 @@ class TestCorteService(unittest.TestCase):
         mock_cash_entries = [
             # Cash in entry
             CashDrawerEntry(
-                id=2,
                 timestamp=datetime(2025, 4, 13, 12, 0),
                 entry_type=CashDrawerEntryType.IN,
                 amount=Decimal("500.00"),
@@ -81,7 +79,6 @@ class TestCorteService(unittest.TestCase):
             ),
             # Cash out entry
             CashDrawerEntry(
-                id=3,
                 timestamp=datetime(2025, 4, 13, 15, 30),
                 entry_type=CashDrawerEntryType.OUT,
                 amount=Decimal("200.00"),
@@ -122,7 +119,6 @@ class TestCorteService(unittest.TestCase):
         """Test the _calculate_starting_balance private method."""
         # Mock a start entry before our period
         start_entry = CashDrawerEntry(
-            id=1,
             timestamp=datetime(2025, 4, 13, 7, 45),
             entry_type=CashDrawerEntryType.START,
             amount=Decimal("1000.00"),
@@ -176,7 +172,6 @@ class TestCorteService(unittest.TestCase):
         
         # Mock the repository response
         mock_entry = CashDrawerEntry(
-            id=4,
             timestamp=datetime.now(),
             entry_type=CashDrawerEntryType.CLOSE,
             amount=actual_amount,

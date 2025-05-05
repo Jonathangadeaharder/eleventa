@@ -64,9 +64,9 @@ def repositories(db_session):
 @pytest.fixture
 def invoicing_service(repositories):
     return InvoicingService(
-        repositories["invoice_repo"],
-        repositories["sale_repo"],
-        repositories["customer_repo"],
+        invoice_repo_factory=lambda session=None: repositories["invoice_repo"],
+        sale_repo_factory=lambda session=None: repositories["sale_repo"],
+        customer_repo_factory=lambda session=None: repositories["customer_repo"],
     )
 
 def create_customer_and_sale(db_session, sale_repo, customer_repo):
@@ -148,9 +148,9 @@ def test_concurrent_invoice_creation(db_session, repositories):
             
             # Create a service with thread-safe repositories
             thread_service = InvoicingService(
-                thread_repos["invoice_repo"],
-                thread_repos["sale_repo"],
-                thread_repos["customer_repo"]
+                invoice_repo_factory=lambda session=None: thread_repos["invoice_repo"],
+                sale_repo_factory=lambda session=None: thread_repos["sale_repo"],
+                customer_repo_factory=lambda session=None: thread_repos["customer_repo"]
             )
             
             # Try to create an invoice
