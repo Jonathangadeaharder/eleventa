@@ -5,8 +5,9 @@ import datetime
 import uuid
 
 # Import the Base directly from database (modified to avoid circular import)
-import infrastructure.persistence.sqlite.database as db
-Base = db.Base
+# import infrastructure.persistence.sqlite.database as db
+# Base = db.Base
+from infrastructure.persistence.sqlite.database import Base
 
 # Import the SQLiteUUID type
 from .types import SQLiteUUID

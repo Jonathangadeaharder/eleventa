@@ -66,7 +66,7 @@ def session_scope(*, session=None) -> Generator[Any, None, None]:
        Example: with session_scope() as session: ...
     
     2. With an existing session: uses the provided session without managing it
-       Example: with session_scope(existing_session) as session: ...
+       Example: with session_scope(session=existing_session) as session: ...
     
     Args:
         session: Optional existing session to use. If provided, this function
@@ -80,20 +80,35 @@ def session_scope(*, session=None) -> Generator[Any, None, None]:
     
     # If no session provided, create a new one
     if managing_session:
-        session = session_scope_provider.get_session()
+        try:
+            session = session_scope_provider.get_session()
+        except Exception as e:
+            logging.error(f"Failed to create database session: {e}")
+            raise ValueError(f"Database connection error: {e}") from e
     
     try:
         yield session
         # Only commit if we're managing the session
         if managing_session:
-            session.commit()
+            try:
+                session.commit()
+            except Exception as e:
+                logging.error(f"Error during session commit: {e}")
+                session.rollback()
+                raise ValueError(f"Database commit error: {e}") from e
     except Exception as e:
         # Only rollback if we're managing the session
         if managing_session:
             logging.error(f"Error during session: {e}. Rolling back.")
-            session.rollback()
+            try:
+                session.rollback()
+            except Exception as rollback_error:
+                logging.error(f"Additional error during rollback: {rollback_error}")
         raise
     finally:
         # Only close if we're managing the session
         if managing_session:
-            session.close()
+            try:
+                session.close()
+            except Exception as close_error:
+                logging.error(f"Error closing session: {close_error}")

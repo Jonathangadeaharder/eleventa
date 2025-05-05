@@ -46,6 +46,8 @@ def create_tables_in_order(connection):
         if table_name in tables:
             print(f"Creating table: {table_name}")
             tables[table_name].create(bind=connection, checkfirst=True)
+            
+    # DO NOT COMMIT HERE - Rely on outer transaction
     
     # Create any remaining tables not explicitly ordered
     existing_tables = set(inspect(connection).get_table_names())
@@ -60,6 +62,7 @@ def create_tables_in_order(connection):
             if table.name not in existing_tables:
                 print(f"Creating additional table: {table.name}")
                 table.create(bind=connection, checkfirst=True)
+        # DO NOT COMMIT HERE - Rely on outer transaction
 
 
 # Store for holding tables during the creation process

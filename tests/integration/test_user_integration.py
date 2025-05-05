@@ -15,7 +15,9 @@ from infrastructure.persistence.sqlite.models_mapping import map_models, ensure_
 @pytest.fixture
 def user_service(clean_db):
     """Provide a UserService backed by a clean in-memory SQLite database."""
-    repo = SqliteUserRepository(clean_db)
+    # Extract session from the clean_db tuple (session, test_user)
+    session, _ = clean_db
+    repo = SqliteUserRepository(session)
     service = UserService(repo)
     return service
 

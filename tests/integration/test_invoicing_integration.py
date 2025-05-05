@@ -69,7 +69,8 @@ class TestInvoicingIntegration:
         Dependencies:
         - Requires clean_db fixture for a database session
         """
-        session = clean_db
+        # Correctly unpack the tuple yielded by clean_db
+        session, _ = clean_db 
         customer_repo = SqliteCustomerRepository(session)
         cuit_to_find = "20123456789"
 
@@ -97,7 +98,8 @@ class TestInvoicingIntegration:
         Dependencies:
         - Requires clean_db fixture for a database session
         """
-        session = clean_db
+        # Correctly unpack the tuple yielded by clean_db
+        session, _ = clean_db 
         product_repo = SqliteProductRepository(session)
         code_to_find = "TEST001"
 
@@ -116,18 +118,12 @@ class TestInvoicingIntegration:
 
     @pytest.fixture
     def test_user(self, clean_db):
-        """Create a test user for sales and invoices."""
-        from infrastructure.persistence.sqlite.repositories import SqliteUserRepository
-        from core.services.user_service import UserService
-        
-        session = clean_db
-        user_repo = SqliteUserRepository(session)
-        user_service = UserService(user_repo)
-        
-        # Create a test user
-        test_user = user_service.add_user("testuser", "password123")
-        session.flush()
-        return test_user
+        """
+        Retrieve the test user created by the clean_db fixture.
+        """
+        # clean_db yields (session, user)
+        session, user = clean_db
+        return user
 
     @pytest.fixture
     def sale(self, clean_db, customer, product, test_user):
@@ -140,7 +136,8 @@ class TestInvoicingIntegration:
         - Requires updated product fixture
         - Requires test_user fixture
         """
-        session = clean_db
+        # Correctly unpack the tuple yielded by clean_db
+        session, _ = clean_db 
         sale_repo = SqliteSaleRepository(session)
 
         sale_item = SaleItem(
@@ -169,14 +166,12 @@ class TestInvoicingIntegration:
         return sale
 
     @pytest.fixture
-    def services(self, clean_db, customer, product, sale):
+    def services(self, clean_db, customer, product, sale, direct_repo_services=None):
         """
-        Set up service classes with proper repositories.
+        Set up service classes with direct repository instances.
         
-        This fixture:
-        - Creates all necessary service instances with real repositories
-        - Configures services with appropriate factory methods
-        - Mocks services not directly related to invoicing
+        This fixture now uses the direct_repo_services fixture when available,
+        otherwise creates its own direct repository instances for reliability.
         
         Dependencies:
         - Requires clean_db fixture for a database session
@@ -185,36 +180,73 @@ class TestInvoicingIntegration:
         Returns:
         - Dictionary with configured services and active session
         """
-        session = clean_db
+        # Correctly unpack the tuple yielded by clean_db at the beginning
+        session, _ = clean_db 
         
-        # Define repository factory functions that all use the SAME session object
-        def invoice_repo_factory(s=None):
-            # Ignore any session passed in, always use our session
-            return SqliteInvoiceRepository(session)
-            
-        def sale_repo_factory(s=None):
-            # Ignore any session passed in, always use our session
-            return SqliteSaleRepository(session)
-            
-        def customer_repo_factory(s=None):
-            # Ignore any session passed in, always use our session
-            return SqliteCustomerRepository(session)
+        # If we have the direct_repo_services fixture available, use it
+        if direct_repo_services:
+            return direct_repo_services
         
-        # Create the InvoicingService with repository factories
+        # Otherwise create our own services with direct repository instances
+        # Ensure these use the correctly unpacked session
+        invoice_repo = SqliteInvoiceRepository(session)
+        sale_repo = SqliteSaleRepository(session)
+        customer_repo = SqliteCustomerRepository(session)
+        product_repo = SqliteProductRepository(session)
+        
+        # Create services with repository FACTORIES
+        # Define factories that return the existing repo instances (now using correct session)
+        # Remove the redundant unpacking here: session_from_db, _ = clean_db
+        
+        def customer_repo_factory(session=None):
+            # Factory now returns the repo instance which uses the correct session
+            return customer_repo 
+            
+        def credit_payment_repo_factory(session=None):
+            from infrastructure.persistence.sqlite.repositories import SqliteCreditPaymentRepository
+            # Create repo using the correct session from the start of the fixture
+            return SqliteCreditPaymentRepository(session or clean_db[0]) # Keep using clean_db[0] here for safety or pass session directly
+            
+        def invoice_repo_factory(session=None):
+            return invoice_repo
+            
+        def sale_repo_factory(session=None):
+            return sale_repo
+            
+        def product_repo_factory(session=None):
+            return product_repo
+
+        # Instantiate services using factories
         invoicing_service = InvoicingService(
-            invoice_repo_factory=invoice_repo_factory,
-            sale_repo_factory=sale_repo_factory,
-            customer_repo_factory=customer_repo_factory
+            invoice_repo_factory=invoice_repo_factory, # Use factory
+            sale_repo_factory=sale_repo_factory,         # Use factory
+            customer_repo_factory=customer_repo_factory  # Use factory
+        )
+
+        # Create customer service using factories
+        customer_service = CustomerService(
+            customer_repo_factory=customer_repo_factory,       # Use factory
+            credit_payment_repo_factory=credit_payment_repo_factory # Use factory
         )
         
-        # For debugging - verify the sale exists through the repository
-        sale_repo = sale_repo_factory()
-        db_sale = sale_repo.get_by_id(sale.id)
-        print(f"Debug - services fixture - verifying sale id={sale.id} exists in DB: {db_sale is not None}")
+        # Create SaleService using factories
+        # Mock inventory service for simplicity
+        from unittest.mock import MagicMock
+        inventory_service = MagicMock()
         
+        sale_service = SaleService(
+            sale_repo_factory=sale_repo_factory,
+            product_repo_factory=product_repo_factory,
+            customer_repo_factory=customer_repo_factory,
+            inventory_service=inventory_service,
+            customer_service=customer_service
+        )
+
         return {
             "invoicing_service": invoicing_service,
-            "session": session
+            "sale_service": sale_service,
+            "customer_service": customer_service,
+            "session": session # Return the correctly unpacked session
         }
 
     def test_create_invoice_from_sale(self, services, sale):

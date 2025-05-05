@@ -232,24 +232,26 @@ def test_session_scope_provider_setup(mock_set_default_factory, mock_create_engi
     mock_set_default_factory.assert_called()
 
 
-@patch('infrastructure.persistence.sqlite.database.Base')
 @patch('infrastructure.persistence.sqlite.database.ensure_all_models_mapped')
-def test_init_db(mock_ensure_mapped, mock_base):
-    """Test that init_db correctly initializes the database."""
+@patch('infrastructure.persistence.sqlite.table_deps.register_table_creation_events')
+@patch('infrastructure.persistence.sqlite.database.Base.metadata.create_all')
+def test_init_db(mock_create_all, mock_register_events, mock_ensure_mapped):
+    """Test that init_db calls mapping, event registration, and table creation."""
     # Setup
-    mock_metadata = MagicMock()
-    mock_base.metadata = mock_metadata
-    mock_ensure_mapped.return_value = True
-    
+    # No need to mock Base or metadata directly anymore
+    mock_ensure_mapped.return_value = True 
+
     # Import inside the test
-    from infrastructure.persistence.sqlite.database import init_db
+    from infrastructure.persistence.sqlite.database import init_db, engine # Need engine
     
     # Call the function
     init_db()
     
     # Verify behavior
     mock_ensure_mapped.assert_called_once()
-    mock_metadata.create_all.assert_called_once()
+    mock_register_events.assert_called_once() # Check event registration was called
+    # Check create_all was called on the (real) metadata, bound to the engine
+    mock_create_all.assert_called_once_with(bind=engine) 
 
 
 @patch('infrastructure.persistence.sqlite.database.import_mappings')

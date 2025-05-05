@@ -4,23 +4,88 @@ import json
 from datetime import datetime
 import os
 
+# Required imports for PDF generation
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT, TA_CENTER, TA_RIGHT
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.units import inch
+
 from core.interfaces.repository_interfaces import IInvoiceRepository, ISaleRepository, ICustomerRepository
 from core.models.invoice import Invoice
 from core.models.sale import Sale
 from core.models.customer import Customer
 from config import Config
 from infrastructure.persistence.utils import session_scope
+from core.exceptions import ResourceNotFoundError, ExternalServiceError
 
 class InvoicingService:
     """Service to handle invoice creation and management."""
     
-    def __init__(self, invoice_repo_factory: Callable[[], IInvoiceRepository], 
-                 sale_repo_factory: Callable[[], ISaleRepository], 
-                 customer_repo_factory: Callable[[], ICustomerRepository]):
-        """Initialize with repository factories."""
+    def __init__(self, 
+                 invoice_repo_factory=None, 
+                 sale_repo_factory=None, 
+                 customer_repo_factory=None,
+                 invoice_repo=None,
+                 sale_repo=None,
+                 customer_repo=None):
+        """
+        Initialize with either repository factories or direct repository instances.
+        
+        Args:
+            invoice_repo_factory: Factory function to create invoice repository
+            sale_repo_factory: Factory function to create sale repository
+            customer_repo_factory: Factory function to create customer repository
+            invoice_repo: Direct invoice repository instance
+            sale_repo: Direct sale repository instance
+            customer_repo: Direct customer repository instance
+            
+        If factories are provided, they will be used with session_scope.
+        If direct instances are provided, they will be used directly without session management.
+        At least one form (factory or instance) must be provided for each repository type.
+        """
+        # Store repo factories
         self.invoice_repo_factory = invoice_repo_factory
         self.sale_repo_factory = sale_repo_factory
         self.customer_repo_factory = customer_repo_factory
+        
+        # Store direct repo instances
+        self.invoice_repo = invoice_repo
+        self.sale_repo = sale_repo
+        self.customer_repo = customer_repo
+        
+        # Validate that we have either factory or instance for each repo type
+        if not (self.invoice_repo_factory or self.invoice_repo):
+            raise ValueError("Either invoice_repo_factory or invoice_repo must be provided")
+        if not (self.sale_repo_factory or self.sale_repo):
+            raise ValueError("Either sale_repo_factory or sale_repo must be provided")
+        if not (self.customer_repo_factory or self.customer_repo):
+            raise ValueError("Either customer_repo_factory or customer_repo must be provided")
+    
+    def _get_invoice_repo(self, session=None):
+        """Get the appropriate invoice repository."""
+        if self.invoice_repo:
+            return self.invoice_repo
+        elif self.invoice_repo_factory and session:
+            return self.invoice_repo_factory(session)
+        raise ValueError("No invoice repository available")
+        
+    def _get_sale_repo(self, session=None):
+        """Get the appropriate sale repository."""
+        if self.sale_repo:
+            return self.sale_repo
+        elif self.sale_repo_factory and session:
+            return self.sale_repo_factory(session)
+        raise ValueError("No sale repository available")
+        
+    def _get_customer_repo(self, session=None):
+        """Get the appropriate customer repository."""
+        if self.customer_repo:
+            return self.customer_repo
+        elif self.customer_repo_factory and session:
+            return self.customer_repo_factory(session)
+        raise ValueError("No customer repository available")
     
     def create_invoice_from_sale(self, sale_id: int) -> Invoice:
         """
@@ -35,19 +100,15 @@ class InvoicingService:
         Raises:
             ValueError: If the sale doesn't exist, already has an invoice, or lacks required customer data
         """
-        with session_scope() as session:
-            invoice_repo = self.invoice_repo_factory(session)
-            sale_repo = self.sale_repo_factory(session)
-            customer_repo = self.customer_repo_factory(session)
-            
+        # If we have direct repos, use them without session management
+        if all([self.invoice_repo, self.sale_repo, self.customer_repo]):
             # Check if sale exists
-            sale = self._get_sale(sale_id, sale_repo)
+            sale = self._get_sale(sale_id, self.sale_repo)
             if not sale:
                 raise ValueError(f"Sale with ID {sale_id} not found")
                 
-            # Check if sale already has an invoice - this needs to be checked twice
-            # for race conditions in concurrent scenarios
-            existing_invoice = invoice_repo.get_by_sale_id(sale_id)
+            # Check if sale already has an invoice
+            existing_invoice = self.invoice_repo.get_by_sale_id(sale_id)
             if existing_invoice:
                 raise ValueError(f"Sale with ID {sale_id} already has an invoice")
                 
@@ -56,10 +117,11 @@ class InvoicingService:
                 raise ValueError(f"Sale with ID {sale_id} has no associated customer. A customer is required for invoicing.")
                 
             # Get customer data
-            customer = self._get_customer(sale.customer_id, customer_repo)
+            customer = self._get_customer(sale.customer_id, self.customer_repo)
             if not customer:
                 raise ValueError(f"Customer with ID {sale.customer_id} not found")
             
+            # Process the rest of the method the same as before
             # Generate customer details snapshot
             customer_details = {
                 "name": customer.name,
@@ -71,13 +133,12 @@ class InvoicingService:
             }
             
             # Generate invoice number
-            invoice_number = self._generate_next_invoice_number(invoice_repo)
+            invoice_number = self._generate_next_invoice_number(self.invoice_repo)
             
             # Determine invoice type based on customer's IVA condition
             invoice_type = self._determine_invoice_type(customer.iva_condition)
             
             # Calculate financial amounts
-            # For now, we'll use simple calculations; this can be expanded based on specific tax rules
             subtotal = Decimal(str(sale.total))
             iva_rate = self._get_iva_rate(invoice_type, customer.iva_condition)
             
@@ -111,10 +172,9 @@ class InvoicingService:
             
             try:
                 # Save to repository
-                return invoice_repo.add(invoice)
+                return self.invoice_repo.add(invoice)
             except ValueError as e:
-                # This could happen if another thread created an invoice 
-                # between our first check and the attempt to save
+                # Handle race conditions as before
                 msg = str(e).lower()
                 if (
                     "already have an invoice" in msg or
@@ -122,12 +182,104 @@ class InvoicingService:
                     "already exists" in msg or
                     "duplicate" in msg
                 ):
-                    # Do one more check to verify
-                    double_check = invoice_repo.get_by_sale_id(sale_id)
+                    double_check = self.invoice_repo.get_by_sale_id(sale_id)
                     if double_check:
                         raise ValueError(f"Sale with ID {sale_id} already has an invoice (duplicate)")
-                # Re-raise any other errors
                 raise ValueError(f"Invoice creation failed: {e}")
+        else:
+            # Use factories with session management
+            with session_scope() as session:
+                invoice_repo = self._get_invoice_repo(session)
+                sale_repo = self._get_sale_repo(session)
+                customer_repo = self._get_customer_repo(session)
+                
+                # Check if sale exists
+                sale = self._get_sale(sale_id, sale_repo)
+                if not sale:
+                    raise ValueError(f"Sale with ID {sale_id} not found")
+                    
+                # Rest of the original method code remains the same
+                # Check if sale already has an invoice
+                existing_invoice = invoice_repo.get_by_sale_id(sale_id)
+                if existing_invoice:
+                    raise ValueError(f"Sale with ID {sale_id} already has an invoice")
+                    
+                # Check if sale has a customer (required for invoicing)
+                if not sale.customer_id:
+                    raise ValueError(f"Sale with ID {sale_id} has no associated customer. A customer is required for invoicing.")
+                    
+                # Get customer data
+                customer = self._get_customer(sale.customer_id, customer_repo)
+                if not customer:
+                    raise ValueError(f"Customer with ID {sale.customer_id} not found")
+                
+                # Generate customer details snapshot
+                customer_details = {
+                    "name": customer.name,
+                    "address": customer.address,
+                    "cuit": customer.cuit,
+                    "iva_condition": customer.iva_condition,
+                    "email": customer.email,
+                    "phone": customer.phone
+                }
+                
+                # Generate invoice number
+                invoice_number = self._generate_next_invoice_number(invoice_repo)
+                
+                # Determine invoice type based on customer's IVA condition
+                invoice_type = self._determine_invoice_type(customer.iva_condition)
+                
+                # Calculate financial amounts
+                # For now, we'll use simple calculations; this can be expanded based on specific tax rules
+                subtotal = Decimal(str(sale.total))
+                iva_rate = self._get_iva_rate(invoice_type, customer.iva_condition)
+                
+                # Calculate IVA amount (if applicable)
+                if iva_rate > 0:
+                    # IVA is calculated on pre-tax amount
+                    pre_tax_amount = subtotal / (Decimal('1') + iva_rate)
+                    iva_amount = subtotal - pre_tax_amount
+                else:
+                    # No IVA
+                    iva_amount = Decimal('0')
+                    pre_tax_amount = subtotal
+                
+                # Quantize amounts to 2 decimals
+                pre_tax_amount = pre_tax_amount.quantize(Decimal('0.01'))
+                iva_amount = iva_amount.quantize(Decimal('0.01'))
+                
+                # Create invoice
+                invoice = Invoice(
+                    sale_id=sale_id,
+                    customer_id=sale.customer_id,
+                    invoice_number=invoice_number,
+                    invoice_date=datetime.now(),
+                    invoice_type=invoice_type,
+                    customer_details=customer_details,
+                    subtotal=pre_tax_amount,
+                    iva_amount=iva_amount,
+                    total=subtotal,
+                    iva_condition=customer.iva_condition or 'Consumidor Final'
+                )
+                
+                try:
+                    # Save to repository
+                    return invoice_repo.add(invoice)
+                except ValueError as e:
+                    # Handle race conditions as before
+                    msg = str(e).lower()
+                    if (
+                        "already have an invoice" in msg or
+                        "sale may already have an invoice" in msg or
+                        "already exists" in msg or
+                        "duplicate" in msg
+                    ):
+                        # Do one more check to verify
+                        double_check = invoice_repo.get_by_sale_id(sale_id)
+                        if double_check:
+                            raise ValueError(f"Sale with ID {sale_id} already has an invoice (duplicate)")
+                    # Re-raise any other errors
+                    raise ValueError(f"Invoice creation failed: {e}")
     
     def _get_sale(self, sale_id: int, sale_repo: ISaleRepository) -> Optional[Sale]:
         """Get a sale by ID, handling any exceptions."""
@@ -241,101 +393,196 @@ class InvoicingService:
     
     def get_invoice_by_id(self, invoice_id: int) -> Optional[Invoice]:
         """Get an invoice by ID."""
-        with session_scope() as session:
-            invoice_repo = self.invoice_repo_factory(session)
-            return invoice_repo.get_by_id(invoice_id)
+        if self.invoice_repo:
+            return self.invoice_repo.get_by_id(invoice_id)
+        else:
+            with session_scope() as session:
+                invoice_repo = self._get_invoice_repo(session)
+                return invoice_repo.get_by_id(invoice_id)
     
     def get_invoice_by_sale_id(self, sale_id: int) -> Optional[Invoice]:
         """Get an invoice by its associated sale ID."""
-        with session_scope() as session:
-            invoice_repo = self.invoice_repo_factory(session)
-            return invoice_repo.get_by_sale_id(sale_id)
+        if self.invoice_repo:
+            return self.invoice_repo.get_by_sale_id(sale_id)
+        else:
+            with session_scope() as session:
+                invoice_repo = self._get_invoice_repo(session)
+                return invoice_repo.get_by_sale_id(sale_id)
     
     def get_all_invoices(self):
         """Get all invoices."""
-        with session_scope() as session:
-            invoice_repo = self.invoice_repo_factory(session)
-            return invoice_repo.get_all()
+        if self.invoice_repo:
+            return self.invoice_repo.get_all()
+        else:
+            with session_scope() as session:
+                invoice_repo = self._get_invoice_repo(session)
+                return invoice_repo.get_all()
     
-    def generate_invoice_pdf(self, invoice_id: int, filename: str = None, output_path: str = None, store_info: Dict[str, str] = None) -> str:
+    def generate_invoice_pdf(self, invoice_id: int, output_path: str = None, filename: str = None, store_info: dict = None, session=None) -> str:
         """
-        Generate a PDF file for an invoice.
-        
+        Generates a PDF document for a given invoice ID.
+
         Args:
-            invoice_id: The ID of the invoice to generate a PDF for
-            filename: Optional custom filename (default: invoice_{invoice_id}.pdf)
-            output_path: Path where to save the PDF (default: config PDF_OUTPUT_DIR)
-            store_info: Dictionary with store information to include in the PDF
-            
+            invoice_id: The ID of the invoice to generate PDF for.
+            output_path: Optional. Directory to save the PDF. Defaults to Config.PDF_OUTPUT_DIR.
+            filename: Optional. Filename for the PDF. Defaults to "invoice_<number>.pdf".
+            store_info: Optional. Dictionary containing store information to include in the PDF.
+            session: The database session. Needs to be provided by the caller.
+
         Returns:
-            The path to the generated PDF file
-            
+            str: The full path to the generated PDF file.
+
         Raises:
-            ValueError: If the invoice is not found or PDF generation fails
+            ResourceNotFoundError: If the invoice or related sale/customer is not found.
+            Exception: For errors during PDF generation.
         """
-        with session_scope() as session:
-            invoice_repo = self.invoice_repo_factory(session)
-            sale_repo = self.sale_repo_factory(session)
-            
-            # Get the invoice
-            invoice = invoice_repo.get_by_id(invoice_id)
-            if not invoice:
-                raise ValueError(f"Invoice with ID {invoice_id} not found")
-            
-            # Get the associated sale with items
-            sale = sale_repo.get_by_id(invoice.sale_id)
-            if not sale:
-                raise ValueError(f"Sale with ID {invoice.sale_id} not found")
-            
-            # Determine output path and filename
-            if not output_path:
-                # Use the configured PDF output directory
-                output_path = Config.PDF_OUTPUT_DIR
-                
-            # Ensure output directory exists
-            os.makedirs(output_path, exist_ok=True)
-                
+        # Retrieve invoice, sale, and customer using the provided session
+        invoice = self.invoice_repo_factory(session).get_by_id(invoice_id)
+        if not invoice:
+            raise ResourceNotFoundError(f"Invoice with ID {invoice_id} not found")
+
+        sale = self.sale_repo_factory(session).get_by_id(invoice.sale_id)
+        if not sale:
+            raise ResourceNotFoundError(f"Sale with ID {invoice.sale_id} not found")
+
+        # --- Determine Full Output Path Logic ---
+        if output_path and not filename:
+            # Assume output_path is the intended full file path
+            full_pdf_path = output_path
+            output_dir = os.path.dirname(full_pdf_path)
+        elif output_path and filename:
+            # Assume output_path is a directory
+            output_dir = output_path
+            full_pdf_path = os.path.join(output_dir, filename)
+        else:
+            # Default behavior: Use default dir and default/provided filename
+            output_dir = Config.PDF_OUTPUT_DIR
             if not filename:
-                filename = f"invoice_{invoice.invoice_number.replace('-', '_')}.pdf"
-                
-            full_path = os.path.join(output_path, filename)
-            
-            # Default store info
+                filename = self._generate_pdf_filename(invoice.invoice_number)
+            full_pdf_path = os.path.join(output_dir, filename)
+
+        # Ensure the final output directory exists
+        # Use os.path.dirname() in case full_pdf_path was provided directly
+        final_output_dir = os.path.dirname(full_pdf_path)
+        if final_output_dir: # Avoid trying to create empty path
+             os.makedirs(final_output_dir, exist_ok=True)
+
+        print(f"Debug PDF Generation: Final Path={full_pdf_path}") # Debug print
+
+        # --- PDF Generation Logic (using ReportLab) ---
+        try:
+            # Default store info (Consider moving to config or a helper)
             default_store_info = {
                 "name": "Eleventa Demo Store",
                 "address": "123 Main St, Buenos Aires, Argentina",
                 "phone": "555-1234",
                 "email": "info@eleventa-demo.com",
                 "website": "www.eleventa-demo.com",
-                "tax_id": "30-12345678-9"
+                "tax_id": "30-12345678-9",
+                "logo_path": None # Add logo path if available
             }
-            
-            # Use provided store info or defaults
             store_info = store_info or default_store_info
             
-            # TODO: Generate PDF logic here
-            # For now, we'll just create a simple text file as a placeholder
-            with open(full_path, "w") as f:
-                f.write(f"INVOICE {invoice.invoice_number}\n")
-                f.write(f"Date: {invoice.invoice_date}\n")
-                f.write(f"Type: {invoice.invoice_type}\n\n")
-                
-                f.write("STORE INFORMATION\n")
-                for key, value in store_info.items():
-                    f.write(f"{key.capitalize()}: {value}\n")
-                
-                f.write("\nCUSTOMER INFORMATION\n")
-                for key, value in invoice.customer_details.items():
-                    if value:  # Only write non-empty values
-                        f.write(f"{key.capitalize()}: {value}\n")
-                
-                f.write("\nITEMS\n")
-                for item in sale.items:
-                    f.write(f"{item.quantity} x {item.description} @ {item.unit_price} = {item.line_total}\n")
-                
-                f.write("\nSUMMARY\n")
-                f.write(f"Subtotal: {invoice.subtotal}\n")
-                f.write(f"IVA ({int(Decimal('0.21')*100)}%): {invoice.iva_amount}\n")
-                f.write(f"Total: {invoice.total}\n")
+            # Create PDF Document
+            doc = SimpleDocTemplate(full_pdf_path, pagesize=letter)
+            styles = getSampleStyleSheet()
+            story = []
+
+            # 1. Store Info & Logo (Simplified)
+            if store_info.get("logo_path") and os.path.exists(store_info["logo_path"]):
+                 # Add logo logic here if needed
+                 pass 
+            story.append(Paragraph(store_info.get("name", "Store Name"), styles['h1']))
+            story.append(Paragraph(store_info.get("address", ""), styles['Normal']))
+            story.append(Paragraph(f"Tel: {store_info.get('phone', '')}", styles['Normal']))
+            story.append(Paragraph(f"CUIT: {store_info.get('tax_id', '')}", styles['Normal']))
+            story.append(Paragraph(f"IVA: {store_info.get('iva_condition', '')}", styles['Normal']))
+            story.append(Spacer(1, 0.2*inch))
+
+            # 2. Invoice Header (Type, Number, Date)
+            header_text = f"<b>FACTURA {invoice.invoice_type}</b> N° {invoice.invoice_number}"
+            story.append(Paragraph(header_text, styles['h2']))
+            story.append(Paragraph(f"Fecha: {invoice.invoice_date.strftime('%d/%m/%Y %H:%M:%S')}", styles['Normal']))
+            story.append(Spacer(1, 0.2*inch))
+
+            # 3. Customer Details
+            story.append(Paragraph("<b>Cliente:</b>", styles['h3']))
+            cust_details = invoice.customer_details or {}
+            story.append(Paragraph(f"Nombre: {cust_details.get('name', 'Consumidor Final')}", styles['Normal']))
+            story.append(Paragraph(f"Dirección: {cust_details.get('address', '-')}", styles['Normal']))
+            story.append(Paragraph(f"CUIT: {cust_details.get('cuit', '-')}", styles['Normal']))
+            story.append(Paragraph(f"Condición IVA: {cust_details.get('iva_condition', '-')}", styles['Normal']))
+            story.append(Spacer(1, 0.3*inch))
             
-            return full_path
+            # 4. Sale Items Table
+            story.append(Paragraph("<b>Detalle:</b>", styles['h3']))
+            data = [['Código', 'Descripción', 'Cant.', 'P. Unit.', 'Subtotal']]
+            for item in sale.items:
+                 data.append([
+                     item.product_code,
+                     Paragraph(item.product_description, styles['Normal']), # Wrap long descriptions
+                     f"{item.quantity:.2f}",
+                     f"${item.unit_price:.2f}",
+                     f"${item.subtotal:.2f}"
+                 ])
+            
+            table_style = TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.grey),
+                ('TEXTCOLOR',(0,0),(-1,0), colors.whitesmoke),
+                ('ALIGN',(0,0),(-1,-1),'CENTER'),
+                ('ALIGN',(1,1),(1,-1),'LEFT'), # Align description left
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('BOTTOMPADDING', (0,0), (-1,0), 12),
+                ('BACKGROUND',(0,1),(-1,-1),colors.beige),
+                ('GRID',(0,0),(-1,-1),1,colors.black),
+                ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+            ])
+            
+            # Create table with specific column widths
+            col_widths = [70, 260, 50, 70, 70] # Adjust as needed
+            items_table = Table(data, colWidths=col_widths)
+            items_table.setStyle(table_style)
+            story.append(items_table)
+            story.append(Spacer(1, 0.3*inch))
+
+            # 5. Totals Section
+            totals_data = [
+                ['Subtotal:', f"${invoice.subtotal:.2f}"],
+                # Calculate effective IVA rate if needed for display
+                # [f"IVA ({int(invoice.iva_rate * 100)}%):", f"${invoice.iva_amount:.2f}"] if invoice.iva_amount > 0 else None, # Conditional IVA
+                [f"IVA:", f"${invoice.iva_amount:.2f}"] if invoice.iva_amount > 0 else None, # Simplified display without rate
+                ['', ''], # Spacer
+                ['<b>Total:</b>', f"<b>${invoice.total:.2f}</b>"]
+            ]
+            # Filter out None rows (for cases with no IVA)
+            totals_data = [row for row in totals_data if row is not None]
+
+            totals_table = Table(totals_data, colWidths=[390, 130]) # Adjust colWidths
+            totals_table.setStyle(TableStyle([
+                ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
+                ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'), # Bold total row
+                ('GRID',(0,0),(-1,-1), 1, colors.white), # No visible grid
+                ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+            ]))
+            story.append(totals_table)
+            story.append(Spacer(1, 0.3*inch))
+            
+            # 6. CAE Information (if applicable)
+            if invoice.cae and invoice.cae_due_date:
+                story.append(Paragraph(f"CAE N°: {invoice.cae}", styles['Normal']))
+                story.append(Paragraph(f"Fecha Vto. CAE: {invoice.cae_due_date.strftime('%d/%m/%Y')}", styles['Normal']))
+
+            # Build the PDF
+            doc.build(story)
+            print(f"Successfully generated PDF: {full_pdf_path}") # Debug print
+            return full_pdf_path
+
+        except Exception as e:
+            # Log the error appropriately
+            print(f"Error generating PDF for invoice {invoice_id}: {e}")
+            # Consider raising a specific PDF generation error
+            raise ExternalServiceError(f"Failed to generate PDF for invoice {invoice_id}") from e
+    
+    def _generate_pdf_filename(self, invoice_number: str) -> str:
+        """Generate a PDF filename from an invoice number."""
+        return f"invoice_{invoice_number.replace('-', '_')}.pdf"

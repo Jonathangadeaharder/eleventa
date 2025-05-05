@@ -3,36 +3,54 @@ import os
 from unittest.mock import MagicMock, patch
 from core.models import Sale, Product, Customer
 from core.services.sale_service import SaleService
+from decimal import Decimal
 
 @pytest.fixture
-def mock_sale_service():
-    # Create mock repositories
-    sale_repo = MagicMock()
-    product_repo = MagicMock()
-    customer_repo = MagicMock()
-    
-    # Create mock services
+def mock_sale_service(product1):
+    """Create a mocked sale service for testing."""
+    sale_repo_factory = MagicMock()
+    product_repo_factory = MagicMock()
+    customer_repo_factory = MagicMock()
     inventory_service = MagicMock()
     customer_service = MagicMock()
     
-    # Initialize SaleService with mock dependencies
+    # Configure product_repo_factory to return product1 when get_by_id is called
+    mock_product_repo = MagicMock()
+    mock_product_repo.get_by_id.return_value = product1
+    product_repo_factory.return_value = mock_product_repo
+    
+    # Configure the repository
+    mock_repo = MagicMock()
+    sale_repo_factory.return_value = mock_repo
+    
     return SaleService(
-        sale_repo_factory=lambda: sale_repo,
-        product_repo_factory=lambda: product_repo,
-        customer_repo_factory=lambda: customer_repo,
+        sale_repo_factory=sale_repo_factory,
+        product_repo_factory=product_repo_factory,
+        customer_repo_factory=customer_repo_factory,
         inventory_service=inventory_service,
         customer_service=customer_service
     )
 
 @pytest.fixture
 def product1():
-    return Product(id=1, code='PROD001', description='Test Product Description', 
-                  cost_price=5.0, sell_price=10.0)
+    """Return a sample product for testing."""
+    return Product(
+        id=1,
+        code="PROD1",
+        description="Test Product 1",
+        sell_price=Decimal("10.00"),
+        cost_price=Decimal("5.00"),
+        department_id=1
+    )
 
 @pytest.fixture
 def sample_customer():
-    return Customer(id=5, name='Test Customer', cuit='12345', 
-                   credit_limit=0.0, credit_balance=0.0)
+    """Return a sample customer for testing."""
+    return Customer(
+        id=5,
+        name="Test Customer",
+        cuit="12345"
+    )
 
 def test_create_sale_success(mock_sale_service, product1, sample_customer):
     """Test successful sale creation with valid data."""
@@ -40,15 +58,15 @@ def test_create_sale_success(mock_sale_service, product1, sample_customer):
     items_data = [{'product_id': 1, 'quantity': '2'}]
     user_id = 1
     payment_type = 'cash'
-    
+
     # Create a mock sale object with expected attributes
     mock_sale = MagicMock(spec=Sale)
     mock_sale.id = 1
     mock_sale.user_id = user_id
     mock_sale.is_credit_sale = False
-    
-    # Configure the repository to return the mock sale
-    mock_sale_service.sale_repo_factory().create.return_value = mock_sale
+
+    # Configure the repository to return the mock sale after add_sale is called
+    mock_sale_service.sale_repo_factory().add_sale.return_value = mock_sale
 
     # Act
     sale = mock_sale_service.create_sale(
@@ -60,9 +78,15 @@ def test_create_sale_success(mock_sale_service, product1, sample_customer):
 
     # Assert
     assert sale is not None
+    assert sale.id == 1
     assert sale.user_id == user_id
-    assert sale.is_credit_sale is False
-    mock_sale_service.sale_repo_factory().create.assert_called_once()
+    assert sale.is_credit_sale == False
+
+    # Verify the repo factory was called
+    mock_sale_service.sale_repo_factory().add_sale.assert_called_once()
+    
+    # Verify product repository was called to get product details
+    mock_sale_service.product_repo_factory().get_by_id.assert_called_with(1)
 
 def test_create_sale_with_credit(mock_sale_service, product1, sample_customer):
     """Test credit sale creation with valid customer."""
@@ -70,15 +94,15 @@ def test_create_sale_with_credit(mock_sale_service, product1, sample_customer):
     items_data = [{'product_id': 1, 'quantity': '1'}]
     user_id = 1
     customer_id = 5
-    
+
     # Create a mock sale object with expected attributes
     mock_sale = MagicMock(spec=Sale)
     mock_sale.id = 1
     mock_sale.user_id = user_id
     mock_sale.is_credit_sale = True
-    
-    # Configure the repository to return the mock sale
-    mock_sale_service.sale_repo_factory().create.return_value = mock_sale
+
+    # Configure the repository to return the mock sale when add_sale is called
+    mock_sale_service.sale_repo_factory().add_sale.return_value = mock_sale
 
     # Act
     sale = mock_sale_service.create_sale(
@@ -92,8 +116,15 @@ def test_create_sale_with_credit(mock_sale_service, product1, sample_customer):
 
     # Assert
     assert sale is not None
+    assert sale.id == 1
+    assert sale.user_id == user_id
     assert sale.is_credit_sale is True
-    mock_sale_service.sale_repo_factory().create.assert_called_once()
+
+    # Verify the call was made
+    mock_sale_service.sale_repo_factory().add_sale.assert_called_once()
+    
+    # Verify product repository was called to get product details
+    mock_sale_service.product_repo_factory().get_by_id.assert_called_with(1)
 
 def test_get_sale_by_id(mock_sale_service):
     """Test retrieving a sale by ID."""

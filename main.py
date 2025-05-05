@@ -120,40 +120,75 @@ def main(test_mode=False, test_user=None, mock_services=None):
                 raise ValueError("User service could not be created")
 
         # --- Other Service Instantiation (using factories) ---
-        product_service = ProductService(get_product_repo, get_dept_repo)
-        inventory_service = InventoryService(get_inventory_repo, get_product_repo)
-        customer_service = CustomerService(get_customer_repo, get_credit_payment_repo) # Uses factories
-
-        # Adjust services to use factory functions directly
-        sale_service = SaleService(get_sale_repo, get_product_repo, inventory_service, customer_service) # Uses factories + instance
-        purchase_service = PurchaseService(
-            purchase_order_repo=get_po_repo, # Pass factory
-            supplier_repo=get_supplier_repo,   # Pass factory
-            product_repo=get_product_repo,     # Pass factory
-            inventory_service=inventory_service # Pass instance
-        )
-        
-        # Instantiate Corte Service
-        corte_service = CorteService(get_sale_repo, get_cash_drawer_repo)
-        
-        # Update: Use repository factories for InvoicingService
-        invoicing_service = InvoicingService(
-            invoice_repo_factory=get_invoice_repo,
-            sale_repo_factory=get_sale_repo,
-            customer_repo_factory=get_customer_repo
-        )
-        
-        # Create a proper sale repository factory for ReportingService
-        @contextmanager
-        def sale_repo_factory():
-            session = SessionLocal()
-            try:
-                yield get_sale_repo(session)
-            finally:
-                session.close()
-                
-        # Instantiate Reporting Service for advanced reports
-        reporting_service = ReportingService(sale_repo_factory)
+        # Use both factories and instances for improved reliability
+        with session_scope() as session:
+            # Create repository instances for direct use
+            product_repo_instance = get_product_repo(session)
+            dept_repo_instance = get_dept_repo(session)
+            inventory_repo_instance = get_inventory_repo(session)
+            sale_repo_instance = get_sale_repo(session)
+            customer_repo_instance = get_customer_repo(session)
+            credit_payment_repo_instance = get_credit_payment_repo(session)
+            po_repo_instance = get_po_repo(session)
+            supplier_repo_instance = get_supplier_repo(session)
+            cash_drawer_repo_instance = get_cash_drawer_repo(session)
+            invoice_repo_instance = get_invoice_repo(session)
+            
+            # Initialize services with both repository instances and factories for flexibility
+            product_service = ProductService(
+                product_repo=product_repo_instance,
+                department_repo=dept_repo_instance,
+                product_repo_factory=get_product_repo,
+                department_repo_factory=get_dept_repo
+            )
+            
+            inventory_service = InventoryService(
+                inventory_repo_factory=get_inventory_repo,
+                product_repo_factory=get_product_repo
+            )
+            
+            customer_service = CustomerService(
+                customer_repo_factory=get_customer_repo,
+                credit_payment_repo_factory=get_credit_payment_repo
+            )
+    
+            sale_service = SaleService(
+                sale_repo_factory=get_sale_repo,
+                product_repo_factory=get_product_repo,
+                customer_repo_factory=get_customer_repo,
+                inventory_service=inventory_service,
+                customer_service=customer_service
+            )
+            
+            purchase_service = PurchaseService(
+                purchase_order_repo=get_po_repo,
+                supplier_repo=get_supplier_repo,
+                product_repo=get_product_repo,
+                inventory_service=inventory_service
+            )
+            
+            # Instantiate Corte Service
+            corte_service = CorteService(
+                sale_repository=sale_repo_instance,
+                cash_drawer_repository=cash_drawer_repo_instance
+            )
+            
+            # Use both repository instances and factories for InvoicingService
+            invoicing_service = InvoicingService(
+                invoice_repo_factory=get_invoice_repo,
+                sale_repo_factory=get_sale_repo,
+                customer_repo_factory=get_customer_repo
+            )
+            
+            # Instantiate Reporting Service for advanced reports
+            @contextmanager
+            def sale_repo_factory():
+                try:
+                    yield sale_repo_instance
+                finally:
+                    pass  # No need to close since we're using the existing session
+                    
+            reporting_service = ReportingService(sale_repo_factory)
 
     # --- Application Setup ---
     # In test mode, skip creating a real QApplication

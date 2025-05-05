@@ -36,7 +36,9 @@ def create_department(test_db_session):
     """Create a test department with timestamp to ensure uniqueness."""
     def _create_department(name=None):
         timestamp = int(time.time() * 1000)  # milliseconds for more uniqueness
-        department_name = name or f"Test Dept {timestamp}"
+        # Add UUID to ensure absolute uniqueness, even with timestamp collisions
+        unique_id = str(uuid.uuid4())[:8]
+        department_name = name or f"Test Dept {timestamp}_{unique_id}"
         repo = SqliteDepartmentRepository(test_db_session)
         department = Department(name=department_name)
         return repo.add(department)

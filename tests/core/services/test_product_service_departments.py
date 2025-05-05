@@ -6,13 +6,17 @@ from core.services.product_service import ProductService
 from core.models.product import Department
 from core.interfaces.repository_interfaces import IDepartmentRepository, IProductRepository
 
-# Patch session_scope to avoid real DB connections
+# Patch session_scope to return a mock session
 @pytest.fixture(autouse=True)
 def patch_session_scope(monkeypatch):
-    class DummyCM:
-        def __enter__(self): return None
-        def __exit__(self, exc_type, exc_val, tb): return False
-    monkeypatch.setattr('core.services.product_service.session_scope', lambda: DummyCM())
+    mock_session = MagicMock()
+    
+    @contextmanager
+    def mock_session_scope():
+        yield mock_session
+        
+    monkeypatch.setattr('core.services.product_service.session_scope', mock_session_scope)
+    return mock_session
 
 @pytest.fixture
 def prod_repo():
@@ -24,7 +28,8 @@ def dept_repo():
 
 @pytest.fixture
 def svc(prod_repo, dept_repo):
-    return ProductService(lambda session: prod_repo, lambda session: dept_repo)
+    # Use direct repository instances for simplicity in testing
+    return ProductService(product_repo=prod_repo, department_repo=dept_repo)
 
 # Tests for department operations
 

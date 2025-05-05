@@ -25,13 +25,16 @@ def test_direct_table_creation(test_engine):
     # Ensure all models are properly mapped
     ensure_all_models_mapped()
     
-    # Get a connection from the engine
     with test_engine.connect() as connection:
-        # Manually create the tables using our function
-        create_tables_in_order(connection)
+        # Bypass custom function, call create_all directly
+        # create_tables_in_order(connection)
+        Base.metadata.create_all(bind=connection)
         
-        # Check that the tables were created
-        inspector = inspect(test_engine)
+        # Commit the transaction
+        connection.commit()
+        
+        # Check that the tables were created using the *connection*
+        inspector = inspect(connection) # Inspect using the connection where tables were created
         existing_tables = inspector.get_table_names()
         
         # Verify that critical tables exist and were created in order

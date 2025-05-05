@@ -297,45 +297,49 @@ class TestCashDrawerHistoryDialog:
     @patch('ui.dialogs.cash_drawer_dialogs.CashDrawerHistoryDialog.update_summary_from_entries')
     def test_apply_filter(self, mock_update_summary, qapp, mock_cash_drawer_service):
         """Test filtering history by date range."""
-        # Completely bypass dialog creation and directly test the logic
+        # Create test data
         start_date = date(2023, 10, 1)
         end_date = date(2023, 10, 31)
         
         # Configure mock service return value
         sample_entry = CashDrawerEntry(
-            id=1, user_id=1, entry_type=CashDrawerEntryType.START,
-            amount=Decimal('100.00'), description="Open", timestamp=date(2023, 10, 26)
+            timestamp=date(2023, 10, 26),
+            entry_type=CashDrawerEntryType.START,
+            amount=Decimal('100.00'), 
+            description="Open", 
+            user_id=1
         )
+        # Set ID manually after creation
+        sample_entry.id = 1
+        
         mock_cash_drawer_service.repository.get_entries_by_date_range.return_value = [sample_entry]
         
-        # Create a minimal mock dialog with all required attributes
-        mock_table_model = MockTableModel()
-        dialog = MagicMock()
-        dialog.cash_drawer_service = mock_cash_drawer_service
-        dialog.table_model = mock_table_model
+        # Create dialog with necessary mocks
+        dialog = CashDrawerHistoryDialog(mock_cash_drawer_service, test_mode=True)
+        
+        # Set up mocks for date widgets
         dialog.date_from = MagicMock()
         dialog.date_to = MagicMock()
-        
-        # Configure date mocks
         dialog.date_from.date().toPyDate.return_value = start_date
         dialog.date_to.date().toPyDate.return_value = end_date
         
-        # Execute the method under test directly
-        # This way we can check how it would actually behave
-        with patch.object(dialog, 'update_summary_from_entries') as mock_update:
-            CashDrawerHistoryDialog.apply_filter(dialog)
-            
-            # Verify service method was called with correct dates
-            mock_cash_drawer_service.repository.get_entries_by_date_range.assert_called_once_with(
-                start_date=start_date,
-                end_date=end_date
-            )
-            
-            # Verify the model's setEntries method was called with the results
-            mock_table_model.setEntries.assert_called_once_with([sample_entry])
-            
-            # Verify that update_summary_from_entries was called
-            mock_update.assert_called_once_with([sample_entry])
+        # Create mock table model
+        dialog.table_model = MockTableModel()
+        
+        # Call apply_filter
+        dialog.apply_filter()
+        
+        # Verify service method was called with correct dates
+        mock_cash_drawer_service.repository.get_entries_by_date_range.assert_called_once_with(
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        # Verify the model's setEntries method was called with the results
+        dialog.table_model.setEntries.assert_called_once_with([sample_entry])
+        
+        # Verify update_summary_from_entries was called with just the entries (no dialog parameter)
+        mock_update_summary.assert_called_once_with([sample_entry])
 
     @patch('ui.dialogs.cash_drawer_dialogs.QMessageBox')
     def test_service_error_on_filter(self, mock_message_box, qapp, mock_cash_drawer_service):
@@ -376,22 +380,16 @@ class TestCashDrawerHistoryDialog:
 
     def test_initialization_loads_today(self, qapp, qtbot, mock_cash_drawer_service):
         """Test that the dialog calls load_today_data on init if not in test_mode."""
-        with patch('ui.dialogs.cash_drawer_dialogs.QTableView'), \
-             patch('ui.dialogs.cash_drawer_dialogs.QHeaderView'), \
-             patch('ui.dialogs.cash_drawer_dialogs.CashDrawerTableModel'), \
-             patch('ui.dialogs.cash_drawer_dialogs.QDateEdit'), \
-             patch('ui.dialogs.cash_drawer_dialogs.QMessageBox'), \
-             patch('ui.dialogs.cash_drawer_dialogs.QPushButton'), \
+        # Fully patch the init_ui and load_today_data methods to avoid UI interaction
+        with patch.object(CashDrawerHistoryDialog, 'init_ui'), \
              patch.object(CashDrawerHistoryDialog, 'load_today_data') as mock_load:
             
             dialog = CashDrawerHistoryDialog(mock_cash_drawer_service, test_mode=False)
-            qtbot.addWidget(dialog)
             
             # Verify load_today_data was called
             mock_load.assert_called_once()
             
-            # Clean up the dialog
-            dialog.close()
+            # No need to clean up since we've patched init_ui
 
     def test_summary_display_update(self, qapp):
         """Test that the summary labels are updated correctly."""
