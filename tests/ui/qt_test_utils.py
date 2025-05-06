@@ -4,6 +4,19 @@ import time
 from PySide6.QtCore import QTimer, QEventLoop, Qt
 from PySide6.QtWidgets import QApplication, QPushButton, QMainWindow, QMessageBox, QWidget, QInputDialog, QLabel
 
+"""
+Qt Test Utilities for Stable UI Testing
+
+This module provides utility functions for stable UI testing that avoids access violations
+and crashes that can occur with traditional UI testing approaches.
+
+Key principles:
+1. Prefer direct method/signal calls over simulated input (clicks, keypresses)
+2. Ensure proper cleanup of Qt resources
+3. Control event processing explicitly
+4. Provide safer alternatives to common UI testing patterns
+"""
+
 def import_widget_safely(widget_path):
     try:
         spec = importlib.util.spec_from_file_location(
@@ -111,6 +124,40 @@ def click_button_by_text(qtbot, parent, text):
         return True
     return False
 
+def safe_click_button(button):
+    """Safely click a button using direct signals rather than mouse events.
+    
+    This is more reliable in tests and avoids access violations that can occur
+    with mouse events.
+    
+    Args:
+        button: The button to click
+        
+    Returns:
+        True if the button was clicked, False otherwise
+    """
+    try:
+        if button and hasattr(button, 'click') and callable(button.click):
+            button.click()
+            process_events()
+            return True
+    except (RuntimeError, AttributeError):
+        pass
+    return False
+
+def safe_click_button_by_text(parent, text):
+    """Find and safely click a button with the given text using direct signals.
+    
+    Args:
+        parent: The parent widget to search for buttons
+        text: The button text to search for
+        
+    Returns:
+        True if the button was found and clicked, False otherwise
+    """
+    button = find_widget_by_text(parent, QPushButton, text)
+    return safe_click_button(button)
+
 def find_all_widgets(parent, widget_type):
     """Find all widgets of a given type in a parent widget."""
     return parent.findChildren(widget_type)
@@ -159,3 +206,242 @@ def capture_dialogs(accept=True):
             pass
     
     return DialogCapture(accept)
+
+def safe_setup_fixture(qtbot, widget_class, *args, **kwargs):
+    """Safely set up a fixture for a Qt widget with proper cleanup.
+    
+    This is a template function for creating widget fixtures that handles
+    proper initialization and cleanup to avoid access violations.
+    
+    Args:
+        qtbot: The Qt testing robot
+        widget_class: The widget class to instantiate
+        *args: Positional arguments to pass to the widget constructor
+        **kwargs: Keyword arguments to pass to the widget constructor
+        
+    Returns:
+        The created widget instance
+    """
+    # Create the widget
+    widget = widget_class(*args, **kwargs)
+    qtbot.addWidget(widget)
+    
+    # Show the widget but don't wait for it to be exposed
+    widget.show()
+    process_events()
+    
+    yield widget
+    
+    # Clean up safely
+    widget.hide()
+    process_events()
+    widget.deleteLater()
+    process_events()
+
+def simulate_combo_box_selection(combo_box, index):
+    """Safely select an item in a combo box without using mouse events.
+    
+    Args:
+        combo_box: The combo box widget
+        index: The index to select
+        
+    Returns:
+        True if selection was successful, False otherwise
+    """
+    try:
+        if combo_box and hasattr(combo_box, 'setCurrentIndex') and callable(combo_box.setCurrentIndex):
+            combo_box.setCurrentIndex(index)
+            # Manually trigger the currentIndexChanged signal if needed
+            if hasattr(combo_box, 'currentIndexChanged') and hasattr(combo_box.currentIndexChanged, 'emit'):
+                combo_box.currentIndexChanged.emit(index)
+            process_events()
+            return True
+    except (RuntimeError, AttributeError, IndexError):
+        pass
+    return False
+
+def trigger_action(action):
+    """Safely trigger a QAction without using mouse events.
+    
+    Args:
+        action: The QAction to trigger
+        
+    Returns:
+        True if action was triggered, False otherwise
+    """
+    try:
+        if action and hasattr(action, 'trigger') and callable(action.trigger):
+            action.trigger()
+            process_events()
+            return True
+    except (RuntimeError, AttributeError):
+        pass
+    return False
+
+def safely_apply_styles(qtbot, widgets_and_styles, show_widgets=True):
+    """Safely apply styles to a collection of widgets, with proper cleanup.
+    
+    This utility handles the entire lifecycle of applying styles to widgets including:
+    - Adding widgets to qtbot for proper event handling
+    - Optionally showing widgets
+    - Applying styles
+    - Processing events after style changes
+    - Handling cleanup
+    
+    Args:
+        qtbot: The Qt testing robot
+        widgets_and_styles: A dictionary mapping widgets to style names
+        show_widgets: Whether to show the widgets (default: True)
+        
+    Example:
+        safely_apply_styles(qtbot, {
+            button: 'button_primary', 
+            line_edit: 'text_input'
+        })
+    """
+    widgets = list(widgets_and_styles.keys())
+    
+    # Add widgets to qtbot
+    for widget in widgets:
+        if widget:
+            qtbot.addWidget(widget)
+    
+    try:
+        # Show widgets if requested
+        if show_widgets:
+            for widget in widgets:
+                if widget:
+                    widget.show()
+            process_events()
+        
+        # Apply styles
+        for widget, style_name in widgets_and_styles.items():
+            if widget and style_name:
+                # Assume apply_style is a function that applies a style to a widget
+                from ui.styles import apply_style
+                apply_style(widget, style_name)
+        
+        # Process events after style changes
+        process_events()
+        
+        # Wait briefly for styles to be applied
+        wait_for(50)
+        
+        # Return the widgets for any additional processing
+        return widgets
+    
+    finally:
+        # Clean up widgets if they were shown
+        if show_widgets:
+            for widget in widgets:
+                if widget:
+                    widget.hide()
+                    process_events()
+                    widget.deleteLater()
+                    process_events()
+
+def with_timeout(func, timeout_ms=5000, *args, **kwargs):
+    """Run a function with a timeout.
+    
+    If the function does not complete within the specified timeout,
+    the function will be interrupted and False will be returned.
+    
+    Args:
+        func: The function to run
+        timeout_ms: The timeout in milliseconds
+        *args: Arguments to pass to the function
+        **kwargs: Keyword arguments to pass to the function
+        
+    Returns:
+        The result of the function if it completes within the timeout,
+        or False if the timeout occurs
+    """
+    result = [False]
+    completed = [False]
+    
+    def run_function():
+        try:
+            result[0] = func(*args, **kwargs)
+            completed[0] = True
+        except Exception as e:
+            result[0] = e
+            completed[0] = True
+    
+    # Create event loop for timeout
+    loop = QEventLoop()
+    
+    # Start timer for timeout
+    timer = QTimer()
+    timer.setSingleShot(True)
+    timer.timeout.connect(loop.quit)
+    
+    # Create timer for function execution
+    function_timer = QTimer()
+    function_timer.setSingleShot(True)
+    function_timer.timeout.connect(run_function)
+    
+    # Start timers
+    timer.start(timeout_ms)
+    function_timer.start(0)
+    
+    # Wait for either function completion or timeout
+    while not completed[0] and timer.isActive():
+        loop.exec_()
+        if completed[0]:
+            timer.stop()
+            return result[0]
+    
+    return False
+
+def safely_test_styling_function(qtbot, widget_class, style_function, **kwargs):
+    """Safely test a styling function on a widget.
+    
+    This utility helps test UI styling functions in a safe way that prevents
+    access violations and properly cleans up resources.
+    
+    NOTE: For tests that are highly unstable or prone to access violations,
+    consider using mock objects instead of real Qt widgets. See the README
+    section on "Using Mocks for UI Testing" for examples.
+    
+    Args:
+        qtbot: The Qt testing robot
+        widget_class: The widget class to instantiate and test
+        style_function: The styling function to apply to the widget
+        **kwargs: Additional keyword arguments to pass to the widget constructor
+        
+    Example:
+        def test_my_style_function(qtbot):
+            # Test that apply_my_style sets the correct properties
+            widget, result = safely_test_styling_function(
+                qtbot, QLineEdit, apply_my_style, text="Initial text"
+            )
+            
+            # Check styling was applied
+            assert widget.styleSheet() != ""
+            assert "border: 1px solid" in widget.styleSheet()
+    
+    Returns:
+        A tuple of (widget, result) where result is the return value of the style function
+    """
+    # Create the widget
+    widget = widget_class(**kwargs)
+    qtbot.addWidget(widget)
+    result = None
+    
+    try:
+        # Show the widget but don't wait for exposure
+        widget.show()
+        process_events()
+        
+        # Apply the style function and capture any return value
+        result = style_function(widget)
+        process_events()
+        
+        return widget, result
+        
+    finally:
+        # Clean up resources
+        widget.hide()
+        process_events()
+        widget.deleteLater()
+        process_events()

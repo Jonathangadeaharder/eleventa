@@ -3,6 +3,7 @@ import pytest
 from PySide6.QtWidgets import QApplication
 from ui.main_window import MainWindow
 from core.models.user import User
+from tests.ui.qt_test_utils import process_events
 
 # Define mock services as in ui/main_window.py
 class MockProductService:
@@ -40,25 +41,41 @@ class MockCorteService:
 class MockReportingService:
     def get_report_data(self): return {}
 
-@pytest.mark.skip(reason="Temporarily skipping due to persistent Qt crash (access violation) during MainWindow/SalesView init")
 @pytest.mark.smoke
-def test_main_window_starts_and_shows(qtbot):
-    # REMOVED manual QApplication creation - pytest-qt handles this via fixtures
-    # app = QApplication.instance() or QApplication(sys.argv)
-    mock_user = User(id=0, username="testuser", password_hash="")
-    main_win = MainWindow(
-        logged_in_user=mock_user,
-        product_service=MockProductService(),
-        inventory_service=MockInventoryService(),
-        sale_service=MockSaleService(),
-        customer_service=MockCustomerService(),
-        purchase_service=MockPurchaseService(),
-        invoicing_service=MockInvoicingService(),
-        corte_service=MockCorteService(),
-        reporting_service=MockReportingService()
-    )
-    qtbot.addWidget(main_win)
-    main_win.show()
-    assert main_win.isVisible()
-    # Optionally close immediately to avoid hanging
-    main_win.close()
+def test_main_window_starts_and_shows(safe_qtbot):
+    # Use the safe_qtbot which tracks widgets for cleanup
+    main_win = None
+    try:
+        # Create a mock user
+        mock_user = User(id=0, username="testuser", password_hash="")
+        
+        # Create the main window with mock services
+        main_win = MainWindow(
+            logged_in_user=mock_user,
+            product_service=MockProductService(),
+            inventory_service=MockInventoryService(),
+            sale_service=MockSaleService(),
+            customer_service=MockCustomerService(),
+            purchase_service=MockPurchaseService(),
+            invoicing_service=MockInvoicingService(),
+            corte_service=MockCorteService(),
+            reporting_service=MockReportingService()
+        )
+        
+        # Add the widget to safe_qtbot for tracking
+        safe_qtbot.addWidget(main_win)
+        
+        # Show the window and process events
+        main_win.show()
+        process_events()
+        
+        # Verify the window is visible
+        assert main_win.isVisible()
+    except Exception as e:
+        pytest.fail(f"Test failed with exception: {str(e)}")
+    finally:
+        # Ensure cleanup happens even if an assertion fails
+        if main_win is not None:
+            main_win.close()
+            process_events()
+            # The deleteLater will be handled by the safe_qtbot fixture

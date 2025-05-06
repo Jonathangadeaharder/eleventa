@@ -27,6 +27,9 @@ from PySide6.QtCore import Qt
 # Application components
 from ui.styles import COLORS, FONTS, STYLES, apply_style
 
+# Test utilities for stable UI testing
+from tests.ui.qt_test_utils import process_events, wait_for, safely_apply_styles
+
 # Apply timeout to all tests to prevent hanging
 pytestmark = pytest.mark.timeout(5)
 
@@ -163,57 +166,61 @@ def test_apply_style_invalid_style():
 
 # INTEGRATION TESTS
 
-def test_style_integration_with_real_widgets(qtbot):
+def test_style_integration_with_real_widgets(safe_qtbot):
     """
     Test style integration with real Qt widgets.
     
     Verifies that styles can be applied to actual Qt widgets without errors.
+    Uses the safely_apply_styles utility to prevent hanging tests.
     """
-    widgets = []
+    # Create real widgets
+    button = None
+    line_edit = None
+    combo_box = None
+    group_box = None
+    
     try:
-        # Create real widgets with proper event handling
         button = QPushButton("Test Button")
         line_edit = QLineEdit()
         combo_box = QComboBox()
         group_box = QGroupBox("Test Group")
         
-        # Track widgets for cleanup
-        widgets = [button, line_edit, combo_box, group_box]
+        # Add widgets to safe_qtbot for tracking
+        safe_qtbot.addWidget(button)
+        safe_qtbot.addWidget(line_edit)
+        safe_qtbot.addWidget(combo_box)
+        safe_qtbot.addWidget(group_box)
         
-        # Add widgets to qtbot for proper event handling
-        for widget in widgets:
-            qtbot.addWidget(widget)
+        # Map widgets to their styles
+        widgets_and_styles = {
+            button: 'button_primary',
+            line_edit: 'text_input',
+            combo_box: 'dropdown',
+            group_box: 'group_box'
+        }
         
-        # Process events to ensure widgets are ready
-        QApplication.processEvents()
-        qtbot.wait(50)  # Short wait to process pending events
+        # Show the widgets - needed to properly initialize them
+        for widget in [button, line_edit, combo_box, group_box]:
+            widget.show()
+            process_events()
         
-        # Apply styles to widgets
-        apply_style(button, 'button_primary')
-        apply_style(line_edit, 'text_input')
-        apply_style(combo_box, 'dropdown')
-        apply_style(group_box, 'group_box')
+        # Apply styles directly
+        for widget, style_name in widgets_and_styles.items():
+            apply_style(widget, style_name)
+            process_events()
         
-        # Process events after style changes
-        QApplication.processEvents()
-        qtbot.wait(50)
-        
-        # Check that styles were applied (just verify they don't raise exceptions)
+        # Check that styles were applied
         assert button.styleSheet() != ""
         assert line_edit.styleSheet() != ""
         assert combo_box.styleSheet() != ""
         assert group_box.styleSheet() != ""
     
+    except Exception as e:
+        pytest.fail(f"Test failed with exception: {str(e)}")
+    
     finally:
-        # Clean up resources
-        for widget in widgets:
-            try:
-                widget.deleteLater()
-            except:
-                pass
-        
-        # Force process events for cleanup
-        QApplication.processEvents()
+        # Cleanup will be handled by safe_qtbot
+        pass
 
 def test_colors_in_style_templates():
     """

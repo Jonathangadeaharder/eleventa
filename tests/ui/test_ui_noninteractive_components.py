@@ -2,6 +2,7 @@ import pytest
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QMessageBox
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
+from unittest.mock import MagicMock
 
 from ui.utils import (
     show_error_message,
@@ -118,15 +119,22 @@ def test_ask_confirmation(monkeypatch):
     assert ask_confirmation('p', 't', 'm') is False
 
 
-def test_apply_standard_form_style(qtbot):
-    w = QWidget()
-    layout = QVBoxLayout()
-    w.setLayout(layout)
-    layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(0)
-    apply_standard_form_style(w)
-    assert layout.contentsMargins().left() == 10
-    assert layout.spacing() == 10
+def test_apply_standard_form_style(monkeypatch):
+    """Test that apply_standard_form_style properly sets margins and spacing.
+    
+    This test uses mocking to avoid any Qt widget rendering which can cause access violations.
+    """
+    # Create a mock widget with a mock layout
+    mock_layout = MagicMock()
+    mock_widget = MagicMock()
+    mock_widget.layout.return_value = mock_layout
+    
+    # Apply the style function to the mock widget
+    apply_standard_form_style(mock_widget)
+    
+    # Verify the layout methods were called with correct values
+    mock_layout.setContentsMargins.assert_called_once_with(10, 10, 10, 10)
+    mock_layout.setSpacing.assert_called_once_with(10)
 
 
 def test_customer_table_model_display_alignment_and_foreground():

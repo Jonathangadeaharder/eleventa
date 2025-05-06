@@ -17,7 +17,9 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from main import main
-
+# Import process_events from qt_test_utils
+sys.path.insert(0, os.path.join(project_root, "tests", "ui"))
+from qt_test_utils import process_events
 
 @pytest.fixture(autouse=True)
 def mock_qapplication(monkeypatch):
@@ -36,19 +38,41 @@ def mock_qapplication(monkeypatch):
 class TestAppInitialization:
     """Tests for application initialization in test mode."""
     
-    @pytest.mark.skip(reason="Skipping temporarily to debug integration test crashes")
     def test_app_initialization_with_test_user(self, test_user, mock_services):
         """Test that the app can be initialized in test mode with a pre-authenticated user."""
-        # Run the application in test mode
-        app, main_window = main(test_mode=True, test_user=test_user, mock_services=mock_services)
+        app = None
+        main_window = None
         
-        # Verify that the application initialized correctly
-        assert app is not None
-        assert main_window is not None
-        
-        # Verify the user was passed to the main window
-        # This assumes that MainWindow stores the user in self.current_user
-        assert main_window.current_user == test_user
+        try:
+            # Run the application in test mode
+            app, main_window = main(test_mode=True, test_user=test_user, mock_services=mock_services)
+            
+            # Verify that the application initialized correctly
+            assert app is not None, "App should not be None"
+            assert main_window is not None, "Main window should not be None"
+            
+            # Verify the user was passed to the main window
+            assert main_window.current_user == test_user, "Incorrect user passed to main window"
+            
+        except Exception as e:
+            pytest.fail(f"Test failed with exception: {str(e)}")
+        finally:
+            # Ensure cleanup happens properly, even if assertions fail
+            if main_window is not None:
+                try:
+                    main_window.close()
+                    process_events()
+                    main_window.deleteLater()
+                    process_events()
+                except Exception as e:
+                    # Log but don't fail the test on cleanup errors
+                    print(f"Warning: Cleanup error: {str(e)}")
+            
+            if app is not None:
+                try:
+                    app.quit()
+                except Exception as e:
+                    print(f"Warning: App cleanup error: {str(e)}")
         
     def test_app_initialization_with_real_services(self, test_user):
         """Test app initialization with real services but still in test mode."""

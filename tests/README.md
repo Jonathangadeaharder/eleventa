@@ -9,6 +9,31 @@ This directory contains tests for the eleventa application.
 - `ui/`: Tests for the user interface components
 - `integration/`: Integration tests for multiple components working together
 
+## UI Testing Strategy
+
+We've implemented a targeted approach to UI testing to balance coverage with stability:
+
+### 1. Smoke Tests for Critical UI Workflows
+
+Located in `ui/smoke_tests.py`, these tests:
+- Cover the most critical user workflows
+- Are designed to be stable and reliable
+- Should be run before releases
+
+Run smoke tests with:
+```bash
+python tests/run_smoke_tests.py
+```
+
+### 2. Lower-Level Tests for Comprehensive Coverage
+
+Most functionality is covered by:
+- Unit tests for view models and business logic
+- Service-level integration tests
+- Repository and data access tests
+
+Read more about our UI testing approach in [tests/ui/README.md](ui/README.md).
+
 ## Test Documentation Standards
 
 All test modules should include:
@@ -53,7 +78,7 @@ The project aims for the following test coverage:
 
 - **Core Business Logic**: 95%+ coverage
 - **Infrastructure**: 85%+ coverage
-- **UI Components**: 70%+ coverage
+- **UI Components**: 70%+ coverage (focusing on view models and key workflows)
 - **Integration Tests**: Key user flows and boundary conditions
 
 ## Setting Up for Testing
@@ -93,8 +118,11 @@ python -m pytest
 # Run all integration tests
 python -m pytest integration/
 
-# Run all UI tests
-python -m pytest ui/
+# Run UI smoke tests (stable UI tests)
+python -m pytest -m smoke
+
+# Run all non-UI tests
+python -m pytest -k "not ui"
 
 # Run all infrastructure tests
 python -m pytest infrastructure/
@@ -126,7 +154,11 @@ This project uses pytest-qt to test UI components without manual intervention. T
 ### Example: Running UI Tests
 
 ```bash
-python -m pytest ui/test_login.py -v
+# Run a specific UI test file (safer than running all UI tests)
+python -m pytest ui/dialogs/test_specific_dialog.py -v
+
+# NOT RECOMMENDED (may cause crashes)
+python -m pytest ui/
 ```
 
 ## Integration Testing Without Login Prompt
