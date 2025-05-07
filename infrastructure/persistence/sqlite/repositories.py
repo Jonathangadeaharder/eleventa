@@ -1887,16 +1887,30 @@ class SqliteCashDrawerRepository(ICashDrawerRepository):
     def get_entries_by_type(self, entry_type: str, start_date: Optional[datetime] = None, 
                             end_date: Optional[datetime] = None) -> List[CashDrawerEntry]:
         """Get cash drawer entries by type within an optional date range."""
-        # Convert string to enum type if needed
-        if isinstance(entry_type, str):
+        # Determine the actual string value to use for the query
+        actual_value_to_query: Optional[str] = None
+        if isinstance(entry_type, CashDrawerEntryType):
+            actual_value_to_query = entry_type.value
+        elif isinstance(entry_type, str):
+            # Validate if the string is a valid CashDrawerEntryType value
             try:
-                entry_type = CashDrawerEntryType[entry_type]
-            except KeyError:
-                # Handle invalid entry type
+                actual_value_to_query = CashDrawerEntryType(entry_type).value # Ensures it's a valid key and gets the value
+            except ValueError:
+                # Log or handle invalid string entry_type
+                logging.warning(f"Invalid string value for CashDrawerEntryType: {entry_type} in get_entries_by_type")
                 return []
-        
+        else:
+            # Log or handle unsupported type for entry_type
+            logging.error(f"Unsupported type for entry_type: {type(entry_type)} in get_entries_by_type")
+            return []
+
+        if actual_value_to_query is None: # Should not happen if logic above is correct
+            return []
+
         # Start building the query
-        query = self.session.query(CashDrawerEntryOrm).filter(CashDrawerEntryOrm.entry_type == entry_type)
+        query = self.session.query(CashDrawerEntryOrm).filter(
+            CashDrawerEntryOrm.entry_type == actual_value_to_query
+        )
         
         # Add date range filters if provided
         if start_date:
@@ -1912,7 +1926,7 @@ class SqliteCashDrawerRepository(ICashDrawerRepository):
         """Get the most recent START entry for a drawer."""
         # Build query for START entries
         query = (self.session.query(CashDrawerEntryOrm)
-                .filter(CashDrawerEntryOrm.entry_type == CashDrawerEntryType.START))
+                .filter(CashDrawerEntryOrm.entry_type == CashDrawerEntryType.START.value)) # Use .value here
                 
         # Add drawer filter if provided
         if drawer_id is not None:
