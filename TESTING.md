@@ -4,111 +4,131 @@
 
 This project uses pytest for testing. The test suite includes:
 
-- Unit tests for core business logic
-- Integration tests for database and service interactions
-- GUI tests for Qt-based user interfaces
+- Unit tests for core business logic (`tests/core/`)
+- Integration tests for database, service interactions (`tests/infrastructure/`, `tests/integration/`)
+- UI tests for Qt-based user interfaces (`tests/ui/`)
 
-## Quick Start
+Tests in the `tests/ui/` directory are automatically marked with the `ui` marker by `conftest.py`.
+Critical Qt environment variables (like running `offscreen`) are also set in `conftest.py`.
 
-Use the unified test runner to run tests:
+## Running Tests with Pytest
 
-```bash
-# Run all tests
-python run_unified_tests.py
+All tests are run using `pytest` directly from the command line in the project root directory.
 
-# Run only non-GUI tests
-python run_unified_tests.py --no-gui
+### Basic Commands
 
-# Run only integration tests
-python run_unified_tests.py --integration
+- **Run all tests (including UI tests):**
+  ```bash
+  pytest
+  ```
 
-# Run with verbose output
-python run_unified_tests.py --verbose
-```
+- **Run tests with verbose output:**
+  ```bash
+  pytest -v
+  ```
 
-## Test Runner Options
+- **Stop on the first failure:**
+  ```bash
+  pytest -x
+  ```
 
-The `run_unified_tests.py` script provides a flexible way to run different types of tests:
+### Selecting Tests
 
-| Option | Description |
-|--------|-------------|
-| `--no-gui` | Run only non-GUI tests (core and infrastructure) |
-| `--qt` | Run only Qt/GUI tests |
-| `--specific PATH` | Run tests in a specific file or directory |
-| `--integration` | Run only integration tests |
-| `--unit` | Run only unit tests |
-| `--coverage` | Generate coverage report |
-| `--html-report` | Generate HTML coverage report |
-| `--verbose` or `-v` | Verbose output |
-| `--failfast` or `-x` | Stop on first failure |
+You can run specific subsets of tests using paths, keywords, or markers.
+
+- **Run tests in a specific directory:**
+  ```bash
+  pytest tests/core/
+  pytest tests/ui/
+  ```
+
+- **Run tests in a specific file:**
+  ```bash
+  pytest tests/core/models/test_product.py
+  ```
+
+- **Run tests matching a keyword expression:**
+  (This will run tests whose names contain "customer" or "Product" - case-insensitive with `-k`)
+  ```bash
+  pytest -k "customer or Product"
+  ```
+
+- **Run tests with specific markers:**
+  (Markers like `unit`, `integration`, `ui`, `smoke`, `alembic` are defined in `pytest.ini` and `conftest.py`)
+  
+  - Run only UI tests:
+    ```bash
+    pytest -m ui
+    ```
+  - Run all tests *except* UI tests:
+    ```bash
+    pytest -m "not ui"
+    ```
+  - Run only integration tests:
+    ```bash
+    pytest -m integration
+    ```
+  - Run smoke tests:
+    ```bash
+    pytest -m smoke
+    ```
+
+### Coverage Reports
+
+Coverage is configured in `pytest.ini` and `.coveragerc`.
+
+- **Run all tests and generate a terminal coverage report:**
+  ```bash
+  pytest --cov
+  ```
+  (Note: `--cov=core --cov-report=term` is often configured in `pytest.ini` `addopts`, so `pytest` might show it by default. To specify sources, use `--cov=core --cov=ui` etc.)
+
+- **Generate an HTML coverage report (runs all tests):**
+  ```bash
+  pytest --cov --cov-report=html
+  ```
+  The HTML report will be available in the `htmlcov/` directory (as configured in `.coveragerc`).
 
 ## Test Organization
 
-- `tests/core/` - Core business logic tests
-- `tests/infrastructure/` - Database and persistence tests
-- `integration/` - Cross-component integration tests
-- UI tests - Tests for Qt components and dialogs
+- `tests/core/` - Core business logic tests (often marked `unit`)
+- `tests/infrastructure/` - Database and persistence tests (often marked `integration`)
+- `tests/integration/` - Cross-component integration tests (marked `integration`)
+- `tests/ui/` - Tests for Qt components and dialogs (automatically marked `ui`)
 
 ## Best Practices
 
-1. **Qt-related testing**: 
-   - Qt tests can be flaky due to GUI interactions
-   - Use `--no-gui` when working on business logic
-   - The unified test runner handles Qt environment setup automatically
-
-2. **Test Isolation**:
-   - Tests should be independent of each other
-   - Clean up any test data or state changes
-
-3. **Mocking**:
-   - Use mocks for external dependencies
-   - For Qt components, prefer to mock GUI interactions
+1.  **Test Isolation**: Tests should be independent. Use fixtures for setup/teardown.
+2.  **Mocking**: Use `pytest-mock` (or `unittest.mock`) for external dependencies.
+3.  **Qt Testing**: 
+    - UI tests are run by default with `pytest`.
+    - Use `pytest -m "not ui"` if you are working only on non-GUI logic and want faster test cycles.
+    - The `conftest.py` and `pytest-qt` plugin handle Qt environment setup (e.g., offscreen platform).
 
 ## Known Issues and Solutions
 
-### "This plugin does not support propagateSizeHints()" warning
-
-This is a known issue with Qt on Windows. The unified test runner automatically sets the proper environment variables to fix this issue.
-
-### Access violations in GUI tests
-
-Some GUI tests may cause access violations. The unified test runner handles this by:
-
-1. Running tests in a specific order to minimize issues
-2. Setting up the proper Qt environment
-3. Separating GUI tests from other tests
-
-If you encounter access violations, try:
-- Running with `--no-gui` flag to skip GUI tests
-- Using the `--specific` flag to run a single test file
-
-## Generating Coverage Reports
-
-```bash
-# Generate standard coverage report
-python run_unified_tests.py --coverage
-
-# Generate HTML coverage report
-python run_unified_tests.py --html-report
-```
-
-The HTML report will be available in the `htmlcov/` directory.
+- **Qt Platform Warnings/Errors**: `conftest.py` attempts to set up a headless Qt environment (`offscreen`). If issues persist, ensure your PySide6 installation and system dependencies are correct.
+- **Access violations in GUI tests**: While `conftest.py` sets up an offscreen platform, GUI tests can sometimes be sensitive. If you encounter issues:
+    - Try running a problematic UI test file individually: `pytest tests/ui/problematic_test_file.py -v -s` (the `-s` shows print output).
 
 ## Adding New Tests
 
-1. Create test files in the appropriate directory
-2. Follow the existing naming conventions
-3. Use pytest fixtures for setup/teardown
-4. For Qt tests, use qtbot for GUI interaction
-5. For business logic services requiring additional scenarios (e.g., concurrency and error handling), create `test_<service>_extra.py` files in `tests/core/services/` and use dummy repositories to simulate edge cases.
+1.  Create test files in the appropriate directory (e.g., `tests/core/services/`).
+2.  Follow naming conventions (e.g., `test_*.py` for files, `Test...` for classes, `test_...` for functions).
+3.  Use pytest fixtures for setup/teardown.
+4.  For Qt tests, use the `qtbot` fixture provided by `pytest-qt`.
+5.  For business logic services requiring additional scenarios (e.g., concurrency and error handling), consider creating `test_<service>_extra.py` files in `tests/core/services/` and use dummy/mock repositories to simulate edge cases.
 
 ## CI/CD Integration
 
-The unified test runner can be easily integrated into CI/CD pipelines:
+For CI/CD pipelines, you can use `pytest` commands directly:
 
-```bash
-# Run only non-GUI tests in CI environment
-python run_unified_tests.py --no-gui --coverage
-```
+- **Run all tests and generate Cobertura XML coverage report (common for CI):**
+  ```bash
+  pytest --cov --cov-report=xml
+  ```
 
-This will run all non-GUI tests and generate a coverage report suitable for CI systems. 
+- **If UI tests are problematic or too slow for a particular CI stage, run non-UI tests:**
+  ```bash
+  pytest -m "not ui" --cov --cov-report=xml
+  ``` 

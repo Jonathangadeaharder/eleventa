@@ -85,29 +85,36 @@ def pytest_configure(config):
 
 @pytest.hookimpl(trylast=True)
 def pytest_collection_modifyitems(config, items):
-    """Modify test collection to handle UI tests properly"""
-    # Check if we should run UI tests by looking for -m ui in the arguments
-    run_ui_tests = any('ui' in m for m in config.getoption('markexpr').split()) if config.getoption('markexpr') else False
+    """Modify test collection to handle UI tests properly.
+    Marks tests in tests/ui with 'ui' and ensures resources are loaded if UI tests are collected.
+    UI tests are run by default unless explicitly deselected (e.g., via -m "not ui" or -k)."""
     
+    ui_tests_present_in_collection = False
     # Mark all tests in the UI directory with the 'ui' marker
     for item in items:
         if "tests/ui" in str(item.fspath):
             item.add_marker(pytest.mark.ui)
+            ui_tests_present_in_collection = True
     
-    # If not explicitly asking for UI tests, skip them
-    if not run_ui_tests:
-        skip_ui = pytest.mark.skip(reason="UI tests only run with -m ui option")
-        for item in items:
-            if "tests/ui" in str(item.fspath):
-                item.add_marker(skip_ui)
-    else:
-        # When we're running UI tests, import resources
-        import_ui_resources()
-        try:
-            # Only import QApplication when running UI tests
-            from PySide6.QtWidgets import QApplication
-        except ImportError:
-            print("WARNING: Could not import PySide6. UI tests will likely fail.")
+    # If UI tests are present in the collection, attempt to import Qt resources.
+    # Pytest will handle actual execution/skipping based on command-line arguments like -k or -m.
+    if ui_tests_present_in_collection:
+        print("UI tests were found in the collection. Attempting to import UI resources from conftest.py.")
+        resources_loaded = import_ui_resources()
+        if resources_loaded:
+            try:
+                # This import is mainly a check that PySide6 is installed and basically works.
+                # The actual QApplication instance is managed by pytest-qt or the qapp fixture.
+                from PySide6.QtWidgets import QApplication
+                print("PySide6.QtWidgets.QApplication import check successful in conftest.py.")
+            except ImportError:
+                print("WARNING (from conftest.py): Could not import PySide6.QtWidgets.QApplication. UI tests might fail or be skipped by pytest-qt if Qt is not properly set up.")
+        else:
+            print("WARNING (from conftest.py): UI resources failed to load. UI tests might have issues.")
+
+    # No more automatic skipping of UI tests here.
+    # `pytest` will run them by default if they are collected and not deselected by other filters.
+    # Users can use `pytest -m "not ui"` or `pytest -k "some_name"` to skip/select tests.
 
 @pytest.fixture(scope="session")
 def qapp_args():
