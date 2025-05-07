@@ -97,7 +97,9 @@ def test_db_session(db_engine):
     
     # Clean up after the test
     session.close()
-    transaction.rollback()  # Roll back the outer transaction
+    if transaction.is_active:  # Check if the transaction is still active
+        transaction.rollback()  # Roll back the outer transaction
+    # Else: transaction was likely committed or rolled back by the test itself.
     connection.close()  # Close the connection
 
 def pytest_configure(config):
