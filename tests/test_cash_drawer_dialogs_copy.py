@@ -9,7 +9,7 @@ import sys
 # We might need QApplication for tests involving GUI interactions
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QTableView, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QDateEdit
 from PySide6.QtCore import Qt, QDate, QAbstractItemModel, Signal
-from PySide6.QtTest import QTest 
+from PySide6 import QtTest as PySideQtTest
 
 # Import the dialogs to be tested
 from ui.dialogs.cash_drawer_dialogs import (
