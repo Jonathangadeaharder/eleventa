@@ -147,13 +147,20 @@ def qt_cleanup():
     global _widgets_to_cleanup
     for widget in _widgets_to_cleanup:
         try:
-            if widget is not None and not widget.isDestroyed():
-                widget.close()
-                process_events()
-                widget.deleteLater()
-                process_events()
-        except (RuntimeError, AttributeError):
-            # Widget might already be deleted or have a different interface
+            # Check if the widget reference itself is not None
+            # and then attempt to close and schedule for deletion.
+            if widget: # This implicitly checks if widget is not None
+                widget.close() # Close the widget first
+                process_events() # Process close events
+                widget.deleteLater() # Schedule for deletion
+                process_events() # Process deletion events
+        except RuntimeError:
+            # This can happen if the underlying C++ object is already deleted
+            # For example, if a parent widget was deleted, deleting its children.
+            pass
+        except AttributeError:
+            # This could happen if 'widget' is not a QWidget, though unlikely
+            # given how _widgets_to_cleanup is populated.
             pass
     
     # Clear the list
@@ -175,6 +182,90 @@ def safe_qtbot(qtbot):
     
     qtbot.addWidget = add_widget_with_tracking
     return qtbot
+
+# Try to get path from PySide6.QtCore.QLibraryInfo first
+try:
+    from PySide6.QtCore import QLibraryInfo
+    # Ensure a QApplication instance exists if QLibraryInfo needs it,
+    # but be careful about creating it too early or conflicting with pytest-qt.
+    # For now, let's assume QLibraryInfo can be called if PySide6 is imported.
+    pyside_plugin_path_qlibraryinfo = QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath)
+    print(f"Plugin path from QLibraryInfo: {pyside_plugin_path_qlibraryinfo}")
+except Exception as e:
+    print(f"Error getting plugin path from QLibraryInfo: {e}")
+    pyside_plugin_path_qlibraryinfo = None
+
+@pytest.fixture(scope="session", autouse=True)
+def set_qt_plugin_path(): # qtbot fixture might be needed to ensure Qt is initialized
+    print("Attempting to set QT_PLUGIN_PATH...")
+    try:
+        pyside_plugin_path = None
+        if pyside_plugin_path_qlibraryinfo and os.path.isdir(pyside_plugin_path_qlibraryinfo):
+            print(f"Using QLibraryInfo path: {pyside_plugin_path_qlibraryinfo}")
+            pyside_plugin_path = pyside_plugin_path_qlibraryinfo
+        else:
+            print("QLibraryInfo path not valid or not found, falling back to constructed path.")
+            # Construct the path to the venv
+            # Assuming conftest.py is in tests/ and venv is at project root
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            
+            # Determine PySide6 plugin path based on typical venv structure
+            # Adjust if your venv structure is different
+            if sys.platform == "win32":
+                constructed_path = os.path.join(project_root, "venv", "Lib", "site-packages", "PySide6", "plugins")
+            else: # Linux/macOS might be slightly different, e.g., lib/pythonX.Y/
+                python_version_dir = f"python{sys.version_info.major}.{sys.version_info.minor}"
+                constructed_path = os.path.join(project_root, "venv", "lib", python_version_dir, "site-packages", "PySide6", "plugins")
+
+            if os.path.isdir(constructed_path):
+                pyside_plugin_path = constructed_path
+                print(f"Using constructed path: {pyside_plugin_path}")
+            else:
+                print(f"Warning: PySide6 plugin path not found at: {constructed_path}")
+                # Fallback or alternative paths can be tried here if necessary
+                # For example, sometimes it might be directly in site-packages/PySide6/Qt/plugins
+                alt_plugin_path = os.path.join(project_root, "venv", "Lib", "site-packages", "PySide6", "Qt", "plugins")
+                if os.path.isdir(alt_plugin_path):
+                    pyside_plugin_path = alt_plugin_path
+                    print(f"Found alternative plugin path at: {alt_plugin_path}")
+                else:
+                    print(f"Warning: Alternative PySide6 plugin path also not found at: {alt_plugin_path}")
+                    pyside_plugin_path = None # Ensure it's None if not found
+
+        if pyside_plugin_path and os.path.isdir(pyside_plugin_path):
+            print(f"Setting QT_PLUGIN_PATH to: {pyside_plugin_path}")
+            os.environ["QT_PLUGIN_PATH"] = pyside_plugin_path
+            os.environ["QT_DEBUG_PLUGINS"] = "1" # Keep debug active
+            
+            # On Windows, Qt might also need paths to platform plugins, etc.
+            # It's also good to ensure PATH includes the Qt binaries directory
+            if sys.platform == "win32":
+                qt_bin_path = os.path.dirname(pyside_plugin_path) # Parent of 'plugins' is usually the PySide6 package dir
+                if os.path.isdir(qt_bin_path):
+                    print(f"Adding to PATH: {qt_bin_path}")
+                    os.environ["PATH"] = qt_bin_path + os.pathsep + os.environ.get("PATH", "")
+                else:
+                    # Fallback for qt_bin_path if structure is different
+                    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    qt_bin_path_fallback = os.path.join(project_root, "venv", "Lib", "site-packages", "PySide6")
+                    if os.path.isdir(qt_bin_path_fallback):
+                         print(f"Adding to PATH (fallback): {qt_bin_path_fallback}")
+                         os.environ["PATH"] = qt_bin_path_fallback + os.pathsep + os.environ.get("PATH", "")
+                    else:
+                        print(f"Warning: PySide6 bin path not found at {qt_bin_path} or {qt_bin_path_fallback}")
+
+
+        else:
+            print("Error: PySide6 plugin path could not be determined or does not exist.")
+        
+        # Verify (optional, for debugging)
+        print(f"Current QT_PLUGIN_PATH: {os.environ.get('QT_PLUGIN_PATH')}")
+        print(f"Current PATH (first 200 chars): {os.environ.get('PATH', '')[:200]}")
+
+    except Exception as e:
+        print(f"Error in set_qt_plugin_path fixture: {e}")
+    
+    yield # Let the test session run
 
 # Import other fixtures
 from tests.fixtures.conftest import *

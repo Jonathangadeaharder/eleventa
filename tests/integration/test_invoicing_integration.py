@@ -371,8 +371,6 @@ class TestInvoicingIntegration:
         assert db_invoice.subtotal == subtotal
         assert db_invoice.iva_amount == iva_amount
         assert db_invoice.total == total
-        
-        return invoice
 
     def test_get_all_invoices(self, services, sale):
         """
@@ -440,4 +438,4 @@ class TestInvoicingIntegration:
         finally:
             # Clean up temp file
             if os.path.exists(pdf_path):
-                os.unlink(pdf_path) 
+                os.unlink(pdf_path)

@@ -42,6 +42,7 @@ class MockReportingService:
     def get_report_data(self): return {}
 
 @pytest.mark.smoke
+@pytest.mark.ui
 def test_main_window_starts_and_shows(safe_qtbot):
     # Use the safe_qtbot which tracks widgets for cleanup
     main_win = None

@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QGroupBox
 )
 from PySide6.QtCore import Qt, Slot, QTimer
-from PySide6.QtGui import QIcon, QFont
+from PySide6.QtGui import QIcon, QFont, QPixmap
 from decimal import Decimal
 from typing import List, Optional
 import os
@@ -92,6 +92,18 @@ class SalesView(QWidget):
         parent=None
     ):
         super().__init__(parent)
+
+        # --- Test: Create a blank QPixmap ---
+        print("Attempting to create blank QPixmap in SalesView init...")
+        try:
+            blank_pixmap = QPixmap(16, 16)
+            print(f"Blank QPixmap created: {blank_pixmap}, isNull: {blank_pixmap.isNull()}")
+            if blank_pixmap.isNull():
+                print("Warning: Blank QPixmap is null after creation.")
+        except Exception as e:
+            print(f"Error creating blank QPixmap: {e}")
+        # --- End Test ---
+
         self.product_service = product_service
         self.sale_service = sale_service
         self.customer_service = customer_service
@@ -142,7 +154,7 @@ class SalesView(QWidget):
         style_text_input(self.code_entry)
         
         self.add_button = QPushButton("Agregar")
-        self.add_button.setIcon(QIcon(":/icons/icons/new.png"))
+        self.add_button.setIcon(QIcon(":/icons/icons/new.png")) # Reverted to original resource path
         style_secondary_button(self.add_button)
         
         entry_layout.addWidget(code_label)
@@ -167,7 +179,7 @@ class SalesView(QWidget):
         """)
         
         self.select_customer_button = QPushButton("Seleccionar Cliente")
-        self.select_customer_button.setIcon(QIcon(":/icons/icons/customers.png"))
+        self.select_customer_button.setIcon(QIcon(":/icons/icons/customers.png")) # Reverted to original
         style_secondary_button(self.select_customer_button)
         
         customer_layout.addWidget(self.customer_label)
@@ -261,11 +273,11 @@ class SalesView(QWidget):
         buttons_layout.setSpacing(8)
         
         self.remove_item_button = QPushButton("Quitar Artículo")
-        self.remove_item_button.setIcon(QIcon(":/icons/icons/delete.png"))
+        self.remove_item_button.setIcon(QIcon(":/icons/icons/delete.png")) # Reverted to original
         style_secondary_button(self.remove_item_button)
         
         self.cancel_button = QPushButton("Cancelar Venta")
-        self.cancel_button.setIcon(QIcon(":/icons/icons/cancel.png"))
+        self.cancel_button.setIcon(QIcon(":/icons/icons/cancel.png")) # Reverted to original
         style_secondary_button(self.cancel_button)
         
         buttons_layout.addWidget(self.remove_item_button)
@@ -279,12 +291,12 @@ class SalesView(QWidget):
         
         self.finalize_button = QPushButton("Finalizar Venta (F12)")
         style_primary_button(self.finalize_button)
-        self.finalize_button.setIcon(QIcon(":/icons/icons/save.png"))
+        self.finalize_button.setIcon(QIcon(":/icons/icons/save.png")) # Reverted to original
         finalizing_layout.addWidget(self.finalize_button)
         
         self.invoice_button = QPushButton("Facturar")
         style_secondary_button(self.invoice_button)
-        self.invoice_button.setIcon(QIcon(":/icons/icons/invoice.png"))
+        self.invoice_button.setIcon(QIcon(":/icons/icons/invoice.png")) # Reverted to original
         self.invoice_button.setEnabled(False)  # Disabled by default until a sale is completed
         finalizing_layout.addWidget(self.invoice_button)
         

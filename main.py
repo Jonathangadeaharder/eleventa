@@ -5,6 +5,7 @@ import os
 
 from PySide6.QtWidgets import QApplication, QDialog
 
+# Core application non-UI imports
 from core.services.customer_service import CustomerService
 from core.services.corte_service import CorteService
 from core.services.inventory_service import InventoryService
@@ -30,9 +31,7 @@ from infrastructure.persistence.sqlite.repositories import (
 )
 from infrastructure.persistence.utils import session_scope
 
-import ui.resources.resources # Import compiled resources
-import ui.main_window
-from ui.dialogs.login_dialog import LoginDialog
+# Note: ui.resources.resources, ui.main_window, and LoginDialog will be imported inside main()
 
 def main(test_mode=False, test_user=None, mock_services=None):
     """
@@ -47,12 +46,23 @@ def main(test_mode=False, test_user=None, mock_services=None):
         In test mode, returns a tuple of (app, main_window) for testing
         In normal mode, the function doesn't return (calls sys.exit)
     """
-    # Fix for "This plugin does not support propagateSizeHints()" warning on Windows
+    # --- Application Setup (Step 1: QApplication) ---
+    app_args = sys.argv if sys.argv else []
+    app = QApplication.instance() 
+    if app is None:
+        app = QApplication(app_args) 
+
+    # --- Platform Specific Fixes (Step 2) ---
     if sys.platform == 'win32':
         os.environ['QT_QPA_PLATFORM'] = 'windows:darkmode=0'
     
-    # Initialize database and session provider
-    init_db() # Make sure tables are created
+    # --- Database Initialization (Step 3) ---
+    init_db() 
+
+    # --- UI Imports (Step 4: AFTER QApplication and init_db) ---
+    import ui.resources.resources 
+    import ui.main_window
+    from ui.dialogs.login_dialog import LoginDialog
 
     # Use provided mock services in test mode or create real services
     if test_mode and mock_services:
@@ -190,13 +200,10 @@ def main(test_mode=False, test_user=None, mock_services=None):
                     
             reporting_service = ReportingService(sale_repo_factory)
 
-    # --- Application Setup ---
-    # In test mode, skip creating a real QApplication
-    if test_mode:
-        app = object()
-    else:
-        app = QApplication(sys.argv)
-        # Load custom style sheet
+    if not test_mode:
+        # Load custom style sheet only in normal mode.
+        # If app is a MagicMock (in tests), setStyleSheet will be a mock call,
+        # but we explicitly skip loading and applying it here for test_mode.
         try:
             style_file = open("ui/style.qss", "r")
             style = style_file.read()
