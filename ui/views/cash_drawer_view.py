@@ -7,7 +7,11 @@ from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QFont, QColor
 from decimal import Decimal
 import locale
+from datetime import datetime
 from infrastructure.reporting.receipt_builder import format_currency
+
+# Import the print manager
+from infrastructure.reporting.print_utility import print_manager, PrintType, PrintDestination
 
 from core.services.cash_drawer_service import CashDrawerService
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
@@ -197,9 +201,24 @@ class CashDrawerView(QWidget):
         # Pre-format amounts to strings before passing to the model
         formatted_entries = []
         for entry in raw_entries:
-            # Create a copy to avoid modifying the original dict
-            formatted_entry = entry.copy() 
-            amount = formatted_entry.get('amount', Decimal('0.00'))
+            # Create a copy or convert Pydantic model to dict if needed
+            if hasattr(entry, 'dict'):
+                # For Pydantic models (v1)
+                formatted_entry = entry.dict()
+            elif hasattr(entry, 'model_dump'):
+                # For Pydantic models (v2)
+                formatted_entry = entry.model_dump()
+            else:
+                # For dictionary entries
+                formatted_entry = entry.copy()
+                
+            # Handle amount differently based on type
+            if isinstance(entry, dict):
+                amount = entry.get('amount', Decimal('0.00'))
+            else:
+                # For Pydantic model
+                amount = getattr(entry, 'amount', Decimal('0.00'))
+                
             # Store the formatted string directly
             formatted_entry['amount'] = f"${amount:,.2f}" 
             formatted_entries.append(formatted_entry)
@@ -299,13 +318,37 @@ class CashDrawerView(QWidget):
                 
     def _print_report(self):
         """Print a cash drawer report."""
-        # This would typically send data to a receipt printer
-        # For now, just show a message
-        QMessageBox.information(
-            self,
-            "Imprimir Reporte",
-            "La funcionalidad de impresión de reportes no está implementada en esta versión."
-        )
+        # Get the current drawer data
+        drawer_summary = self.service.get_drawer_summary(self.current_drawer_id)
+        
+        # Check if drawer is open
+        if not drawer_summary.get('is_open', False):
+            QMessageBox.warning(self, "Error", "La caja debe estar abierta para imprimir el reporte.")
+            return
+            
+        try:
+            # Prepare the data for printing
+            timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+            
+            print_data = {
+                'title': 'Reporte de Caja',
+                'drawer_id': self.current_drawer_id,
+                'drawer_data': drawer_summary,
+                'timestamp': timestamp
+            }
+            
+            # Use the print manager to generate and open the PDF
+            result = print_manager.print(
+                print_type=PrintType.CASH_DRAWER,
+                data=print_data,
+                destination=PrintDestination.PREVIEW  # Open in PDF viewer
+            )
+            
+            if not result:
+                QMessageBox.warning(self, "Error", "Ocurrió un error al generar el reporte.")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error al imprimir el reporte: {str(e)}")
 
 # Re-export utility functions
 __all__ = [

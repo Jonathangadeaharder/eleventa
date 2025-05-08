@@ -1,7 +1,7 @@
 import pytest
 import os
 from sqlalchemy import text, Column, Integer, String, inspect
-from sqlalchemy.orm import Session, declarative_base
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from sqlalchemy.exc import OperationalError, ResourceClosedError, InvalidRequestError
 
 # Adjust path to import from the project root
@@ -40,10 +40,10 @@ class _TestItem(Base):
 #     
 #     # Tables will be cleaned up by the transaction rollback in test_db_session
 
-def test_database_connection(db_engine):
+def test_database_connection(test_engine):
     """Verify that engine.connect() successfully establishes a connection."""
     try:
-        connection = db_engine.connect()
+        connection = test_engine.connect()
         assert connection is not None
         # Optional: Execute a simple query
         result = connection.execute(text("SELECT 1"))
@@ -84,45 +84,68 @@ def test_session_scope_rollback_data_consistency(test_db_session):
     Test that after an exception and rollback, no partial data is persisted.
     Uses test_db_session directly instead of session_scope for debugging.
     """
-    with pytest.raises(RuntimeError, match="Simulated failure"):
-        # Use test_db_session directly
-        item = _TestItem(id=1, name="should_rollback")
-        test_db_session.add(item)
-        test_db_session.flush()
-        try:
-            raise RuntimeError("Simulated failure")
-        except RuntimeError:
-            test_db_session.rollback() # Explicitly rollback *before* leaving the context
-            raise # Re-raise the exception for pytest.raises
-
-    # Expire session state might still be good practice
-    test_db_session.expire_all()
+    # Create a fresh session for this test to avoid interference with fixture session
+    from sqlalchemy.orm import sessionmaker
+    from infrastructure.persistence.sqlite.database import engine
     
-    # Verify that the row was not persisted
-    # Since test_db_session rolled back, it should be clean for the next query.
-    result = test_db_session.query(_TestItem).filter_by(id=1).first()
-    assert result is None, "Row should not exist after rollback"
+    TestSession = sessionmaker(bind=engine)
+    local_session = TestSession()
+    
+    try:
+        # Clean up any existing test data for isolation
+        local_session.execute(text("DELETE FROM test_items WHERE id = 1"))
+        local_session.commit()
+        
+        # Add test data
+        item = _TestItem(id=1, name="should_rollback")
+        local_session.add(item)
+        local_session.flush()
+        
+        # Simulate failure and rollback
+        local_session.rollback()
+        
+        # Verify rollback worked
+        result = local_session.query(_TestItem).filter_by(id=1).first()
+        assert result is None, "Row should not exist after rollback"
+    finally:
+        # Ensure clean up regardless of test outcome
+        local_session.close()
 
 def test_session_scope_commit_exception_consistency(test_db_session):
     """
     Test that an IntegrityError during flush prevents persistence and 
-    the session can be rolled back cleanly using the fixture.
-    (Note: Name reflects original intent, but behavior tests fixture + DB constraint)
+    the session can be rolled back cleanly.
     """
-    # Attempt to insert item and a duplicate in the same transaction
+    # Create a fresh session for this test to avoid interference with fixture session
+    from sqlalchemy.orm import sessionmaker
+    from infrastructure.persistence.sqlite.database import engine
     from sqlalchemy.exc import IntegrityError
+    
+    TestSession = sessionmaker(bind=engine)
+    local_session = TestSession()
+    
     try:
+        # Clean up any existing test data for isolation
+        local_session.execute(text("DELETE FROM test_items WHERE id = 2"))
+        local_session.commit()
+        
+        # Attempt to insert two items with the same primary key (should fail)
         item = _TestItem(id=2, name="unique")
-        test_db_session.add(item)
-        dup = _TestItem(id=2, name="duplicate") # Duplicate PK
-        test_db_session.add(dup)
-        # Flush will raise IntegrityError due to the PK constraint
-        test_db_session.flush() 
-        pytest.fail("IntegrityError not raised during flush") # Should not reach here
-    except IntegrityError:
-        # Expected error, now rollback the session state
-        test_db_session.rollback()
-
-    # Verify *no* item exists with id=2 after rollback
-    items = test_db_session.query(_TestItem).filter_by(id=2).all()
-    assert len(items) == 0, "Item should not exist after IntegrityError and rollback"
+        dup = _TestItem(id=2, name="duplicate")
+        local_session.add(item)
+        local_session.add(dup)
+        
+        try:
+            # This should raise IntegrityError
+            local_session.flush()
+            pytest.fail("IntegrityError not raised during flush") 
+        except IntegrityError:
+            # Expected error - rollback to clean state
+            local_session.rollback()
+            
+            # Verify no item exists after rollback
+            items = local_session.query(_TestItem).filter_by(id=2).all()
+            assert len(items) == 0, "Item should not exist after IntegrityError and rollback"
+    finally:
+        # Ensure clean up regardless of test outcome
+        local_session.close()

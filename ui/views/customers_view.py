@@ -1,15 +1,17 @@
 import sys
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit,
-    QTableView, QMessageBox, QAbstractItemView, QHeaderView
+    QTableView, QMessageBox, QAbstractItemView, QHeaderView, QLabel
 )
 from PySide6.QtCore import Qt, Slot # Import Slot
-from PySide6.QtGui import QKeySequence, QShortcut # For shortcuts
+from PySide6.QtGui import QKeySequence, QShortcut, QIcon # For shortcuts and icons
+import os
 
 # Assuming Table Model, Dialog, and Service are available
 from ..models.table_models import CustomerTableModel
 from ..dialogs.customer_dialog import CustomerDialog
 from ..dialogs.register_payment_dialog import RegisterPaymentDialog # Added payment dialog
+from ..dialogs.adjust_balance_dialog import AdjustBalanceDialog
 from core.services.customer_service import CustomerService
 # Import utility functions
 from ..utils import show_error_message, ask_confirmation, show_info_message # Added show_info_message
@@ -32,7 +34,8 @@ class CustomersView(QWidget):
         self.modify_button = QPushButton("&Modificar Cliente (F6)") # Added shortcut hint
         self.delete_button = QPushButton("&Eliminar Cliente (Supr)") # Added shortcut hint
         self.register_payment_button = QPushButton("Registrar &Pago") # Renombrado para coincidir con el test
-        self.edit_button = QPushButton("Editar")
+        self.adjust_balance_button = QPushButton("Ajustar Saldo")
+        self.adjust_balance_button.setEnabled(False)
 
         self.table_view = QTableView()
         self.table_model = CustomerTableModel(self)
@@ -60,7 +63,7 @@ class CustomersView(QWidget):
         toolbar_layout.addWidget(self.modify_button)
         toolbar_layout.addWidget(self.delete_button)
         toolbar_layout.addWidget(self.register_payment_button)
-        toolbar_layout.addWidget(self.edit_button)
+        toolbar_layout.addWidget(self.adjust_balance_button)
 
         main_layout = QVBoxLayout(self)
         main_layout.addLayout(toolbar_layout)
@@ -74,6 +77,10 @@ class CustomersView(QWidget):
         self.delete_button.clicked.connect(self.delete_selected_customer)
         self.register_payment_button.clicked.connect(self.register_payment) # Conectar el botón renombrado
         self.table_view.doubleClicked.connect(self.modify_selected_customer)
+        self.adjust_balance_button.clicked.connect(self.adjust_balance)
+
+        # Connect selection changes to update button states
+        self.table_view.selectionModel().selectionChanged.connect(self._update_buttons_state)
 
         # --- Shortcuts ---
         QShortcut(QKeySequence(Qt.Key.Key_F5), self, self.add_new_customer)
@@ -85,6 +92,9 @@ class CustomersView(QWidget):
 
         # --- Initial Data Load ---
         self.refresh_customers()
+        
+        # Initial button state
+        self._update_buttons_state()
 
     @Slot()
     def refresh_customers(self):
@@ -190,6 +200,55 @@ class CustomersView(QWidget):
                 show_error_message(self, "Error Inesperado", f"Ocurrió un error al registrar el pago: {e}")
                 print(f"Unexpected error during payment registration: {e}")
 
+    # --- New Slot for Balance Adjustment --- #
+    @Slot()
+    def adjust_balance(self):
+        """Opens a dialog to directly adjust a customer's balance."""
+        selected_customer = self._get_selected_customer()
+        if not selected_customer:
+            show_error_message(self, "Selección Requerida", "Por favor, seleccione un cliente para ajustar su saldo.")
+            return
+
+        # Open the balance adjustment dialog
+        dialog = AdjustBalanceDialog(selected_customer, parent=self)
+        if dialog.exec():
+            # Dialog was accepted, get adjustment details
+            amount = dialog.adjustment_amount
+            notes = dialog.adjustment_notes
+            is_increase = dialog.is_increase
+            
+            try:
+                # Call the customer service to apply the balance adjustment
+                adjustment_log = self._customer_service.adjust_balance(
+                    customer_id=selected_customer.id,
+                    amount=amount,
+                    is_increase=is_increase,
+                    notes=notes
+                    # user_id=user_id if implementing users
+                )
+                
+                # Determine the message based on adjustment type
+                action_type = "aumentado" if is_increase else "reducido" 
+                show_info_message(
+                    self, 
+                    "Saldo Ajustado", 
+                    f"Saldo {action_type} en $ {amount:.2f} para {selected_customer.name}."
+                )
+                self.refresh_customers() # Refresh the view to show updated balance
+            except ValueError as ve:
+                show_error_message(self, "Error al Ajustar Saldo", str(ve))
+            except Exception as e:
+                show_error_message(self, "Error Inesperado", f"Ocurrió un error al ajustar el saldo: {e}")
+                print(f"Unexpected error during balance adjustment: {e}")
+
+    def _update_buttons_state(self):
+        """Update the enable/disable state of buttons based on selection."""
+        has_selection = len(self.table_view.selectionModel().selectedRows()) > 0
+        self.modify_button.setEnabled(has_selection)
+        self.delete_button.setEnabled(has_selection)
+        self.register_payment_button.setEnabled(has_selection)
+        self.adjust_balance_button.setEnabled(has_selection)
+
 # Example Usage (for testing if run directly)
 if __name__ == '__main__':
     from PySide6.QtWidgets import QApplication
@@ -221,9 +280,19 @@ if __name__ == '__main__':
             print(f"Mock: apply payment for {customer_id}, Amount: {amount}, Notes: {notes}")
             cust = self.get_customer_by_id(customer_id)
             if cust:
-                cust.credit_balance += float(amount) # Simulate payment decreasing debt
+                cust.credit_balance -= float(amount) # Simulate payment decreasing debt
             # Return a dummy CreditPayment object if needed
             return CreditPayment(id=999, customer_id=customer_id, amount=amount)
+        def adjust_balance(self, customer_id, amount, is_increase, notes, user_id=None):
+            print(f"Mock: adjust balance for {customer_id}, Amount: {amount}, Increase: {is_increase}, Notes: {notes}")
+            cust = self.get_customer_by_id(customer_id)
+            if cust:
+                if is_increase:
+                    cust.credit_balance += float(amount) # Increase debt
+                else:
+                    cust.credit_balance -= float(amount) # Decrease debt
+            # Return a dummy CreditPayment object
+            return CreditPayment(id=998, customer_id=customer_id, amount=amount if is_increase else -amount)
 
     app = QApplication(sys.argv)
     service = MockCustomerService()

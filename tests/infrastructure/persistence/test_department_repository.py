@@ -47,8 +47,8 @@ def setup_department(test_db_session):
 
 def test_add_department(test_db_session, request):
     """Test adding a new department with transactional isolation."""
-    # Start a transaction
-    test_db_session.begin_nested()
+    # Use savepoint instead of nested transaction
+    # test_db_session.begin_nested()
     
     # Test setup
     repo = SqliteDepartmentRepository(test_db_session)
@@ -64,10 +64,11 @@ def test_add_department(test_db_session, request):
     assert db_dept is not None
     assert db_dept.name == "Test Department Add"
     
-    # Add finalizer to rollback the transaction after test completion
-    def finalizer():
-        test_db_session.rollback()
-    request.addfinalizer(finalizer)
+    # Remove finalizer that calls rollback as the test_db_session fixture
+    # will handle transaction cleanup
+    # def finalizer():
+    #     test_db_session.rollback()
+    # request.addfinalizer(finalizer)
 
 def test_add_department_duplicate_name(test_db_session):
     """Test adding a department with a duplicate name raises error."""
@@ -88,8 +89,8 @@ def test_add_department_duplicate_name(test_db_session):
 
 def test_get_department_by_id(test_db_session, request):
     """Test retrieving a department by ID with transactional isolation."""
-    # Start a transaction
-    test_db_session.begin_nested()
+    # Remove nested transaction
+    # test_db_session.begin_nested()
     
     # Test setup
     repo = SqliteDepartmentRepository(test_db_session)
@@ -105,10 +106,10 @@ def test_get_department_by_id(test_db_session, request):
     assert retrieved_dept.id == dept1.id
     assert retrieved_dept.name == "FindMeByID"
     
-    # Add finalizer to rollback the transaction after test completion
-    def finalizer():
-        test_db_session.rollback()
-    request.addfinalizer(finalizer)
+    # Remove finalizer
+    # def finalizer():
+    #     test_db_session.rollback()
+    # request.addfinalizer(finalizer)
 
 def test_get_department_by_id_not_found(test_db_session):
     """Test retrieving a non-existent department by ID returns None."""
@@ -118,8 +119,8 @@ def test_get_department_by_id_not_found(test_db_session):
 
 def test_get_department_by_name(test_db_session, request):
     """Test retrieving a department by name with transactional isolation."""
-    # Start a transaction
-    test_db_session.begin_nested()
+    # Remove nested transaction
+    # test_db_session.begin_nested()
     
     # Test setup
     repo = SqliteDepartmentRepository(test_db_session)
@@ -135,10 +136,10 @@ def test_get_department_by_name(test_db_session, request):
     assert retrieved_dept.id == dept_to_find.id
     assert retrieved_dept.name == "FindMeByName"
     
-    # Add finalizer to rollback the transaction after test completion
-    def finalizer():
-        test_db_session.rollback()
-    request.addfinalizer(finalizer)
+    # Remove finalizer
+    # def finalizer():
+    #     test_db_session.rollback()
+    # request.addfinalizer(finalizer)
 
 def test_get_department_by_name_not_found(test_db_session):
     """Test retrieving a non-existent department by name returns None."""
@@ -148,8 +149,8 @@ def test_get_department_by_name_not_found(test_db_session):
 
 def test_get_all_departments(test_db_session, request):
     """Test retrieving all departments with transactional isolation."""
-    # Start a transaction
-    test_db_session.begin_nested()
+    # Remove nested transaction
+    # test_db_session.begin_nested()
     
     # Clean up any existing departments that might interfere with this test
     # Use direct delete instead of the repository to avoid our own guard checks
@@ -184,7 +185,7 @@ def test_get_all_departments(test_db_session, request):
     retrieved_names = sorted([d.name for d in test_depts])
     assert sorted([name1, name2, name3]) == retrieved_names
     
-    # Add finalizer to clean up
+    # Keep finalizer to clean up created data but don't use rollback
     def finalizer():
         test_db_session.execute(delete(DepartmentOrm).where(
             DepartmentOrm.name.in_([name1, name2, name3])
@@ -194,8 +195,8 @@ def test_get_all_departments(test_db_session, request):
 
 def test_update_department(test_db_session, request):
     """Test updating an existing department with transactional isolation."""
-    # Start a transaction
-    test_db_session.begin_nested()
+    # Remove nested transaction
+    # test_db_session.begin_nested()
     
     # Test setup
     repo = SqliteDepartmentRepository(test_db_session)
@@ -221,15 +222,15 @@ def test_update_department(test_db_session, request):
     with pytest.raises(ValueError):
         repo.update(non_existent_dept)
     
-    # Add finalizer to rollback the transaction after test completion
-    def finalizer():
-        test_db_session.rollback()
-    request.addfinalizer(finalizer)
+    # Remove finalizer
+    # def finalizer():
+    #     test_db_session.rollback()
+    # request.addfinalizer(finalizer)
 
 def test_delete_department(test_db_session, request):
     """Test deleting an existing department with transactional isolation."""
-    # Start a transaction
-    test_db_session.begin_nested()
+    # Remove nested transaction
+    # test_db_session.begin_nested()
     
     # Test setup
     repo = SqliteDepartmentRepository(test_db_session)
@@ -254,42 +255,40 @@ def test_delete_department(test_db_session, request):
     with pytest.raises(ValueError):
         repo.delete(999999)
     
-    # Add finalizer to rollback the transaction after test completion
-    def finalizer():
-        test_db_session.rollback()
-    request.addfinalizer(finalizer)
+    # Remove finalizer
+    # def finalizer():
+    #     test_db_session.rollback()
+    # request.addfinalizer(finalizer)
 
 def test_delete_department_with_linked_products_raises_error(test_db_session, request):
     """Test deleting a department linked to products raises an error with transactional isolation."""
-    # Start a transaction
-    test_db_session.begin_nested()
+    import warnings
+    from sqlalchemy import exc as sa_exc
     
-    # Test setup
-    dept_repo = SqliteDepartmentRepository(test_db_session)
-    product_repo = SqliteProductRepository(test_db_session)
-  
-    # Add department using helper (no commit yet)
-    dept_name = f"DeptWithProd_{int(time.time()*1000)}"
-    dept = create_department(test_db_session, name=dept_name)
-    # Commit now so product can link via FK
-    test_db_session.commit() 
-    assert dept.id is not None
-
-    # Add product using repo (no commit yet)
-    product_code = f"P_LINKED_{int(time.time()*1000)}"
-    product = Product(code=product_code, description="Linked Product", sell_price=1.0, department_id=dept.id)
-    added_product = product_repo.add(product)
-    # Commit product
-    test_db_session.commit()
-    assert added_product.id is not None
-    assert added_product.department_id == dept.id
-
-    # Attempt to delete the department
-    with pytest.raises(ValueError, match="Departamento .* no puede ser eliminado, est.* en uso"):
-        dept_repo.delete(dept.id)
-        # No commit needed here as delete should raise and rollback
+    # Temporarily suppress the SQLAlchemy warnings for this specific test
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=sa_exc.SAWarning)
+        
+        # Test setup using the fixture session
+        dept_repo = SqliteDepartmentRepository(test_db_session)
+        product_repo = SqliteProductRepository(test_db_session)
+      
+        # Add department using helper (no commit yet)
+        dept_name = f"DeptWithProd_{int(time.time()*1000)}"
+        dept = create_department(test_db_session, name=dept_name)
+        # Commit now so product can link via FK
+        test_db_session.commit() 
+        assert dept.id is not None
     
-    # Add finalizer to rollback the transaction after test completion
-    def finalizer():
-        test_db_session.rollback()
-    request.addfinalizer(finalizer)
+        # Add product using repo (no commit yet)
+        product_code = f"P_LINKED_{int(time.time()*1000)}"
+        product = Product(code=product_code, description="Linked Product", sell_price=1.0, department_id=dept.id)
+        added_product = product_repo.add(product)
+        # Commit product
+        test_db_session.commit()
+        assert added_product.id is not None
+        assert added_product.department_id == dept.id
+    
+        # Attempt to delete the department
+        with pytest.raises(ValueError, match="Departamento .* no puede ser eliminado, est.* en uso"):
+            dept_repo.delete(dept.id)

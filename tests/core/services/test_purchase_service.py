@@ -164,12 +164,20 @@ def clean_db_for_test(test_db_session):
     """
     Clean the database before each individual test.
     More comprehensive than just clearing tables - this completely rolls back any changes.
+    Also specifically removes any test suppliers that might have been created in previous runs.
     """
     # Start with a clean slate - delete all records
     test_db_session.execute(text("DELETE FROM purchase_order_items"))
     test_db_session.execute(text("DELETE FROM purchase_orders"))
     test_db_session.execute(text("DELETE FROM products"))
+    
+    # First delete any test suppliers that might have been created in previous runs
+    # This includes both new TEST_ prefixed suppliers and older "Test Supplier" patterns
+    test_db_session.execute(text("DELETE FROM suppliers WHERE name LIKE 'TEST\\_%' OR name LIKE 'Test Supplier%'"))
+    
+    # Then delete any remaining suppliers (which should be none if using a clean test DB)
     test_db_session.execute(text("DELETE FROM suppliers"))
+    
     test_db_session.commit()
     
     # Yield control back to the test
@@ -179,25 +187,49 @@ def clean_db_for_test(test_db_session):
     test_db_session.execute(text("DELETE FROM purchase_order_items"))
     test_db_session.execute(text("DELETE FROM purchase_orders"))
     test_db_session.execute(text("DELETE FROM products"))
+    
+    # Again, be thorough with supplier cleanup
+    test_db_session.execute(text("DELETE FROM suppliers WHERE name LIKE 'TEST\\_%' OR name LIKE 'Test Supplier%'"))
     test_db_session.execute(text("DELETE FROM suppliers"))
+    
     test_db_session.commit()
 
 def test_add_supplier(purchase_service, test_db_session):
-    # Generate a unique timestamp for test uniqueness
+    # Generate a unique identifier for test uniqueness
+    unique_id = str(uuid.uuid4())[:8]
     timestamp = int(time.time()) % 10000  # Use last 4 digits to keep CUIT short
+    
+    # Ensure all test data is clearly marked as TEST_ to identify it
     supplier_data = {
-        "name": f"Test Supplier {timestamp}",
+        "name": f"TEST_Supplier_{unique_id}",
         "address": "123 Test St",
         "phone": "555-1234",
-        "email": "test@supplier.com",
-        "cuit": f"123456789-{timestamp}"  # Unique CUIT
+        "email": f"test_{unique_id}@example.com",
+        "cuit": f"TEST-{unique_id}"  # Unique CUIT with TEST prefix
     }
+    
+    # Verify we're not using a production database
+    # Handle both Engine and Connection objects 
+    db_url = ""
+    if hasattr(test_db_session.bind, 'url'):
+        # If bind is Engine
+        db_url = str(test_db_session.bind.url).lower()
+    elif hasattr(test_db_session.bind, 'engine'):
+        # If bind is Connection
+        db_url = str(test_db_session.bind.engine.url).lower()
+    else:
+        # Fallback to checking engine URL directly
+        db_url = str(test_db_session.get_bind().url).lower()
+        
+    if "memory" not in db_url and "test" not in db_url:
+        pytest.skip("Test is being run against a non-test database. Skipping to prevent production data contamination.")
+    
     supplier = purchase_service.add_supplier(supplier_data)
     assert supplier.id is not None
-    assert supplier.name == f"Test Supplier {timestamp}"
+    assert supplier.name == f"TEST_Supplier_{unique_id}"
     assert supplier.phone == "555-1234"
     assert supplier.address == "123 Test St"
-    assert supplier.cuit == f"123456789-{timestamp}"
+    assert supplier.cuit == f"TEST-{unique_id}"
 
 def test_create_purchase_order(purchase_service_with_mocks, mock_supplier_repo, mock_product_repo, mock_po_repo, sample_supplier, sample_product):
     """Test creating a purchase order successfully using mocks instead of trying to use the database."""

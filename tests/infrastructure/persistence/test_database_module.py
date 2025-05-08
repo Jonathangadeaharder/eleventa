@@ -27,11 +27,11 @@ def test_ensure_all_models_mapped():
     assert 'customers' in tables
 
 
-def test_create_all_tables_creates_model_tables(db_engine):
-    # Create tables in the db_engine from session-scoped fixture
-    create_all_tables(db_engine)
+def test_create_all_tables_creates_model_tables(test_engine):
+    # Create tables in the test_engine from session-scoped fixture
+    create_all_tables(test_engine)
     # Inspect tables in the database
-    inspector = inspect(db_engine)
+    inspector = inspect(test_engine)
     db_tables = inspector.get_table_names()
     # Expect the Base metadata table names to appear
     expected = set(Base.metadata.tables.keys())

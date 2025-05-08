@@ -5,3 +5,4 @@ PySide6-Addons==6.7.0
 PySide6-Essentials==6.7.0
 SQLAlchemy==2.0.30
 pydantic[email]
+reportlab==4.1.0

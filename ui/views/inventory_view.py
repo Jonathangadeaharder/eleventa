@@ -14,6 +14,7 @@ from core.services.product_service import ProductService
 from ui.models.table_models import ProductTableModel # Assuming reuse initially
 from ui.utils import show_error_message, ask_confirmation # Assuming utility functions
 from ui.dialogs.add_inventory_dialog import AddInventoryDialog # Import the dialog
+from ui.dialogs.adjust_inventory_dialog import AdjustInventoryDialog # Import the new dialog
 from core.models.product import Product # Import Product model
 from ui.widgets.filter_dropdowns import FilterBoxWidget, FilterDropdown, PeriodFilterWidget
 
@@ -282,14 +283,22 @@ class InventoryView(QWidget):
             print(f"Inventory added for {selected_product.code}") # Debug
 
     def adjust_inventory_item(self):
-        """Placeholder for adjusting stock of the selected item."""
+        """Opens the dialog to adjust stock of the selected item."""
         selected_product = self._get_selected_product()
         if not selected_product:
             return
-        # Similar to add_inventory_item, get selection, show AdjustInventoryDialog
-        print("Adjust Inventory Item clicked (Not Implemented)")
-        show_error_message(self, "Función no implementada", "La función 'Ajustar Stock' no está implementada aún.")
-    
+
+        dialog = AdjustInventoryDialog(self.inventory_service, selected_product, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Refresh the current view after adjusting stock
+            current_index = self.tab_widget.currentIndex()
+            if current_index == 0:
+                self.refresh_inventory_report()
+            elif current_index == 1:
+                self.refresh_low_stock_report()
+            # Optionally, re-select the item if needed
+            print(f"Inventory adjusted for {selected_product.code}") # Debug
+
     def showEvent(self, event):
         """Override showEvent to load filter data when the view becomes visible."""
         super().showEvent(event)

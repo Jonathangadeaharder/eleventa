@@ -21,6 +21,7 @@ ICONS = {
     "reports.png": "https://raw.githubusercontent.com/google/material-design-icons/master/png/action/assessment/materialicons/24dp/2x/baseline_assessment_black_24dp.png",
     "config.png": "https://raw.githubusercontent.com/google/material-design-icons/master/png/action/settings/materialicons/24dp/2x/baseline_settings_black_24dp.png",
     "suppliers.png": "https://raw.githubusercontent.com/google/material-design-icons/master/png/maps/local_shipping/materialicons/24dp/2x/baseline_local_shipping_black_24dp.png",
+    "cash_drawer.png": "https://raw.githubusercontent.com/google/material-design-icons/master/png/hardware/point_of_sale/materialicons/24dp/2x/baseline_point_of_sale_black_24dp.png",
     
     # Button icons
     "new.png": "https://raw.githubusercontent.com/google/material-design-icons/master/png/content/add/materialicons/24dp/2x/baseline_add_black_24dp.png",

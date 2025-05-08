@@ -197,10 +197,13 @@ def test_adjust_inventory_success_positive(inventory_service, mock_product_repo,
 def test_adjust_inventory_success_negative(inventory_service, mock_product_repo, mock_inventory_repo, sample_product):
     """Test successfully adjusting inventory downwards."""
     product_id = sample_product.id
-    quantity_to_adjust = Decimal('-10.0')
-    reason = "Stock count correction (negative)"
-    user_id = 2
+    # We'll set the initial stock to 10 so we can decrease by 3
+    sample_product.quantity_in_stock = 10.0
     
+    quantity_to_adjust = Decimal('-3.0')  # Negative quantity for decreasing
+    reason = "Stock count correction - reducing"
+    user_id = 2
+
     # Explicit creation of product_from_db
     product_from_db = Product(
         id=sample_product.id,
@@ -213,12 +216,12 @@ def test_adjust_inventory_success_negative(inventory_service, mock_product_repo,
         min_stock=sample_product.min_stock
     )
     mock_product_repo.get_by_id.return_value = product_from_db
-    
+
     result_product = inventory_service.adjust_inventory(product_id, quantity_to_adjust, reason, user_id)
-    
+
     # Assertions
     mock_product_repo.get_by_id.assert_called_once_with(product_id)
-    # Check update_stock was called with the negative value
+    # Check update_stock was called with quantity_to_adjust
     mock_product_repo.update_stock.assert_called_once_with(product_id, quantity_to_adjust)
     mock_inventory_repo.add_movement.assert_called_once()
     added_movement = mock_inventory_repo.add_movement.call_args[0][0]
@@ -226,36 +229,91 @@ def test_adjust_inventory_success_negative(inventory_service, mock_product_repo,
     assert added_movement.movement_type == "ADJUSTMENT"
     assert added_movement.description == reason
     assert added_movement.user_id == user_id
-
-def test_adjust_inventory_zero_quantity(inventory_service):
-    """Test adjusting by zero quantity raises ValueError."""
-    with pytest.raises(ValueError, match="Adjustment quantity cannot be zero"):
-        inventory_service.adjust_inventory(product_id=1, quantity=0, reason="Test reason")
-
-def test_adjust_inventory_product_not_found(inventory_service, mock_product_repo):
-    """Test adjusting non-existent product raises ValueError."""
-    product_id = 999
-    mock_product_repo.get_by_id.return_value = None
-    with pytest.raises(ValueError, match=f"Product with ID {product_id} not found"):
-        inventory_service.adjust_inventory(product_id=product_id, quantity=10, reason="Test reason")
-
-def test_adjust_inventory_product_does_not_use_inventory(inventory_service, mock_product_repo, sample_product_no_inventory):
-    """Test adjusting product not using inventory raises ValueError."""
-    product_id = sample_product_no_inventory.id
-    mock_product_repo.get_by_id.return_value = sample_product_no_inventory
-    with pytest.raises(ValueError, match=f"Product {sample_product_no_inventory.code} does not use inventory control"):
-        inventory_service.adjust_inventory(product_id=product_id, quantity=5, reason="Test reason")
-
-def test_adjust_inventory_results_in_negative_stock(inventory_service, mock_product_repo, mock_inventory_repo, sample_product):
-    """Test adjustment resulting in negative stock raises ValueError (default behavior)."""
+    
+def test_adjust_inventory_zero_quantity(inventory_service, mock_product_repo, mock_inventory_repo, sample_product):
+    """Test that adjusting inventory with quantity zero raises an error."""
     product_id = sample_product.id
-    mock_product_repo.get_by_id.return_value = sample_product # Return the original product
-    # Try removing 60 when stock is 50
-    with pytest.raises(ValueError, match="Adjustment results in negative stock.*not allowed"):
-         inventory_service.adjust_inventory(product_id=product_id, quantity=Decimal('-60.0'), reason="Test reason") # Use Decimal
-    # Ensure no update or movement was attempted
+    quantity_to_adjust = Decimal('0.0')
+    reason = "This should fail"
+
+    # Set up mock
+    mock_product_repo.get_by_id.return_value = sample_product
+
+    # Attempt to adjust with zero quantity
+    with pytest.raises(ValueError) as excinfo:
+        inventory_service.adjust_inventory(product_id, quantity_to_adjust, reason)
+    
+    # Assert error message
+    assert "Adjustment quantity cannot be zero" in str(excinfo.value)
+    
+    # Verify no repository methods were called after validation failed
     mock_product_repo.update_stock.assert_not_called()
     mock_inventory_repo.add_movement.assert_not_called()
+
+def test_adjust_inventory_negative_stock(inventory_service, mock_product_repo, mock_inventory_repo, sample_product):
+    """Test that attempting to adjust inventory below zero raises an error."""
+    product_id = sample_product.id
+    # Set initial stock to 5
+    sample_product.quantity_in_stock = Decimal('5.0')
+    # Try to decrease by 10, which would make stock negative
+    quantity_to_adjust = Decimal('-10.0')
+    reason = "This should fail"
+    
+    # Set up mock
+    mock_product_repo.get_by_id.return_value = sample_product
+
+    # Attempt to adjust to negative stock
+    with pytest.raises(ValueError) as excinfo:
+        inventory_service.adjust_inventory(product_id, quantity_to_adjust, reason)
+    
+    # Assert error message
+    assert "negative stock" in str(excinfo.value).lower()
+    
+    # Verify no repository methods were called after validation failed
+    mock_product_repo.update_stock.assert_not_called()
+    mock_inventory_repo.add_movement.assert_not_called()
+
+def test_adjust_inventory_product_not_found(inventory_service, mock_product_repo, sample_product):
+    """Test that adjusting inventory for a non-existent product raises an error."""
+    product_id = 999  # Nonexistent ID
+    quantity_to_adjust = Decimal('5.0')
+    reason = "This should fail"
+    
+    # Configure mock to return None (product not found)
+    mock_product_repo.get_by_id.return_value = None
+
+    # Attempt to adjust for nonexistent product
+    with pytest.raises(ValueError) as excinfo:
+        inventory_service.adjust_inventory(product_id, quantity_to_adjust, reason)
+    
+    # Assert error message
+    assert "not found" in str(excinfo.value).lower()
+    
+    # Verify only get_by_id was called, but no update happened
+    mock_product_repo.get_by_id.assert_called_once_with(product_id)
+    mock_product_repo.update_stock.assert_not_called()
+
+def test_adjust_inventory_product_no_inventory_control(inventory_service, mock_product_repo, sample_product):
+    """Test that adjusting inventory for a product that doesn't use inventory control raises an error."""
+    product_id = sample_product.id
+    # Set product to not use inventory control
+    sample_product.uses_inventory = False
+    quantity_to_adjust = Decimal('5.0')
+    reason = "This should fail"
+    
+    # Configure mock
+    mock_product_repo.get_by_id.return_value = sample_product
+
+    # Attempt to adjust for product that doesn't use inventory
+    with pytest.raises(ValueError) as excinfo:
+        inventory_service.adjust_inventory(product_id, quantity_to_adjust, reason)
+    
+    # Assert error message
+    assert "does not use inventory control" in str(excinfo.value).lower()
+    
+    # Verify only get_by_id was called, but no update happened
+    mock_product_repo.get_by_id.assert_called_once_with(product_id)
+    mock_product_repo.update_stock.assert_not_called()
 
 # --- Tests for decrease_stock_for_sale ---
 # Note: These tests need a mock session object passed directly

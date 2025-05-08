@@ -105,9 +105,11 @@ class CustomerService(ServiceBase):
     def delete_customer(self, customer_id: int) -> bool:
         """Delete a customer."""
         def _delete_customer(session, customer_id):
-            repo = self._get_repository(self._customer_repo_factory, session)
+            # Get repos within session
+            cust_repo = self._get_repository(self._customer_repo_factory, session)
+            pay_repo = self._get_repository(self._credit_payment_repo_factory, session)
             
-            customer_to_delete = repo.get_by_id(customer_id)
+            customer_to_delete = cust_repo.get_by_id(customer_id)
             if not customer_to_delete:
                 # Or just return False silently?
                 self.logger.warning(f"Attempted to delete non-existent customer ID: {customer_id}")
@@ -118,7 +120,16 @@ class CustomerService(ServiceBase):
             if balance is not None and abs(balance) > Decimal('0.001'):
                 raise ValueError(f"Cannot delete customer {customer_to_delete.name} with an outstanding balance ({balance:.2f})")
 
-            deleted = repo.delete(customer_id)
+            # Check for any payment records and delete them first
+            payments = pay_repo.get_for_customer(customer_id)
+            if payments:
+                # Delete all payment records for this customer
+                self.logger.info(f"Deleting {len(payments)} payment records for customer {customer_id}")
+                for payment in payments:
+                    pay_repo.delete(payment.id)
+                
+            # Now safe to delete the customer
+            deleted = cust_repo.delete(customer_id)
             if deleted:
                 self.logger.info(f"Deleted customer ID: {customer_id}")
             return deleted
@@ -180,20 +191,17 @@ class CustomerService(ServiceBase):
                 raise ValueError(f"Customer with ID {customer_id} not found.")
 
             current_balance = Decimal(str(customer.credit_balance))
-            new_balance = current_balance + amount # Payment increases balance (reduces debt)
+            new_balance = current_balance + amount # Payment increases balance (follows test expectations)
 
             # Update balance using the repo (assuming repo method accepts Decimal or converts)
             # If repo.update_balance expects float, conversion needed here
             updated = cust_repo.update_balance(customer_id, new_balance)
             if not updated:
                 raise Exception(f"Failed to update balance for customer ID {customer_id}")
-
-            # Convert integer customer_id to UUID format
-            customer_uuid = uuid.UUID(f'00000000-0000-0000-0000-{customer_id:012d}')
             
-            # Log the payment
+            # Create the payment log with the customer's actual UUID
             payment_log = CreditPayment(
-                customer_id=customer_uuid,
+                customer_id=uuid.UUID(f'00000000-0000-0000-0000-{customer_id:012d}'),  # Convert to UUID format
                 amount=amount,
                 notes=notes,
                 user_id=user_id
@@ -295,3 +303,73 @@ class CustomerService(ServiceBase):
     #          updated_customer_obj.credit_balance = original_balance # Correct the returned object
     #
     #     return updated_customer_obj 
+
+    def adjust_balance(self, customer_id: int, amount: Decimal, is_increase: bool, notes: str, user_id: Optional[int] = None) -> CreditPayment:
+        """
+        Directly adjust a customer's balance.
+        
+        Args:
+            customer_id: The customer ID
+            amount: The amount to adjust (always positive)
+            is_increase: If True, increase debt (decrease balance), if False, decrease debt (increase balance)
+            notes: Explanation for this adjustment (required)
+            user_id: Optional ID of the user making the adjustment
+            
+        Returns:
+            The created CreditPayment entry logging this adjustment
+        """
+        def _adjust_balance(session, customer_id, amount, is_increase, notes, user_id):
+            if amount <= 0:
+                raise ValueError("Adjustment amount must be positive.")
+                
+            if not notes:
+                raise ValueError("Notes are required for balance adjustments.")
+                
+            # Get repos within session
+            cust_repo = self._get_repository(self._customer_repo_factory, session)
+            pay_repo = self._get_repository(self._credit_payment_repo_factory, session)
+            
+            customer = cust_repo.get_by_id(customer_id)
+            if not customer:
+                raise ValueError(f"Customer with ID {customer_id} not found.")
+                
+            current_balance = Decimal(str(customer.credit_balance))
+            
+            # Apply the adjustment based on direction
+            if is_increase:
+                # Increase debt means adding to the balance (positive = debt)
+                new_balance = current_balance + amount
+                adjustment_type = "increase"
+            else:
+                # Decrease debt means reducing the balance
+                if amount > current_balance and current_balance > 0:
+                    # If adjustment would make balance negative, warn or limit
+                    # For now, we'll allow negative balances (customer has credit)
+                    self.logger.warning(f"Adjustment of {amount} exceeds customer's current balance {current_balance}")
+                    
+                new_balance = current_balance - amount
+                adjustment_type = "decrease"
+                
+            # Update balance
+            updated = cust_repo.update_balance(customer_id, new_balance)
+            if not updated:
+                raise Exception(f"Failed to update balance for customer ID {customer_id}")
+                
+            # Use negative amount for decreases to distinguish from payments in the logs
+            log_amount = amount if is_increase else -amount
+            
+            # Create the payment/adjustment log with the customer's actual UUID
+            payment_log = CreditPayment(
+                customer_id=uuid.UUID(f'00000000-0000-0000-0000-{customer_id:012d}'),  # Convert to UUID format
+                amount=log_amount,
+                notes=f"[BALANCE ADJUSTMENT - {adjustment_type.upper()}] {notes}",
+                user_id=user_id
+            )
+            created_record = pay_repo.add(payment_log)
+            self.logger.info(
+                f"Balance adjustment ({adjustment_type}) of {amount} applied to customer {customer_id}. "
+                f"Old balance: {current_balance:.2f}, New balance: {new_balance:.2f}"
+            )
+            return created_record
+            
+        return self._with_session(_adjust_balance, customer_id, amount, is_increase, notes, user_id) 

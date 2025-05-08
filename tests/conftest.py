@@ -16,86 +16,77 @@ from unittest.mock import MagicMock
 import importlib.util
 import os
 from PySide6.QtWidgets import QApplication
+from pathlib import Path
+
+# Add the project root to the Python path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+# Import necessary modules from the project
+from infrastructure.persistence.sqlite.database import Base
+from infrastructure.persistence.sqlite.models_mapping import ensure_all_models_mapped
+
+# Force use of in-memory database for tests
+TEST_DB_URL = "sqlite:///:memory:"
 
 @pytest.fixture(scope="session")
-def db_engine():
-    """Provide a SQLAlchemy engine for the test session."""
-    from infrastructure.persistence.sqlite.database import Base
-    from infrastructure.persistence.sqlite.models_mapping import map_models
-    
-    # Create in-memory engine for testing
-    test_engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=sqlalchemy.pool.StaticPool
-    )
+def test_engine():
+    """Create an engine connected to an in-memory database for testing."""
+    # Use in-memory SQLite database to avoid touching any real database
+    if "TEST_DB_URL" in os.environ:
+        # Allow override for CI environments
+        db_url = os.environ["TEST_DB_URL"]
+        if "test" not in db_url.lower() and "memory" not in db_url.lower():
+            pytest.skip(f"Refusing to connect to non-test database: {db_url}")
+    else:
+        db_url = TEST_DB_URL
+        
+    engine = create_engine(db_url, echo=False)
     
     # Ensure models are mapped
-    map_models()
+    ensure_all_models_mapped()
     
-    # Register table creation event hooks to control order
-    from infrastructure.persistence.sqlite.table_deps import register_table_creation_events
-    register_table_creation_events(Base.metadata)
+    # Create all tables in the engine
+    Base.metadata.create_all(engine)
     
-    # Create schema with tables in the correct order
-    Base.metadata.create_all(bind=test_engine)
-    
-    yield test_engine
+    # Return engine for use in tests
+    yield engine
     
     # Cleanup after all tests
-    test_engine.dispose()
+    Base.metadata.drop_all(engine)
 
 @pytest.fixture(scope="function")
-def test_db_session(db_engine):
-    """Provide a SQLAlchemy session for each test with proper isolation."""
-    # Create a connection to use for transaction
-    connection = db_engine.connect()
-    
-    # Begin a non-ORM transaction
+def test_db_session(test_engine):
+    """Create a new database session for a test."""
+    # Connect to the database and create a session
+    connection = test_engine.connect()
     transaction = connection.begin()
     
-    # Create a session bound to this connection
-    TestingSessionLocal = sessionmaker(
-        bind=connection, 
-        expire_on_commit=False,
-        future=True
-    )
-    session = TestingSessionLocal()
+    # Create a session bound to the connection
+    Session = sessionmaker(bind=connection)
+    session = Session()
     
-    # Override the begin_nested method to use subtransactions
-    original_begin_nested = session.begin_nested
-    
-    def begin_nested_with_subtransaction():
-        """Create a savepoint with better handling for nested transactions."""
-        return session.begin(nested=True)
-    
-    # Replace the method with our improved version
-    session.begin_nested = begin_nested_with_subtransaction
-    
-    # Provide better commit handling for subtransactions
-    original_commit = session.commit
-    
-    def commit_with_subtransaction_support():
-        """Commit changes with better handling for nested transactions."""
-        try:
-            original_commit()
-        except Exception as e:
-            # If we're in a nested transaction, the commit is expected to fail
-            # but shouldn't crash the test unless it's the main transaction
-            if "This transaction is inactive" not in str(e):
-                raise
-    
-    # Replace the commit method with our improved version
-    session.commit = commit_with_subtransaction_support
-    
+    # Return session for the test to use
     yield session
     
-    # Clean up after the test
+    # Cleanup after test
     session.close()
-    if transaction.is_active:  # Check if the transaction is still active
-        transaction.rollback()  # Roll back the outer transaction
-    # Else: transaction was likely committed or rolled back by the test itself.
-    connection.close()  # Close the connection
+    
+    # Check if transaction is still active before attempting to roll it back
+    # This is the correct way to check transaction state in SQLAlchemy
+    if transaction.is_active:
+        transaction.rollback()
+    
+    connection.close()
+
+@pytest.fixture(scope="session", autouse=True)
+def verify_test_database():
+    """Verify that we are not connecting to a production database."""
+    # Check if we're using a test database
+    db_url = os.environ.get("DATABASE_URL", TEST_DB_URL)
+    if "test" not in db_url.lower() and "memory" not in db_url.lower():
+        pytest.skip(f"Tests must use a test database. Current DB URL: {db_url}")
+    return True
 
 def pytest_configure(config):
     """Register custom pytest marks."""

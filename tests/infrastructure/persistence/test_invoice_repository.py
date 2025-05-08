@@ -104,17 +104,17 @@ def create_customer_department_product_sale(test_db_session, create_customer, cr
 
 def test_add_and_get_invoice(invoice_repo, test_db_session, request, create_customer, create_department, create_product, create_sale):
     """Test adding a new invoice and retrieving it with transactional isolation."""
-    # Start a transaction
-    test_db_session.begin_nested()
+    # Remove nested transaction
+    # test_db_session.begin_nested()
     
     # --- Setup ---
     customer, dept, product, sale = create_customer_department_product_sale(test_db_session, create_customer, create_department, create_product, create_sale, "AddGet")
     # --- End Setup ---
     
-    # Add finalizer to rollback the transaction after test completion
-    def finalizer():
-        test_db_session.rollback()
-    request.addfinalizer(finalizer)
+    # Remove finalizer that calls rollback
+    # def finalizer():
+    #     test_db_session.rollback()
+    # request.addfinalizer(finalizer)
     
     invoice_number = get_unique_invoice_number()
     # Ensure customer ID is a string for JSON serialization
@@ -151,8 +151,8 @@ def test_add_and_get_invoice(invoice_repo, test_db_session, request, create_cust
 
 def test_get_all_invoices(invoice_repo, test_db_session, request, create_customer, create_department, create_product, create_sale):
     """Test retrieving all invoices with transactional isolation."""
-    # Start a transaction
-    test_db_session.begin_nested()
+    # Remove nested transaction
+    # test_db_session.begin_nested()
     
     invoice_numbers_added = set()
 
@@ -180,10 +180,10 @@ def test_get_all_invoices(invoice_repo, test_db_session, request, create_custome
     invoice_numbers_added.add(inv_num2)
     # --- End Invoice 2 --- 
     
-    # Add finalizer to rollback the transaction after test completion
-    def finalizer():
-        test_db_session.rollback()
-    request.addfinalizer(finalizer)
+    # Remove finalizer that calls rollback
+    # def finalizer():
+    #     test_db_session.rollback()
+    # request.addfinalizer(finalizer)
 
     # Retrieve all
     all_invoices = invoice_repo.get_all()
@@ -193,8 +193,8 @@ def test_get_all_invoices(invoice_repo, test_db_session, request, create_custome
 
 def test_duplicate_sale_id_raises_error(invoice_repo, test_db_session, request, create_customer, create_department, create_product, create_sale):
     """Test that adding an invoice for an already invoiced sale raises error with transactional isolation."""
-    # Start a transaction
-    test_db_session.begin_nested()
+    # Remove nested transaction
+    # test_db_session.begin_nested()
     
     # --- Setup ---
     customer, dept, product, sale = create_customer_department_product_sale(test_db_session, create_customer, create_department, create_product, create_sale, "Dup")
@@ -233,7 +233,7 @@ def test_duplicate_sale_id_raises_error(invoice_repo, test_db_session, request, 
         invoice_repo.add(invoice2)
         # No commit needed as add should fail
         
-    # Add finalizer to rollback the transaction after test completion
-    def finalizer():
-        test_db_session.rollback()
-    request.addfinalizer(finalizer)
+    # Remove finalizer that calls rollback
+    # def finalizer():
+    #     test_db_session.rollback()
+    # request.addfinalizer(finalizer)

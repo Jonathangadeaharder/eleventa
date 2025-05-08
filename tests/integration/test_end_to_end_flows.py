@@ -87,7 +87,8 @@ class TestSalesEndToEndFlow:
         # user = test_app["user"]  # Comment this out to use our newly created user instead
 
         # Setup inventory service mock for verification
-        inventory_service.update_stock_from_sale = lambda sale: None
+        original_update_stock = inventory_service.update_stock_from_sale
+        inventory_service.update_stock_from_sale = MagicMock()
         
         # Patch customer service to handle our test customer ID
         def mock_get_customer_by_id(customer_id):
@@ -177,15 +178,27 @@ class TestSalesEndToEndFlow:
         
         # Configure the mock to return the content we expect
         mock_fs = test_app["external"]["filesystem"]
-        mock_fs.file_exists.return_value = True
-        mock_fs.read_file.return_value = receipt_content
-        mock_fs.get_path.return_value = "receipt.txt"
         
-        # Verify receipt was generated (using the mocks)
-        assert mock_fs.file_exists("receipt.txt")
-        assert f"Receipt for sale {sale.id}" in mock_fs.read_file("receipt.txt")
-        assert f"Customer: {customer.name}" in mock_fs.read_file("receipt.txt")
-        assert f"Total: ${sale_total}" in mock_fs.read_file("receipt.txt")
+        # Replace methods with proper MagicMock objects
+        original_file_exists = mock_fs.file_exists
+        original_read_file = mock_fs.read_file
+        original_get_path = mock_fs.get_path
+        
+        mock_fs.file_exists = MagicMock(return_value=True)
+        mock_fs.read_file = MagicMock(return_value=receipt_content)
+        mock_fs.get_path = MagicMock(return_value="receipt.txt")
+
+        try:
+            # Verify receipt was generated (using the mocks)
+            assert mock_fs.file_exists("receipt.txt")
+            assert f"Receipt for sale {sale.id}" in mock_fs.read_file("receipt.txt")
+            assert f"Customer: {customer.name}" in mock_fs.read_file("receipt.txt")
+            assert f"Total: ${sale_total}" in mock_fs.read_file("receipt.txt")
+        finally:
+            # Restore original methods
+            mock_fs.file_exists = original_file_exists
+            mock_fs.read_file = original_read_file
+            mock_fs.get_path = original_get_path
 
 
     def test_sale_with_error_handling(self, test_app, test_data_factory):
@@ -356,9 +369,13 @@ class TestInvoicingEndToEndFlow:
 
         # Configure the mock filesystem
         mock_fs = test_app["external"]["filesystem"]
-        mock_fs.get_path.return_value = temp_path
-        mock_fs.file_exists.return_value = True
-        mock_fs.read_file.return_value = '%PDF-1.4\nThis is a mock PDF file for testing'
+        original_get_path = mock_fs.get_path
+        original_file_exists = mock_fs.file_exists
+        original_read_file = mock_fs.read_file
+        
+        mock_fs.get_path = MagicMock(return_value=temp_path)
+        mock_fs.file_exists = MagicMock(return_value=True)
+        mock_fs.read_file = MagicMock(return_value='%PDF-1.4\nThis is a mock PDF file for testing')
 
         # Patch os.makedirs and os.path.exists to avoid actual filesystem operations
         with patch('os.makedirs', return_value=None) as mock_makedirs, \
@@ -404,6 +421,11 @@ class TestInvoicingEndToEndFlow:
                 
                 # Re-raise the error
                 raise
+            finally:
+                # Restore the original methods
+                mock_fs.get_path = original_get_path
+                mock_fs.file_exists = original_file_exists
+                mock_fs.read_file = original_read_file
 
 
 @pytest.mark.integration

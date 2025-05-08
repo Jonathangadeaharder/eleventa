@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime, timedelta
 from decimal import Decimal
+import os
 from sqlalchemy.orm import Session
 
 from core.interfaces.repository_interfaces import ISaleRepository
@@ -341,3 +342,343 @@ class ReportingService(ServiceBase):
             return float('inf') if new_value > 0 else 0.0
         
         return (new_value - old_value) / abs(old_value)
+    
+    def print_sales_by_period_report(
+        self, 
+        start_time: datetime, 
+        end_time: datetime,
+        group_by: str = 'day',
+        filename: str = None
+    ) -> str:
+        """
+        Generate and print a PDF report for sales by period.
+        
+        Args:
+            start_time: Start of the reporting period
+            end_time: End of the reporting period
+            group_by: Grouping time period ('day', 'week', 'month')
+            filename: Optional custom filename for the PDF
+            
+        Returns:
+            Path to the generated PDF file
+        """
+        from infrastructure.reporting.report_builder import ReportBuilder
+        
+        # Ensure the pdfs directory exists
+        os.makedirs('pdfs', exist_ok=True)
+        
+        # Format dates for display and filename
+        start_str = start_time.strftime('%Y-%m-%d')
+        end_str = end_time.strftime('%Y-%m-%d')
+        
+        # Generate filename if not provided
+        if not filename:
+            filename = f"pdfs/ventas_por_periodo_{start_str}_a_{end_str}.pdf"
+        
+        # Get sales data
+        sales_data = self.get_sales_summary_by_period(start_time, end_time, group_by)
+        
+        # Get totals
+        total_revenue = sum(item.get('total_sales', 0) for item in sales_data)
+        sales_count = sum(item.get('num_sales', 0) for item in sales_data)
+        
+        # Prepare report data
+        report_data = {
+            'start_date': start_str,
+            'end_date': end_str,
+            'total_revenue': total_revenue,
+            'sales_count': sales_count,
+            'sales_by_period': sales_data
+        }
+        
+        # Create and generate the report
+        report_builder = ReportBuilder()
+        success = report_builder.generate_report_pdf(
+            report_title=f"Reporte de Ventas por Período - {start_str} a {end_str}",
+            report_data=report_data,
+            filename=filename
+        )
+        
+        if success:
+            return filename
+        else:
+            raise RuntimeError(f"Error generating sales by period report PDF")
+    
+    def print_sales_by_department_report(
+        self, 
+        start_time: datetime, 
+        end_time: datetime,
+        filename: str = None
+    ) -> str:
+        """
+        Generate and print a PDF report for sales by department.
+        
+        Args:
+            start_time: Start of the reporting period
+            end_time: End of the reporting period
+            filename: Optional custom filename for the PDF
+            
+        Returns:
+            Path to the generated PDF file
+        """
+        from infrastructure.reporting.report_builder import ReportBuilder
+        
+        # Ensure the pdfs directory exists
+        os.makedirs('pdfs', exist_ok=True)
+        
+        # Format dates for display and filename
+        start_str = start_time.strftime('%Y-%m-%d')
+        end_str = end_time.strftime('%Y-%m-%d')
+        
+        # Generate filename if not provided
+        if not filename:
+            filename = f"pdfs/ventas_por_departamento_{start_str}_a_{end_str}.pdf"
+        
+        # Get sales data
+        dept_data = self.get_sales_by_department(start_time, end_time)
+        
+        # Calculate total for percentages
+        total_revenue = sum(dept.get('total_amount', 0) for dept in dept_data)
+        
+        # Add percentage to each department
+        for dept in dept_data:
+            if total_revenue > 0:
+                dept['percentage'] = (dept.get('total_amount', 0) / total_revenue) * 100
+            else:
+                dept['percentage'] = 0
+        
+        # Prepare report data
+        report_data = {
+            'start_date': start_str,
+            'end_date': end_str,
+            'total_revenue': total_revenue,
+            'sales_by_department': dept_data
+        }
+        
+        # Create and generate the report
+        report_builder = ReportBuilder()
+        success = report_builder.generate_report_pdf(
+            report_title=f"Reporte de Ventas por Departamento - {start_str} a {end_str}",
+            report_data=report_data,
+            filename=filename,
+            is_landscape=True
+        )
+        
+        if success:
+            return filename
+        else:
+            raise RuntimeError(f"Error generating sales by department report PDF")
+    
+    def print_sales_by_customer_report(
+        self, 
+        start_time: datetime, 
+        end_time: datetime,
+        limit: int = 20,
+        filename: str = None
+    ) -> str:
+        """
+        Generate and print a PDF report for sales by customer.
+        
+        Args:
+            start_time: Start of the reporting period
+            end_time: End of the reporting period
+            limit: Maximum number of customers to include
+            filename: Optional custom filename for the PDF
+            
+        Returns:
+            Path to the generated PDF file
+        """
+        from infrastructure.reporting.report_builder import ReportBuilder
+        
+        # Ensure the pdfs directory exists
+        os.makedirs('pdfs', exist_ok=True)
+        
+        # Format dates for display and filename
+        start_str = start_time.strftime('%Y-%m-%d')
+        end_str = end_time.strftime('%Y-%m-%d')
+        
+        # Generate filename if not provided
+        if not filename:
+            filename = f"pdfs/ventas_por_cliente_{start_str}_a_{end_str}.pdf"
+        
+        # Get sales data
+        customer_data = self.get_sales_by_customer(start_time, end_time, limit)
+        
+        # Calculate total for percentages
+        total_revenue = sum(cust.get('total_amount', 0) for cust in customer_data)
+        
+        # Add percentage to each customer
+        for cust in customer_data:
+            if total_revenue > 0:
+                cust['percentage'] = (cust.get('total_amount', 0) / total_revenue) * 100
+            else:
+                cust['percentage'] = 0
+        
+        # Prepare report data
+        report_data = {
+            'start_date': start_str,
+            'end_date': end_str,
+            'total_revenue': total_revenue,
+            'sales_by_customer': customer_data
+        }
+        
+        # Create and generate the report
+        report_builder = ReportBuilder()
+        success = report_builder.generate_report_pdf(
+            report_title=f"Reporte de Ventas por Cliente - {start_str} a {end_str}",
+            report_data=report_data,
+            filename=filename
+        )
+        
+        if success:
+            return filename
+        else:
+            raise RuntimeError(f"Error generating sales by customer report PDF")
+    
+    def print_top_products_report(
+        self, 
+        start_time: datetime, 
+        end_time: datetime,
+        limit: int = 20,
+        filename: str = None
+    ) -> str:
+        """
+        Generate and print a PDF report for top selling products.
+        
+        Args:
+            start_time: Start of the reporting period
+            end_time: End of the reporting period
+            limit: Maximum number of products to include
+            filename: Optional custom filename for the PDF
+            
+        Returns:
+            Path to the generated PDF file
+        """
+        from infrastructure.reporting.report_builder import ReportBuilder
+        
+        # Ensure the pdfs directory exists
+        os.makedirs('pdfs', exist_ok=True)
+        
+        # Format dates for display and filename
+        start_str = start_time.strftime('%Y-%m-%d')
+        end_str = end_time.strftime('%Y-%m-%d')
+        
+        # Generate filename if not provided
+        if not filename:
+            filename = f"pdfs/top_productos_{start_str}_a_{end_str}.pdf"
+        
+        # Get sales data
+        products_data = self.get_top_selling_products(start_time, end_time, limit)
+        
+        # Calculate total for percentages
+        total_revenue = sum(prod.get('total_amount', 0) for prod in products_data)
+        
+        # Add percentage to each product
+        for prod in products_data:
+            if total_revenue > 0:
+                prod['percentage'] = (prod.get('total_amount', 0) / total_revenue) * 100
+            else:
+                prod['percentage'] = 0
+        
+        # Prepare report data
+        report_data = {
+            'start_date': start_str,
+            'end_date': end_str,
+            'total_revenue': total_revenue,
+            'top_products': products_data
+        }
+        
+        # Create and generate the report
+        report_builder = ReportBuilder()
+        success = report_builder.generate_report_pdf(
+            report_title=f"Reporte de Productos Más Vendidos - {start_str} a {end_str}",
+            report_data=report_data,
+            filename=filename,
+            is_landscape=True
+        )
+        
+        if success:
+            return filename
+        else:
+            raise RuntimeError(f"Error generating top products report PDF")
+    
+    def print_profit_analysis_report(
+        self, 
+        start_time: datetime, 
+        end_time: datetime,
+        filename: str = None
+    ) -> str:
+        """
+        Generate and print a PDF report for profit analysis.
+        
+        Args:
+            start_time: Start of the reporting period
+            end_time: End of the reporting period
+            filename: Optional custom filename for the PDF
+            
+        Returns:
+            Path to the generated PDF file
+        """
+        from infrastructure.reporting.report_builder import ReportBuilder
+        
+        # Ensure the pdfs directory exists
+        os.makedirs('pdfs', exist_ok=True)
+        
+        # Format dates for display and filename
+        start_str = start_time.strftime('%Y-%m-%d')
+        end_str = end_time.strftime('%Y-%m-%d')
+        
+        # Generate filename if not provided
+        if not filename:
+            filename = f"pdfs/analisis_ganancias_{start_str}_a_{end_str}.pdf"
+        
+        # Get profit data
+        profit_data = self.calculate_profit_for_period(start_time, end_time)
+        
+        # Get sales by department for department profit breakdown
+        dept_data = self.get_sales_by_department(start_time, end_time)
+        
+        # Prepare report data
+        report_data = {
+            'start_date': start_str,
+            'end_date': end_str,
+            'total_revenue': profit_data.get('total_revenue', 0),
+            'total_cost': profit_data.get('total_cost', 0),
+            'total_profit': profit_data.get('total_profit', 0),
+            'profit_margin': profit_data.get('profit_margin', 0) * 100,  # Convert to percentage
+            'department_profit': []
+        }
+        
+        # Add department profit details if available
+        if dept_data:
+            for dept in dept_data:
+                dept_profit = {
+                    'department_name': dept.get('department_name', 'Sin departamento'),
+                    'revenue': dept.get('total_amount', 0),
+                    'cost': 0,  # We would need to calculate this from the items
+                    'profit': 0,
+                    'margin': 0
+                }
+                
+                # Get department cost from sale items (simplified example)
+                # In a real implementation, you would get actual costs from the database
+                dept_profit['cost'] = dept_profit['revenue'] * Decimal('0.65')  # Assuming 65% cost of goods
+                dept_profit['profit'] = dept_profit['revenue'] - dept_profit['cost']
+                
+                if dept_profit['revenue'] > 0:
+                    dept_profit['margin'] = (dept_profit['profit'] / dept_profit['revenue']) * Decimal('100')
+                
+                report_data['department_profit'].append(dept_profit)
+        
+        # Create and generate the report
+        report_builder = ReportBuilder()
+        success = report_builder.generate_report_pdf(
+            report_title=f"Análisis de Ganancias - {start_str} a {end_str}",
+            report_data=report_data,
+            filename=filename
+        )
+        
+        if success:
+            return filename
+        else:
+            raise RuntimeError(f"Error generating profit analysis report PDF")

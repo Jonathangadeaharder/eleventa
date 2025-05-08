@@ -20,5 +20,6 @@
         <file>icons/cancel.png</file>
         <file>icons/save.png</file>
         <file>icons/login.png</file>
+        <file>icons/cash_drawer.png</file>
     </qresource>
 </RCC> 

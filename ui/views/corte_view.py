@@ -12,6 +12,7 @@ from core.services.corte_service import CorteService
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
 from ui.models.table_models import CashDrawerEntryTableModel
 from ui.widgets.filter_dropdowns import PeriodFilterWidget, FilterBoxWidget, FilterDropdown
+from infrastructure.reporting.print_utility import print_manager, PrintType, PrintDestination
 
 
 class CorteView(QWidget):
@@ -162,7 +163,17 @@ class CorteView(QWidget):
         self.do_corte_btn = QPushButton("Hacer Corte del Día")
         self.do_corte_btn.setMinimumHeight(40)
         self.do_corte_btn.clicked.connect(self._on_do_corte)
-        left_layout.addWidget(self.do_corte_btn)
+        
+        # Add the "Print Report" button
+        self.print_report_btn = QPushButton("Imprimir Reporte")
+        self.print_report_btn.setMinimumHeight(40)
+        self.print_report_btn.clicked.connect(self._print_report)
+        
+        # Add buttons in a horizontal layout
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addWidget(self.do_corte_btn)
+        buttons_layout.addWidget(self.print_report_btn)
+        left_layout.addLayout(buttons_layout)
         
         left_layout.addStretch()
         
@@ -269,20 +280,26 @@ class CorteView(QWidget):
                 # Update label
                 self.payment_type_labels[payment_type].setText(f"${amount:.2f}")
             
+            # Get cash sales from payment type breakdown
+            cash_sales = corte_data['sales_by_payment_type'].get('Efectivo', Decimal("0.00"))
+            
             # Update cash drawer summary
             self.starting_balance_label.setText(f"${corte_data['starting_balance']:.2f}")
-            self.cash_sales_label.setText(f"${corte_data['cash_sales']:.2f}")
+            self.cash_sales_label.setText(f"${cash_sales:.2f}")
             self.cash_in_label.setText(f"${corte_data['cash_in_total']:.2f}")
             self.cash_out_label.setText(f"${corte_data['cash_out_total']:.2f}")
             
             # Calculate and update expected cash
             expected_cash = (
                 corte_data['starting_balance'] + 
-                corte_data['cash_sales'] + 
+                cash_sales + 
                 corte_data['cash_in_total'] - 
                 corte_data['cash_out_total']
             )
             self.expected_cash_label.setText(f"${expected_cash:.2f}")
+            
+            # Store cash_sales in current_data for later use
+            self.current_data['cash_sales'] = cash_sales
             
             # Reset actual cash input and difference
             self.actual_cash_input.setValue(expected_cash)
@@ -302,7 +319,7 @@ class CorteView(QWidget):
         
         expected_cash = (
             self.current_data['starting_balance'] + 
-            self.current_data['cash_sales'] + 
+            self.current_data.get('cash_sales', Decimal("0.00")) + 
             self.current_data['cash_in_total'] - 
             self.current_data['cash_out_total']
         )
@@ -359,3 +376,63 @@ class CorteView(QWidget):
                 
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error al realizar el corte: {str(e)}")
+    
+    def _print_report(self):
+        """Print the current corte report."""
+        if self.current_data is None:
+            QMessageBox.warning(self, "Advertencia", "No hay datos para imprimir el reporte.")
+            return
+            
+        try:
+            # Format date range for the report title
+            start_time, end_time = self.period_filter.get_period_range()
+            start_str = start_time.strftime('%d/%m/%Y')
+            end_str = end_time.strftime('%d/%m/%Y')
+            
+            # Prepare the data for printing
+            timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+            
+            # Get cash sales from payment type breakdown if exists
+            cash_sales = self.current_data['sales_by_payment_type'].get('Efectivo', Decimal("0.00"))
+            
+            # Calculate expected cash
+            expected_cash = (
+                self.current_data['starting_balance'] + 
+                cash_sales + 
+                self.current_data['cash_in_total'] - 
+                self.current_data['cash_out_total']
+            )
+            
+            # Prepare report data
+            print_data = {
+                'title': f"Corte de Caja - {start_str} a {end_str}",
+                'report_type': 'corte',
+                'timestamp': timestamp,
+                'start_date': start_str,
+                'end_date': end_str,
+                'total_sales': self.current_data['total_sales'],
+                'num_sales': self.current_data['num_sales'],
+                'sales_by_payment_type': self.current_data['sales_by_payment_type'],
+                'starting_balance': self.current_data['starting_balance'],
+                'cash_sales': cash_sales,
+                'cash_in_total': self.current_data['cash_in_total'],
+                'cash_out_total': self.current_data['cash_out_total'],
+                'expected_cash': expected_cash,
+                'actual_cash': self.actual_cash_input.value(),
+                'difference': self.actual_cash_input.value() - expected_cash,
+                'cash_in_entries': self.current_data['cash_in_entries'],
+                'cash_out_entries': self.current_data['cash_out_entries']
+            }
+            
+            # Use the print manager to generate and show the PDF
+            result = print_manager.print(
+                print_type=PrintType.REPORT,
+                data=print_data,
+                destination=PrintDestination.PREVIEW  # Open in PDF viewer
+            )
+            
+            if not result:
+                QMessageBox.warning(self, "Error", "Ocurrió un error al generar el reporte.")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error al imprimir el reporte: {str(e)}")

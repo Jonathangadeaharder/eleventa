@@ -118,7 +118,7 @@ class SuppliersView(QWidget):
         if not supplier:
             return
 
-        if ask_confirmation(self, f"¿Está seguro que desea eliminar al proveedor '{supplier.name}'?"):
+        if ask_confirmation(self, "Confirmar Eliminación", f"¿Está seguro que desea eliminar al proveedor '{supplier.name}'?"):
             try:
                 success = self.purchase_service.delete_supplier(supplier.id)
                 if success:

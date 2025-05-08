@@ -328,6 +328,11 @@ class ICreditPaymentRepository(ABC):
     def get_for_customer(self, customer_id: int) -> List[CreditPayment]:
         """Gets all credit payments for a specific customer."""
         pass  # pragma: no cover
+        
+    @abstractmethod
+    def delete(self, payment_id: int) -> bool:
+        """Deletes a credit payment by ID."""
+        pass  # pragma: no cover
 
 # Potentially add other repositories here (User, Invoice, etc.) 
 

@@ -460,8 +460,12 @@ class SalesView(QWidget):
     def print_receipt(self, sale_id):
         """Generate and display a PDF receipt for the given sale ID."""
         try:
+            # Create a receipts directory if it doesn't exist
+            receipts_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "receipts")
+            os.makedirs(receipts_dir, exist_ok=True)
+            
             # Generate receipt PDF using SaleService
-            pdf_path = self.sale_service.generate_receipt_pdf(sale_id)
+            pdf_path = self.sale_service.generate_receipt_pdf(sale_id, receipts_dir)
             
             # Inform user that receipt has been generated
             show_info_message(self, "Recibo Generado", 

@@ -517,36 +517,76 @@ class CashDrawerTableModel(QAbstractTableModel):
         
         if role == Qt.DisplayRole:
             if col == 0:  # ID
-                return str(entry.id)
+                # Check if entry is a dict or an object
+                if isinstance(entry, dict):
+                    return str(entry.get('id', ''))
+                else:
+                    return str(getattr(entry, 'id', ''))
             elif col == 1:  # Timestamp
-                return entry.timestamp.strftime("%d/%m/%Y %H:%M")
+                if isinstance(entry, dict):
+                    timestamp = entry.get('timestamp')
+                else:
+                    timestamp = getattr(entry, 'timestamp', None)
+                    
+                if timestamp:
+                    return timestamp.strftime("%d/%m/%Y %H:%M")
+                return ''
             elif col == 2:  # Type
                 type_labels = {
                     CashDrawerEntryType.START: "Apertura",
                     CashDrawerEntryType.IN: "Ingreso",
                     CashDrawerEntryType.OUT: "Retiro"
                 }
-                return type_labels.get(entry.entry_type, str(entry.entry_type))
+                
+                if isinstance(entry, dict):
+                    entry_type = entry.get('entry_type')
+                else:
+                    entry_type = getattr(entry, 'entry_type', None)
+                    
+                return type_labels.get(entry_type, str(entry_type))
             elif col == 3:  # Amount
-                # Amount is now pre-formatted string from the view
-                return entry.get('amount', "$0.00") # Accessing dict directly
+                # Handle both dict and object formats
+                if isinstance(entry, dict):
+                    # If it's already a formatted string
+                    if isinstance(entry.get('amount'), str):
+                        return entry.get('amount', "$0.00")
+                    # If it's a number, format it
+                    amount = entry.get('amount', 0)
+                else:
+                    # If it's an object
+                    if hasattr(entry, 'amount'):
+                        amount = entry.amount
+                    else:
+                        amount = 0
+                
+                # Format the amount if it's not already a string
+                if not isinstance(amount, str):
+                    return f"${float(amount):,.2f}"
+                return amount
             elif col == 4:  # Description
-                # Ensure we access dict keys, provide default
-                return entry.get('description', "")
+                if isinstance(entry, dict):
+                    return entry.get('description', "")
+                else:
+                    return getattr(entry, 'description', "")
             elif col == 5:  # User ID
-                # Ensure we access dict keys, provide default
-                return str(entry.get('user_id', ""))
+                if isinstance(entry, dict):
+                    return str(entry.get('user_id', ""))
+                else:
+                    return str(getattr(entry, 'user_id', ""))
         
         elif role == Qt.BackgroundRole:
-            # Need to access entry_type from the dictionary
-            entry_type = entry.get('type') # Assuming type key holds the enum or string representation
-            # Map string representation back to Enum if necessary, or handle strings directly
-            # This part might need adjustment based on what's in the dict
-            if entry_type == CashDrawerEntryType.START or entry_type == 'add': # Adjust based on actual data
+            # Get entry_type properly based on type
+            if isinstance(entry, dict):
+                entry_type = entry.get('entry_type')
+            else:
+                entry_type = getattr(entry, 'entry_type', None)
+                
+            # Color based on entry type
+            if entry_type == CashDrawerEntryType.START:
                 return QBrush(QColor(230, 230, 250))  # Light lavender
             elif entry_type == CashDrawerEntryType.IN:
                 return QBrush(QColor(240, 255, 240))  # Light green
-            elif entry_type == CashDrawerEntryType.OUT or entry_type == 'remove': # Adjust based on actual data
+            elif entry_type == CashDrawerEntryType.OUT:
                 return QBrush(QColor(255, 240, 240))  # Light red
                 
         elif role == Qt.TextAlignmentRole:

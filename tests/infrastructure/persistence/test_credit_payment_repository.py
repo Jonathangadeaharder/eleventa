@@ -42,7 +42,7 @@ def create_sample_customer(customer_repo):
     )
     return customer_repo.add(customer)
 
-def create_sample_payment(credit_repo, customer_id, user_id=None):
+def create_sample_payment(credit_repo, customer_id, user_id=1):
     payment = CreditPayment(
         customer_id=customer_id,
         amount=Decimal("100.00"),

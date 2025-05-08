@@ -51,8 +51,8 @@ class TestUserRepository:
 
     def test_add_user_duplicate_username(self, test_db_session, request):
         """Test adding a user with a duplicate username raises ValueError with transactional isolation."""
-        # Start a transaction
-        test_db_session.begin_nested()
+        # Remove nested transaction
+        # test_db_session.begin_nested()
         
         # Test setup
         repo = SqliteUserRepository(test_db_session)
@@ -67,15 +67,15 @@ class TestUserRepository:
         with pytest.raises(ValueError, match=".*already exists.*"):
             repo.add(user2)
         
-        # Add finalizer to rollback the transaction after test completion
-        def finalizer():
-            test_db_session.rollback()
-        request.addfinalizer(finalizer)
+        # Remove finalizer
+        # def finalizer():
+        #     test_db_session.rollback()
+        # request.addfinalizer(finalizer)
 
     def test_get_user_by_id(self, test_db_session, request):
         """Verify retrieving a user by ID with transactional isolation."""
-        # Start a transaction
-        test_db_session.begin_nested()
+        # Remove nested transaction
+        # test_db_session.begin_nested()
         
         # Test setup
         repo = SqliteUserRepository(test_db_session)
@@ -93,10 +93,10 @@ class TestUserRepository:
         assert retrieved_user.username == "findme_id_test2"
         assert retrieved_user.id == added_user.id
         
-        # Add finalizer to rollback the transaction after test completion
-        def finalizer():
-            test_db_session.rollback()
-        request.addfinalizer(finalizer)
+        # Remove finalizer
+        # def finalizer():
+        #     test_db_session.rollback()
+        # request.addfinalizer(finalizer)
 
     def test_get_user_by_id_not_found(self, test_db_session):
         """Verify retrieving a non-existent user by ID returns None."""
@@ -106,8 +106,8 @@ class TestUserRepository:
 
     def test_get_user_by_username(self, test_db_session, request):
         """Verify retrieving a user by username with transactional isolation."""
-        # Start a transaction
-        test_db_session.begin_nested()
+        # Remove nested transaction
+        # test_db_session.begin_nested()
         
         # Test setup
         repo = SqliteUserRepository(test_db_session)
@@ -125,10 +125,10 @@ class TestUserRepository:
         assert retrieved_user.id == added_user.id
         assert retrieved_user.username == "findme_name_test2"
         
-        # Add finalizer to rollback the transaction after test completion
-        def finalizer():
-            test_db_session.rollback()
-        request.addfinalizer(finalizer)
+        # Remove finalizer
+        # def finalizer():
+        #     test_db_session.rollback()
+        # request.addfinalizer(finalizer)
 
     def test_get_user_by_username_not_found(self, test_db_session):
         """Verify retrieving a non-existent user by username returns None."""

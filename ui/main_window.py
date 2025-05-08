@@ -75,7 +75,8 @@ class MainWindow(QMainWindow):
         self.reporting_service = reporting_service  # Store the ReportingService
         self.cash_drawer_service = cash_drawer_service  # Store the CashDrawerService
 
-        self.stacked_widget = QStackedWidget(self)
+        # Create stacked widget with parent explicitly set
+        self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
 
         # --- Create Views ---
@@ -119,15 +120,37 @@ class MainWindow(QMainWindow):
             "Reports": reports_view,
             "Configuration": config_view,
             "Suppliers": suppliers_view,
-            "CashDrawer": cash_drawer_view,
+            "CashDrawer": cash_drawer_view,  # Enable the real CashDrawerView
         }
 
+        # No longer need the placeholder
+        # Create a placeholder for the CashDrawer view
+        # placeholder_cash_drawer = PlaceholderWidget("Cash Drawer")
+        
         self.view_indices = {}
         index = 0
+        # Add the widgets one by one with explicit error handling
         for name, widget in self.views.items():
-            self.stacked_widget.addWidget(widget)
-            self.view_indices[name] = index
-            index += 1
+            try:
+                # Set parent to the stacked widget
+                widget.setParent(self.stacked_widget)
+                # Add widget safely
+                self.stacked_widget.addWidget(widget)
+                self.view_indices[name] = index
+                index += 1
+            except Exception as e:
+                print(f"Error adding {name} view to stacked widget: {e}")
+                # If there's an error with CashDrawer view, fall back to placeholder
+                if name == "CashDrawer":
+                    try:
+                        placeholder = PlaceholderWidget("Cash Drawer")
+                        placeholder.setParent(self.stacked_widget)
+                        self.stacked_widget.addWidget(placeholder)
+                        self.view_indices[name] = index
+                        index += 1
+                        print(f"Using placeholder for {name} view instead")
+                    except Exception as placeholder_error:
+                        print(f"Error adding placeholder for {name} view: {placeholder_error}")
 
         self._create_toolbar()
         self._create_status_bar()
@@ -157,8 +180,15 @@ class MainWindow(QMainWindow):
             QToolButton:pressed {
                 background-color: #1c5080;
             }
+            QToolButton[active="true"] {
+                background-color: #1c5080;
+                border: 1px solid #ffffff;
+            }
         """)
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
+        
+        # Dictionary to store actions by view name for highlighting
+        self.view_actions = {}
 
         # Define action details: (Text, View name, Icon name, Shortcut)
         actions = [
@@ -186,14 +216,24 @@ class MainWindow(QMainWindow):
                 font.setBold(True)
                 action.setFont(font)
                 
+                # Store a reference to view_name for each action
+                action.setProperty("view_name", view_name)
+                
                 action.triggered.connect(
                     lambda checked=False, index=self.view_indices[view_name]: self.switch_view(index)
                 )
                 if shortcut:
                     action.setShortcut(QKeySequence(shortcut))
+                    
+                # Store the action for later access
+                self.view_actions[view_name] = action
+                
                 toolbar.addAction(action)
             else:
                 print(f"Warning: View '{view_name}' not found for action '{text}'")
+                
+        # Store the toolbar for later access
+        self.toolbar = toolbar
 
     def _create_status_bar(self):
         """Creates the status bar and adds user display."""
@@ -226,13 +266,47 @@ class MainWindow(QMainWindow):
             self.stacked_widget.setCurrentIndex(index)
             current_widget = self.stacked_widget.widget(index)
             view_name = "Unknown"
+            
+            # Find the name of the current view
             for name, idx in self.view_indices.items():
                 if idx == index:
                     view_name = name
                     break
+                    
+            # Update the status bar
             self.status_bar.showMessage(f"{view_name} View Active")
+            
+            # Highlight the active toolbar item
+            self._highlight_active_action(view_name)
         else:
             print(f"Error: Invalid view index {index}")
+            
+    def _highlight_active_action(self, active_view_name):
+        """Highlights the active toolbar action and removes highlight from others."""
+        # First, remove highlight from all actions
+        for view_name, action in self.view_actions.items():
+            # Find the QToolButton for this action
+            button = self._find_toolbar_button_for_action(action)
+            if button:
+                button.setProperty("active", "false")
+                button.style().unpolish(button)
+                button.style().polish(button)
+        
+        # Then, highlight the active action
+        if active_view_name in self.view_actions:
+            action = self.view_actions[active_view_name]
+            button = self._find_toolbar_button_for_action(action)
+            if button:
+                button.setProperty("active", "true")
+                button.style().unpolish(button)
+                button.style().polish(button)
+    
+    def _find_toolbar_button_for_action(self, action):
+        """Finds the QToolButton in the toolbar that corresponds to the given action."""
+        for widget in self.toolbar.children():
+            if hasattr(widget, 'defaultAction') and widget.defaultAction() == action:
+                return widget
+        return None
 
 if __name__ == '__main__':
     class MockProductService:

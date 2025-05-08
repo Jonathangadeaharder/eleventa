@@ -179,8 +179,8 @@ def _map_credit_payment_orm_to_model(payment_orm: "CreditPaymentOrm") -> Optiona
         id=payment_orm.id,
         customer_id=payment_orm.customer_id, # UUID
         amount=payment_orm.amount, # Numeric -> Decimal
-        payment_date=payment_orm.timestamp, # Map timestamp to payment_date
-        description=payment_orm.notes, # Map notes to description
+        timestamp=payment_orm.timestamp, # Already matches
+        notes=payment_orm.notes, # Already matches
         user_id=payment_orm.user_id
     )
 
@@ -1376,8 +1376,8 @@ class SqliteCreditPaymentRepository(ICreditPaymentRepository):
             payment_orm = CreditPaymentOrm(
                 customer_id=payment.customer_id,
                 amount=payment.amount,
-                timestamp=payment.payment_date if payment.payment_date else datetime.datetime.now(),
-                notes=payment.description,
+                timestamp=payment.timestamp,  # Use timestamp directly
+                notes=payment.notes,  # Use notes directly
                 user_id=payment.user_id
             )
             
@@ -1397,13 +1397,24 @@ class SqliteCreditPaymentRepository(ICreditPaymentRepository):
         payment_orm = self.session.query(CreditPaymentOrm).filter(CreditPaymentOrm.id == payment_id).first()
         return _map_credit_payment_orm_to_model(payment_orm)
         
-    def get_for_customer(self, customer_id) -> List[CreditPayment]:
-        """Gets all credit payments for a specific customer."""
-        payments_orm = self.session.query(CreditPaymentOrm).filter(
-            CreditPaymentOrm.customer_id == customer_id
-        ).order_by(CreditPaymentOrm.timestamp.desc()).all()
+    def get_for_customer(self, customer_id: int) -> List[CreditPayment]:
+        """Get all credit payments for a customer."""
+        payments = self.session.query(CreditPaymentOrm).filter_by(customer_id=customer_id).order_by(CreditPaymentOrm.timestamp.desc()).all()
+        return [_map_credit_payment_orm_to_model(p) for p in payments]
         
-        return [_map_credit_payment_orm_to_model(orm) for orm in payments_orm]
+    def delete(self, payment_id: int) -> bool:
+        """Delete a credit payment by ID."""
+        try:
+            payment = self.session.query(CreditPaymentOrm).filter_by(id=payment_id).first()
+            if not payment:
+                return False
+                
+            self.session.delete(payment)
+            self.session.flush()
+            return True
+        except Exception as e:
+            logging.error(f"Error deleting credit payment: {e}")
+            raise
 
 class SqliteUserRepository(IUserRepository):
     """SQLite implementation of the user repository interface."""

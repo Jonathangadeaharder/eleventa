@@ -84,10 +84,8 @@ class CustomerDialog(QDialog):
 
         try:
             if self._customer: # Editing existing customer
-                # Include the existing balance when calling update
-                # This assumes update_customer signature takes all fields or uses kwargs
-                # We might need to adjust update_customer or how we pass data
-                customer_data["credit_balance"] = self._customer.credit_balance # Keep existing balance
+                # Update customer without passing credit_balance parameter
+                # The service handles preserving the credit balance internally
                 self._customer_service.update_customer(self._customer.id, **customer_data)
                 show_info_message(self, "Cliente Actualizado", "Cliente actualizado correctamente.")
             else: # Adding new customer

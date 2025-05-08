@@ -208,16 +208,15 @@ def test_delete_product(test_db_session, setup_department, request):
     retrieved_prod = repo.get_by_id(prod_id)
     assert retrieved_prod is None
 
-    # Test transactional isolation - ensure no auto-commit
-    test_db_session.rollback()  # Rollback to undo all test operations
-    assert test_db_session.query(ProductOrm).filter_by(id=prod_id).first() is None
+    # Make sure we don't manually rollback, let the fixture handle it
+    # Verify product is actually deleted by checking directly in ORM
+    deleted_check = test_db_session.query(ProductOrm).filter_by(id=prod_id).first()
+    assert deleted_check is None
     
-
     # Test deleting non-existent (should not raise error)
     try:
         repo.delete(88888)
     except Exception as e:
-        test_db_session.rollback()
         pytest.fail(f"Deleting non-existent product raised an error: {e}")
 
 def test_search_product(test_db_session, setup_department):

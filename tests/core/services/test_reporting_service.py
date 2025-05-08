@@ -1,7 +1,10 @@
 import pytest
-from unittest.mock import MagicMock, PropertyMock
+import os
+from datetime import datetime, timedelta
+from decimal import Decimal
+from unittest.mock import MagicMock, patch
+
 from core.services.reporting_service import ReportingService
-from datetime import datetime, timedelta  # Import datetime
 
 class TestReportingService:
     @pytest.fixture(autouse=True)
@@ -182,3 +185,152 @@ class TestReportingService:
         assert isinstance(result["previous_period_products"], list)
         assert isinstance(result["current_payment_types"], list)
         assert isinstance(result["previous_payment_types"], list)
+
+# Add PDF generation tests
+@pytest.mark.parametrize('method_name,report_type', [
+    ('print_sales_by_period_report', 'ventas_por_periodo'),
+    ('print_sales_by_department_report', 'ventas_por_departamento'),
+    ('print_sales_by_customer_report', 'ventas_por_cliente'),
+    ('print_top_products_report', 'top_productos'),
+    ('print_profit_analysis_report', 'analisis_ganancias')
+])
+def test_print_report_methods(method_name, report_type, tmpdir):
+    """Test that all print report methods generate PDF files correctly."""
+    # Create mock repository and service
+    mock_repo = MagicMock()
+    
+    # Set up mock returns for different method calls
+    if 'period' in method_name:
+        mock_repo.get_sales_summary_by_period.return_value = [
+            {'date': '2023-01-01', 'total_sales': Decimal('100.00'), 'num_sales': 5},
+            {'date': '2023-01-02', 'total_sales': Decimal('200.00'), 'num_sales': 10}
+        ]
+    elif 'department' in method_name:
+        mock_repo.get_sales_by_department.return_value = [
+            {'department_id': 1, 'department_name': 'Electronics', 'total_amount': Decimal('500.00'), 'num_items': 20},
+            {'department_id': 2, 'department_name': 'Furniture', 'total_amount': Decimal('300.00'), 'num_items': 5}
+        ]
+    elif 'customer' in method_name:
+        mock_repo.get_sales_by_customer.return_value = [
+            {'customer_id': 1, 'customer_name': 'John Doe', 'total_amount': Decimal('800.00'), 'num_sales': 4},
+            {'customer_id': 2, 'customer_name': 'Jane Smith', 'total_amount': Decimal('200.00'), 'num_sales': 1}
+        ]
+    elif 'product' in method_name:
+        mock_repo.get_top_selling_products.return_value = [
+            {'product_id': 101, 'product_code': 'P001', 'product_description': 'Smartphone', 
+             'quantity_sold': 10, 'total_amount': Decimal('5000.00')},
+            {'product_id': 102, 'product_code': 'P002', 'product_description': 'Tablet', 
+             'quantity_sold': 5, 'total_amount': Decimal('2500.00')}
+        ]
+    elif 'profit' in method_name:
+        mock_repo.calculate_profit_for_period.return_value = {
+            'total_revenue': Decimal('1000.00'),
+            'total_cost': Decimal('600.00'),
+            'total_profit': Decimal('400.00'),
+            'profit_margin': Decimal('0.40')
+        }
+        mock_repo.get_sales_by_department.return_value = [
+            {'department_id': 1, 'department_name': 'Electronics', 'total_amount': Decimal('500.00'), 'num_items': 20},
+            {'department_id': 2, 'department_name': 'Furniture', 'total_amount': Decimal('300.00'), 'num_items': 5}
+        ]
+    
+    # Create a mock factory that returns our mock repo
+    def mock_factory(session):
+        return mock_repo
+    
+    # Create the service with our mock factory
+    service = ReportingService(sale_repo_factory=mock_factory)
+    
+    # Create a temporary file path for the PDF
+    pdf_path = os.path.join(str(tmpdir), f"{report_type}_test.pdf")
+    
+    # Set test dates
+    start_date = datetime(2023, 1, 1)
+    end_date = datetime(2023, 1, 31)
+    
+    # Create patch for ReportBuilder to avoid actually generating PDFs in the test
+    with patch('infrastructure.reporting.report_builder.ReportBuilder') as mock_builder_class:
+        # Setup the mock to return a successful result
+        mock_builder = MagicMock()
+        mock_builder.generate_report_pdf.return_value = True
+        mock_builder_class.return_value = mock_builder
+        
+        # Call the appropriate method
+        method = getattr(service, method_name)
+        
+        # Call with appropriate parameters
+        if method_name == 'print_sales_by_period_report':
+            result = method(start_date, end_date, 'day', pdf_path)
+        elif method_name in ['print_sales_by_customer_report', 'print_top_products_report']:
+            result = method(start_date, end_date, 20, pdf_path)
+        else:
+            result = method(start_date, end_date, pdf_path)
+        
+        # Check that the result is the PDF path
+        assert result == pdf_path
+        
+        # Verify ReportBuilder was called with correct parameters
+        mock_builder.generate_report_pdf.assert_called_once()
+        
+        # Check that the title and filename were passed correctly
+        call_args = mock_builder.generate_report_pdf.call_args[1]
+        assert 'report_title' in call_args
+        assert 'filename' in call_args
+        assert call_args['filename'] == pdf_path
+        
+        # Check that the report data was populated based on the report type
+        assert 'report_data' in call_args
+        report_data = call_args['report_data']
+        assert 'start_date' in report_data
+        assert 'end_date' in report_data
+        
+        # Check specific data for each report type
+        if 'period' in method_name:
+            assert 'sales_by_period' in report_data
+        elif 'department' in method_name:
+            assert 'sales_by_department' in report_data
+        elif 'customer' in method_name:
+            assert 'sales_by_customer' in report_data
+        elif 'product' in method_name:
+            assert 'top_products' in report_data
+        elif 'profit' in method_name:
+            assert 'total_profit' in report_data
+            assert 'profit_margin' in report_data
+
+
+def test_print_report_failure(tmpdir):
+    """Test that a RuntimeError is raised when PDF generation fails."""
+    # Create mock repository and service
+    mock_repo = MagicMock()
+    mock_repo.get_sales_summary_by_period.return_value = []
+    
+    # Create a mock factory that returns our mock repo
+    def mock_factory(session):
+        return mock_repo
+    
+    # Create the service with our mock factory
+    service = ReportingService(sale_repo_factory=mock_factory)
+    
+    # Create a temporary file path for the PDF
+    pdf_path = os.path.join(str(tmpdir), "failed_report.pdf")
+    
+    # Set test dates
+    start_date = datetime(2023, 1, 1)
+    end_date = datetime(2023, 1, 31)
+    
+    # Create patch for ReportBuilder to simulate a failure
+    with patch('infrastructure.reporting.report_builder.ReportBuilder') as mock_builder_class:
+        # Setup the mock to return a failed result
+        mock_builder = MagicMock()
+        mock_builder.generate_report_pdf.return_value = False
+        mock_builder_class.return_value = mock_builder
+        
+        # Call the method and check that it raises a RuntimeError
+        with pytest.raises(RuntimeError) as excinfo:
+            service.print_sales_by_period_report(start_date, end_date, 'day', pdf_path)
+        
+        # Check error message
+        assert "Error generating" in str(excinfo.value)
+        
+        # Verify ReportBuilder was called
+        mock_builder.generate_report_pdf.assert_called_once()

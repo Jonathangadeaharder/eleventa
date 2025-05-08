@@ -224,8 +224,14 @@ def main(test_mode=False, test_user=None, mock_services=None):
     
     # In normal mode, show the window and run the app
     if not test_mode:
-        main_window.show()
-        sys.exit(app.exec())
+        try:
+            main_window.show()
+            sys.exit(app.exec())
+        except Exception as e:
+            print(f"Error showing main window: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
     else:
         # In test mode, return app and main_window for testing
         return app, main_window
