@@ -4,3 +4,5 @@ importlib-metadata
 sqlalchemy
 pytest-cov
 bcrypt
+black
+ruff

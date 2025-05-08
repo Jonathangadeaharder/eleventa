@@ -10,14 +10,21 @@ from typing import List, Optional
 class SaleItem:
     # Fields without defaults first
     product_id: int
-    quantity: Decimal
-    unit_price: Decimal  # Price at the time of sale
+    quantity: Decimal  # This will be converted to Decimal if float
+    unit_price: Decimal  # This will be converted to Decimal if float
 
     # Fields with defaults next
     id: Optional[int] = None
     sale_id: Optional[int] = None
     product_code: str = "" # Denormalized for easy display
     product_description: str = "" # Denormalized for easy display
+
+    def __post_init__(self):
+        # Ensure quantity and unit_price are always Decimal objects
+        if not isinstance(self.quantity, Decimal):
+            self.quantity = Decimal(str(self.quantity))
+        if not isinstance(self.unit_price, Decimal):
+            self.unit_price = Decimal(str(self.unit_price))
 
     @property
     def subtotal(self) -> Decimal:

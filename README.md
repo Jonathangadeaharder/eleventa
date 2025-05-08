@@ -38,12 +38,16 @@ This project uses Alembic for database schema migrations.
 
 ## Project Structure
 
-*   `core/`: Core domain logic, models, services, interfaces.
-*   `infrastructure/`: Database persistence (SQLite), external service integrations.
-*   `ui/`: User interface components (potentially using PySide/Qt).
-*   `tests/`: Unit, integration, and infrastructure tests.
+*   `core/`: Core domain logic (domain models in `core/models/`, services in `core/services/`, and business rule interfaces).
+*   `infrastructure/`: Implementation details for persistence (e.g., `infrastructure/persistence/sqlite/` for SQLite ORM models and repositories) and other external integrations.
+*   `ui/`: User interface components, views, and dialogs (using PySide6/Qt).
+*   `scripts/`: Utility and helper scripts for development or operational tasks.
+*   `tests/`: Contains all tests (unit, integration, UI). Test structure mirrors the application structure (e.g., `tests/core`, `tests/ui`).
+*   `alembic/`: Database migration scripts managed by Alembic.
 *   `main.py`: Main application entry point.
-*   `requirements.txt`: Project dependencies.
-*   `alembic/`: Alembic migration scripts.
-*   `alembic.ini`: Alembic configuration.
-*   `pytest.ini`: Pytest configuration.
+*   `config.py`: Root configuration for the application.
+*   `requirements.txt`: Main application dependencies.
+*   `requirements-dev.txt`: Development and testing dependencies.
+*   `alembic.ini`: Alembic configuration file.
+*   `pytest.ini`: Pytest configuration file.
+*   `.gitignore`: Specifies intentionally untracked files that Git should ignore.

@@ -10,17 +10,12 @@ sys.path.append(".")
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
-from core.database import Base
-from core.config import settings
 from infrastructure.persistence.sqlite.database import SessionLocal
 import sqlalchemy.pool
 from unittest.mock import MagicMock
 import importlib.util
 import os
 from PySide6.QtWidgets import QApplication
-
-# Configure test database URL
-TEST_DATABASE_URL = settings.DATABASE_URL.replace("sqlite:///", "sqlite:///test_")
 
 @pytest.fixture(scope="session")
 def db_engine():

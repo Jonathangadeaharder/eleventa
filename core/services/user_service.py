@@ -1,20 +1,24 @@
 import bcrypt
-from typing import Optional
+from typing import Optional, Callable
+from sqlalchemy.orm import Session
 
-# Adjust path if necessary
-try:
-    from ..interfaces.repository_interfaces import IUserRepository
-    from ..models.user import User
-except ImportError:
-    # Fallback for different import contexts
-    from core.interfaces.repository_interfaces import IUserRepository
-    from core.models.user import User
+from core.services.service_base import ServiceBase
+from core.interfaces.repository_interfaces import IUserRepository
+from core.models.user import User
+from infrastructure.persistence.utils import session_scope
 
-class UserService:
+class UserService(ServiceBase):
     """Handles business logic related to users."""
 
-    def __init__(self, user_repository: IUserRepository):
-        self.user_repository = user_repository
+    def __init__(self, user_repo_factory: Callable[[Session], IUserRepository]):
+        """
+        Initialize the service with a repository factory.
+        
+        Args:
+            user_repo_factory: Factory function to create user repository
+        """
+        super().__init__()  # Initialize base class with default logger
+        self.user_repo_factory = user_repo_factory
 
     def _hash_password(self, password: str) -> str:
         """Hashes a plain text password using bcrypt."""
@@ -34,26 +38,37 @@ class UserService:
         hashed_bytes = hashed_password.encode('utf-8')
         return bcrypt.checkpw(plain_bytes, hashed_bytes)
 
-    def add_user(self, username: str, password: str) -> User:
+    def add_user(self, username: str, password: str) -> Optional[User]:
         """Adds a new user with a hashed password."""
-        if not username:
-            raise ValueError("Username cannot be empty.")
-        # Check if username already exists
-        existing_user = self.user_repository.get_by_username(username)
-        if existing_user:
-            raise ValueError(f"Username '{username}' already exists.")
+        def _add_user(session, username, password):
+            user_repo = self._get_repository(self.user_repo_factory, session)
+            
+            if not username:
+                raise ValueError("Username cannot be empty.")
+                
+            # Check if username already exists
+            existing_user = user_repo.get_by_username(username)
+            if existing_user:
+                self.logger.info(f"Username '{username}' already exists.")
+                raise ValueError(f"Username '{username}' already exists.")
 
-        hashed_password = self._hash_password(password)
-        new_user = User(username=username, password_hash=hashed_password, is_active=True)
-        
-        # The repository's add method should handle the actual saving
-        # and return the user with an assigned ID.
-        created_user = self.user_repository.add(new_user)
-        return created_user
+            hashed_password = self._hash_password(password)
+            new_user = User(username=username, password_hash=hashed_password, is_active=True)
+            
+            # The repository's add method should handle the actual saving
+            # and return the user with an assigned ID.
+            self.logger.info(f"Creating new user: {username}")
+            return user_repo.add(new_user)
+            
+        return self._with_session(_add_user, username, password)
 
     def get_user_by_id(self, user_id: int) -> Optional[User]:
         """Gets a user by their ID."""
-        return self.user_repository.get_by_id(user_id)
+        def _get_user_by_id(session, user_id):
+            user_repo = self._get_repository(self.user_repo_factory, session)
+            return user_repo.get_by_id(user_id)
+            
+        return self._with_session(_get_user_by_id, user_id)
 
     def get_user(self, user_id: int) -> Optional[User]:
         """Gets a user by their ID (alias for get_user_by_id)."""
@@ -61,20 +76,32 @@ class UserService:
 
     def get_user_by_username(self, username: str) -> Optional[User]:
         """Gets a user by their username."""
-        return self.user_repository.get_by_username(username)
+        def _get_user_by_username(session, username):
+            user_repo = self._get_repository(self.user_repo_factory, session)
+            return user_repo.get_by_username(username)
+            
+        return self._with_session(_get_user_by_username, username)
 
     def authenticate_user(self, username: str, password: str) -> Optional[User]:
         """Authenticates a user by username and password."""
-        if not username or not password:
-            return None # Or raise ValueError? Returning None is common for auth failures.
+        def _authenticate_user(session, username, password):
+            if not username or not password:
+                return None
+                
+            user_repo = self._get_repository(self.user_repo_factory, session)
+            user = user_repo.get_by_username(username)
+            
+            if not user or not user.is_active:
+                self.logger.info(f"Authentication failed for username '{username}': user not found or inactive")
+                return None # User not found or inactive
 
-        user = self.user_repository.get_by_username(username)
-        if not user or not user.is_active:
-            return None # User not found or inactive
-
-        if self._verify_password(password, user.password_hash):
-            return user # Authentication successful
-        else:
-            return None # Password incorrect
+            if self._verify_password(password, user.password_hash):
+                self.logger.info(f"Authentication successful for user: {username}")
+                return user # Authentication successful
+            else:
+                self.logger.info(f"Authentication failed for username '{username}': incorrect password")
+                return None # Password incorrect
+                
+        return self._with_session(_authenticate_user, username, password)
 
     # Add update/delete methods later if needed, handling password changes carefully

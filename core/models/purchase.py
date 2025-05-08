@@ -1,74 +1,50 @@
 from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
-from core.database import Base
 from datetime import datetime
 import uuid
+from typing import Optional, List
+from pydantic import BaseModel, Field
+from decimal import Decimal
 
-class Purchase(Base):
-    __tablename__ = 'purchases'
-    
-    id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey('products.id'), nullable=False)
-    supplier_id = Column(Integer, ForeignKey('suppliers.id'), nullable=False)
-    quantity = Column(Numeric(10, 2), nullable=False)
-    unit_price = Column(Numeric(10, 2), nullable=False)
-    total_price = Column(Numeric(10, 2), nullable=False)
-    purchase_date = Column(DateTime, default=datetime.utcnow)
-    invoice_number = Column(String(100))
-    
-    product = relationship("Product", back_populates="purchases")
-    supplier = relationship("Supplier", back_populates="purchases")
+class Purchase(BaseModel):
+    id: Optional[int] = None
+    product_id: int
+    supplier_id: int
+    quantity: Decimal = Field(..., max_digits=10, decimal_places=2)
+    unit_price: Decimal = Field(..., max_digits=10, decimal_places=2)
+    purchase_date: datetime = Field(default_factory=datetime.utcnow)
+    invoice_number: Optional[str] = Field(default=None, max_length=100)
 
-class PurchaseOrder:
-    """Purchase order model representing an order to a supplier."""
-    
-    def __init__(self, 
-                 id=None, 
-                 supplier_id=None, 
-                 date=None, 
-                 status="draft", 
-                 notes="", 
-                 total=0, 
-                 items=None,
-                 expected_delivery_date=None):
-        self.id = id
-        self.supplier_id = supplier_id
-        self.date = date or datetime.now()
-        self.status = status  # draft, sent, received, cancelled
-        self.notes = notes
-        self.total = total
-        self.items = items or []
-        self.expected_delivery_date = expected_delivery_date
+    class Config:
+        from_attributes = True
 
-class PurchaseOrderItem:
+class PurchaseOrderItem(BaseModel):
     """Item within a purchase order."""
-    
-    def __init__(self, 
-                 id=None, 
-                 order_id=None, 
-                 product_id=None, 
-                 quantity=0, 
-                 unit_price=0, 
-                 quantity_received=0,
-                 product_code=None,
-                 product_description=None):
-        self.id = id
-        self.order_id = order_id
-        self.product_id = product_id
-        self.product_code = product_code
-        self.product_description = product_description
-        self.quantity = quantity
-        self.unit_price = unit_price
-        self.quantity_received = quantity_received
+    id: Optional[int] = None
+    product_id: int
+    product_code: Optional[str] = None
+    product_description: Optional[str] = None
+    quantity_ordered: Decimal = Field(..., max_digits=10, decimal_places=2)
+    unit_price: Decimal = Field(..., max_digits=10, decimal_places=2)
+    quantity_received: Decimal = Field(default=Decimal('0.00'), max_digits=10, decimal_places=2)
         
     @property
-    def total(self):
+    def total(self) -> Decimal:
         """Calculate the total price for this item."""
-        return self.quantity * self.unit_price
-        
-    @property
-    def received_status(self):
-        """Calculate the received status as a percentage."""
-        if self.quantity == 0:
-            return 0
-        return min(100, (self.quantity_received / self.quantity) * 100)
+        return (self.quantity_ordered * self.unit_price).quantize(Decimal("0.01"))
+
+    class Config:
+        from_attributes = True
+
+class PurchaseOrder(BaseModel):
+    """Purchase order model representing an order to a supplier."""
+    id: Optional[int] = None
+    supplier_id: int
+    order_date: datetime = Field(default_factory=datetime.utcnow)
+    expected_delivery_date: Optional[datetime] = None
+    status: str = Field(default="PENDING", max_length=50)
+    notes: Optional[str] = Field(default=None)
+    items: List[PurchaseOrderItem] = Field(default_factory=list)
+
+    class Config:
+        from_attributes = True

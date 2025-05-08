@@ -18,6 +18,7 @@ except ImportError:
     # If tests fail due to missing icons, ensure resources.py is generated via pyside6-rcc and importable
 
 from ui.dialogs.login_dialog import LoginDialog  # Import the actual dialog
+from tests.ui.qt_test_utils import safe_click_button, wait_until # Added imports
 
 
 class TestLoginWorkflows:
@@ -382,6 +383,9 @@ class TestSessionManagement:
 class TestUIAuthentication:
     """Tests for UI authentication integration."""
 
+    # This test was previously skipped due to UI instability.
+    # Refactoring to use utils from qt_test_utils.py
+    # @pytest.mark.skip(reason="Known to cause UI test crashes, needs refactoring or environment fix")
     def test_login_dialog_with_auth_service(self, qtbot):
         """Test that the actual login dialog integrates with the user service."""
         # Import Qt resources safely
@@ -419,8 +423,13 @@ class TestUIAuthentication:
                 # --- Test unsuccessful login ---
                 qtbot.keyClicks(dialog.username_input, "admin")
                 qtbot.keyClicks(dialog.password_input, "wrong")
-                qtbot.mouseClick(dialog.login_button, Qt.LeftButton) # Use mouseClick for buttons
-                QApplication.processEvents() # Allow Qt event loop to process signals/slots
+                # qtbot.mouseClick(dialog.login_button, Qt.LeftButton) # Use mouseClick for buttons
+                # QApplication.processEvents() # Allow Qt event loop to process signals/slots
+                safe_click_button(dialog.login_button)
+                
+                # Wait for the warning to be called or dialog to change state if needed
+                # For example, wait for the warning to be called:
+                wait_until(lambda: mock_warning.called, timeout=1000)
 
                 # Verify user service was called with the entered credentials
                 mock_user_service.authenticate.assert_called_with("admin", "wrong")
@@ -447,8 +456,12 @@ class TestUIAuthentication:
 
                 qtbot.keyClicks(dialog.username_input, "admin")
                 qtbot.keyClicks(dialog.password_input, "correct")
-                qtbot.mouseClick(dialog.login_button, Qt.LeftButton)
-                QApplication.processEvents()
+                # qtbot.mouseClick(dialog.login_button, Qt.LeftButton)
+                # QApplication.processEvents()
+                safe_click_button(dialog.login_button)
+
+                # Wait for dialog to be accepted
+                assert wait_until(lambda: dialog.result() == QDialog.Accepted, timeout=1000), "Dialog not accepted"
 
                 # Verify user service was called with correct credentials
                 mock_user_service.authenticate.assert_called_with("admin", "correct")

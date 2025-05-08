@@ -24,7 +24,7 @@ class TestUserRepository:
         
         # Test setup
         repo = SqliteUserRepository(test_db_session)
-        user_to_add = User(username="testuser_add_unique2", password="password123", role="admin", is_active=True)
+        user_to_add = User(username="testuser_add_unique2", password="password123", is_admin=True, is_active=True)
         
         # Execute operation
         added_user = repo.add(user_to_add)

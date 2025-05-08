@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 from decimal import Decimal
 
@@ -13,10 +13,26 @@ class TestCorteService(unittest.TestCase):
         """Set up test environment before each test."""
         self.sale_repository = Mock()
         self.cash_drawer_repository = Mock()
+        
+        # Create factory functions that return the mock repositories
+        def sale_repo_factory(session):
+            return self.sale_repository
+            
+        def cash_drawer_repo_factory(session):
+            return self.cash_drawer_repository
+        
+        # Initialize the service with factories
         self.corte_service = CorteService(
-            sale_repository=self.sale_repository,
-            cash_drawer_repository=self.cash_drawer_repository
+            sale_repo_factory=sale_repo_factory,
+            cash_drawer_repo_factory=cash_drawer_repo_factory
         )
+        
+        # Mock _with_session to avoid SQLAlchemy session handling in tests
+        def mock_with_session(func, *args, **kwargs):
+            session = MagicMock()  # Create a mock session
+            return func(session, *args, **kwargs)
+        
+        self.corte_service._with_session = mock_with_session
         
         # Set up test periods
         self.start_time = datetime(2025, 4, 13, 8, 0)  # April 13, 2025, 8:00 AM
@@ -81,7 +97,7 @@ class TestCorteService(unittest.TestCase):
             CashDrawerEntry(
                 timestamp=datetime(2025, 4, 13, 15, 30),
                 entry_type=CashDrawerEntryType.OUT,
-                amount=Decimal("200.00"),
+                amount=Decimal("-200.00"),  # Negative amount for cash out
                 description="Withdrawal for supplies",
                 user_id=1,
                 drawer_id=1
@@ -98,8 +114,8 @@ class TestCorteService(unittest.TestCase):
         
         # Verify repository methods were called with correct parameters
         self.sale_repository.get_sales_by_period.assert_called_once_with(self.start_time, self.end_time)
-        self.cash_drawer_repository.get_last_start_entry.assert_called_once()
-        self.cash_drawer_repository.get_entries_by_date_range.assert_called_once_with(self.start_time, self.end_time)
+        self.cash_drawer_repository.get_last_start_entry.assert_called_once() 
+        self.cash_drawer_repository.get_entries_by_date_range.assert_called_once_with(self.start_time, self.end_time, None)
         
         # Assert results
         self.assertEqual(result["starting_balance"], Decimal("1000.00"))
@@ -130,15 +146,18 @@ class TestCorteService(unittest.TestCase):
         # Set up the mock
         self.cash_drawer_repository.get_last_start_entry.return_value = start_entry
         
-        # Call the method
-        result = self.corte_service._calculate_starting_balance(self.start_time)
+        # Create mock session
+        mock_session = MagicMock()
+        
+        # Call the method with session parameter
+        result = self.corte_service._calculate_starting_balance(mock_session, self.start_time)
         
         # Verify result
         self.assertEqual(result, Decimal("1000.00"))
         
         # Test when no start entry exists
         self.cash_drawer_repository.get_last_start_entry.return_value = None
-        result = self.corte_service._calculate_starting_balance(self.start_time)
+        result = self.corte_service._calculate_starting_balance(mock_session, self.start_time)
         self.assertEqual(result, Decimal("0.00"))
 
     def test_calculate_sales_by_payment_type(self):
@@ -171,6 +190,7 @@ class TestCorteService(unittest.TestCase):
         user_id = 1
         
         # Mock the repository response
+        self.cash_drawer_repository.is_drawer_open.return_value = True
         mock_entry = CashDrawerEntry(
             timestamp=datetime.now(),
             entry_type=CashDrawerEntryType.CLOSE,

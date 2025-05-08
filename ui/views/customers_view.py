@@ -13,6 +13,7 @@ from ..dialogs.register_payment_dialog import RegisterPaymentDialog # Added paym
 from core.services.customer_service import CustomerService
 # Import utility functions
 from ..utils import show_error_message, ask_confirmation, show_info_message # Added show_info_message
+from core.models.credit_payment import CreditPayment
 
 class CustomersView(QWidget):
     """View for managing customers."""
@@ -222,7 +223,6 @@ if __name__ == '__main__':
             if cust:
                 cust.credit_balance += float(amount) # Simulate payment decreasing debt
             # Return a dummy CreditPayment object if needed
-            from core.models.credit import CreditPayment
             return CreditPayment(id=999, customer_id=customer_id, amount=amount)
 
     app = QApplication(sys.argv)

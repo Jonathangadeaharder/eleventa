@@ -15,6 +15,7 @@ from core.services.product_service import ProductService
 from core.services.reporting_service import ReportingService
 from core.services.sale_service import SaleService
 from core.services.user_service import UserService
+from core.services.cash_drawer_service import CashDrawerService
 
 from core.interfaces.repository_interfaces import (
     IProductRepository, IDepartmentRepository, IInventoryRepository, ISaleRepository,
@@ -76,6 +77,7 @@ def main(test_mode=False, test_user=None, mock_services=None):
         corte_service = mock_services.get('corte_service')
         reporting_service = mock_services.get('reporting_service')
         user_service = mock_services.get('user_service')
+        cash_drawer_service = mock_services.get('cash_drawer_service')
     else:
         # --- Repository Factories --- #
         # Define functions that take a session and return a repository instance
@@ -91,114 +93,84 @@ def main(test_mode=False, test_user=None, mock_services=None):
         def get_invoice_repo(session): return SqliteInvoiceRepository(session)
         def get_user_repo(session): return SqliteUserRepository(session)
 
-        # --- Service Instantiation (Requires specific handling for initial User Setup/Login) ---
-        # Create UserService instance needed *before* main window loop for login
-        user_service = None
+        # --- Service Instantiation (using factories) --- #
+        # UserService is instantiated first for login and initial admin setup.
+        user_service = UserService(user_repo_factory=get_user_repo)
+
+        # --- Add default admin user if not exists (UserService handles its session) ---
         try:
-            with session_scope() as session:
-                user_repo_instance = get_user_repo(session)
-                user_service = UserService(user_repo_instance) # Pass the INSTANCE
-
-                # --- Add default admin user if not exists ---
-                try:
-                    print("Attempting to add admin user...")
-                    admin_user = user_service.add_user("admin", "12345")
-                    print(f"Admin user created successfully with ID: {admin_user.id}")
-                except ValueError as e:
-                    if "already exists" in str(e):
-                        print("Admin user already exists.")
-                    else:
-                        # Re-raise other validation errors
-                        raise e
-                except Exception as e:
-                    print(f"An unexpected error occurred during admin user creation: {e}")
-                    # Decide if you want to exit or continue
-                    # sys.exit(1)
-
+            print("Attempting to add admin user...")
+            # UserService now manages its own session through factory pattern
+            admin_user = user_service.add_user("admin", "12345") 
+            if admin_user: # If add_user returns the user object
+                print(f"Admin user created/verified successfully with ID: {admin_user.id}")
+            else: # If add_user returns None or raises specific exception for existing user
+                print("Admin user already exists or was not created.")
+        except ValueError as e:
+            if "already exists" in str(e).lower(): # Make check case-insensitive
+                print("Admin user already exists.")
+            else:
+                print(f"ValueError during admin user creation: {e}")
+                # Re-raise other validation errors if needed, or handle
         except Exception as e:
-            print(f"Failed to initialize user service or add admin user: {e}")
-            if not test_mode:
-                sys.exit(1) # Exit if user service cannot be initialized
-            else:
-                raise # Re-raise for tests to catch
-
-        if not user_service:
-            print("User service could not be created. Exiting.")
-            if not test_mode:
-                sys.exit(1)
-            else:
-                raise ValueError("User service could not be created")
+            print(f"An unexpected error occurred during admin user creation: {e}")
+            # Decide if you want to exit or continue
+            # sys.exit(1)
 
         # --- Other Service Instantiation (using factories) ---
-        # Use both factories and instances for improved reliability
-        with session_scope() as session:
-            # Create repository instances for direct use
-            product_repo_instance = get_product_repo(session)
-            dept_repo_instance = get_dept_repo(session)
-            inventory_repo_instance = get_inventory_repo(session)
-            sale_repo_instance = get_sale_repo(session)
-            customer_repo_instance = get_customer_repo(session)
-            credit_payment_repo_instance = get_credit_payment_repo(session)
-            po_repo_instance = get_po_repo(session)
-            supplier_repo_instance = get_supplier_repo(session)
-            cash_drawer_repo_instance = get_cash_drawer_repo(session)
-            invoice_repo_instance = get_invoice_repo(session)
-            
-            # Initialize services with both repository instances and factories for flexibility
-            product_service = ProductService(
-                product_repo=product_repo_instance,
-                department_repo=dept_repo_instance,
-                product_repo_factory=get_product_repo,
-                department_repo_factory=get_dept_repo
-            )
-            
-            inventory_service = InventoryService(
-                inventory_repo_factory=get_inventory_repo,
-                product_repo_factory=get_product_repo
-            )
-            
-            customer_service = CustomerService(
-                customer_repo_factory=get_customer_repo,
-                credit_payment_repo_factory=get_credit_payment_repo
-            )
-    
-            sale_service = SaleService(
-                sale_repo_factory=get_sale_repo,
-                product_repo_factory=get_product_repo,
-                customer_repo_factory=get_customer_repo,
-                inventory_service=inventory_service,
-                customer_service=customer_service
-            )
-            
-            purchase_service = PurchaseService(
-                purchase_order_repo=get_po_repo,
-                supplier_repo=get_supplier_repo,
-                product_repo=get_product_repo,
-                inventory_service=inventory_service
-            )
-            
-            # Instantiate Corte Service
-            corte_service = CorteService(
-                sale_repository=sale_repo_instance,
-                cash_drawer_repository=cash_drawer_repo_instance
-            )
-            
-            # Use both repository instances and factories for InvoicingService
-            invoicing_service = InvoicingService(
-                invoice_repo_factory=get_invoice_repo,
-                sale_repo_factory=get_sale_repo,
-                customer_repo_factory=get_customer_repo
-            )
-            
-            # Instantiate Reporting Service for advanced reports
-            @contextmanager
-            def sale_repo_factory():
-                try:
-                    yield sale_repo_instance
-                finally:
-                    pass  # No need to close since we're using the existing session
-                    
-            reporting_service = ReportingService(sale_repo_factory)
+        # Services will manage their own sessions using the provided factories.
+        
+        product_service = ProductService(
+            product_repo_factory=get_product_repo,
+            department_repo_factory=get_dept_repo
+        )
+        
+        # InventoryService needs product_repo_factory as well for some operations
+        inventory_service = InventoryService(
+            inventory_repo_factory=get_inventory_repo,
+            product_repo_factory=get_product_repo 
+        )
+        
+        customer_service = CustomerService(
+            customer_repo_factory=get_customer_repo,
+            credit_payment_repo_factory=get_credit_payment_repo
+        )
+
+        # SaleService depends on InventoryService and CustomerService instances
+        sale_service = SaleService(
+            sale_repo_factory=get_sale_repo,
+            product_repo_factory=get_product_repo,
+            customer_repo_factory=get_customer_repo,
+            inventory_service=inventory_service, # Pass instance
+            customer_service=customer_service   # Pass instance
+        )
+        
+        # PurchaseService depends on InventoryService instance
+        purchase_service = PurchaseService(
+            purchase_order_repo_factory=get_po_repo, # Pass factory
+            supplier_repo_factory=get_supplier_repo,   # Pass factory
+            product_repo_factory=get_product_repo,     # Pass factory
+            inventory_service=inventory_service    # Pass instance
+        )
+        
+        corte_service = CorteService(
+            sale_repo_factory=get_sale_repo,
+            cash_drawer_repo_factory=get_cash_drawer_repo
+        )
+        
+        invoicing_service = InvoicingService(
+            invoice_repo_factory=get_invoice_repo,
+            sale_repo_factory=get_sale_repo,
+            customer_repo_factory=get_customer_repo
+        )
+        
+        reporting_service = ReportingService(
+            sale_repo_factory=get_sale_repo
+        )
+        
+        cash_drawer_service = CashDrawerService(
+            cash_drawer_repo_factory=get_cash_drawer_repo
+        )
 
     if not test_mode:
         # Load custom style sheet only in normal mode.
@@ -246,7 +218,8 @@ def main(test_mode=False, test_user=None, mock_services=None):
         purchase_service=purchase_service,
         invoicing_service=invoicing_service,
         corte_service=corte_service,
-        reporting_service=reporting_service  # Add ReportingService to MainWindow
+        reporting_service=reporting_service,  # Add ReportingService to MainWindow
+        cash_drawer_service=cash_drawer_service  # Add CashDrawerService to MainWindow
     )
     
     # In normal mode, show the window and run the app

@@ -8,12 +8,9 @@ class TestReportingService:
     def setup_service(self):
         # Patch the repository factory to return a mock repo
         self.mock_repo = MagicMock()
-        # Simulate context manager if factory returns one
-        self.mock_context_manager = MagicMock()
-        self.mock_context_manager.__enter__.return_value = self.mock_repo
-        self.mock_context_manager.__exit__.return_value = None
-        self.service = ReportingService(lambda: self.mock_context_manager)  # Adapt factory for context manager
-
+        # Create a factory that accepts a session parameter and returns the mock repo
+        self.service = ReportingService(sale_repo_factory=lambda session: self.mock_repo)
+        
         # Define sample date range for tests
         self.start_time = datetime(2024, 1, 1)
         self.end_time = datetime(2024, 1, 31, 23, 59, 59)
@@ -24,6 +21,11 @@ class TestReportingService:
             {"date": "2024-01-01", "total_sales": 100.0, "num_sales": 2}
         ]
         self.mock_repo.get_sales_summary_by_period.return_value = expected_repo_return
+
+        # Print for debugging
+        print("\nDEBUG: ReportingService implementation:")
+        import inspect
+        print(inspect.getsource(self.service.get_sales_summary_by_period))
 
         # Call service method with required args
         result = self.service.get_sales_summary_by_period(

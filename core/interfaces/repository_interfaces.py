@@ -11,22 +11,22 @@ try:
     from ..models.inventory import InventoryMovement
     from ..models.sale import Sale, SaleItem
     from ..models.customer import Customer
-    from ..models.credit import CreditPayment
+    from ..models.credit_payment import CreditPayment
     from ..models.supplier import Supplier
     from ..models.purchase import PurchaseOrder, PurchaseOrderItem
     from ..models.invoice import Invoice # Add Invoice model import
-    from ..models.cash_drawer import CashDrawerEntry
+    from ..models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
 except ImportError:
     # Fallback for different import contexts
     from core.models.product import Product, Department
     from core.models.inventory import InventoryMovement
     from core.models.sale import Sale, SaleItem
     from core.models.customer import Customer
-    from core.models.credit import CreditPayment
+    from core.models.credit_payment import CreditPayment
     from core.models.supplier import Supplier
     from core.models.purchase import PurchaseOrder, PurchaseOrderItem
     from core.models.invoice import Invoice # Add Invoice model import
-    from core.models.cash_drawer import CashDrawerEntry
+    from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
     # Removed User import from here
 
 class IDepartmentRepository(ABC):
@@ -283,8 +283,8 @@ class ICustomerRepository(ABC):
         pass  # pragma: no cover
 
     @abstractmethod
-    def get_all(self) -> List[Customer]:
-        """Retrieves all customers."""
+    def get_all(self, limit: Optional[int] = None, offset: Optional[int] = None) -> List[Customer]:
+        """Retrieves all customers, with optional pagination."""
         pass  # pragma: no cover
 
     @abstractmethod
@@ -298,8 +298,8 @@ class ICustomerRepository(ABC):
         pass  # pragma: no cover
 
     @abstractmethod
-    def search(self, search_term: str) -> List[Customer]:
-        """Searches for customers by name (case-insensitive partial match)."""
+    def search(self, search_term: str, limit: Optional[int] = None, offset: Optional[int] = None) -> List[Customer]:
+        """Searches for customers by name (case-insensitive partial match), with optional pagination."""
         pass  # pragma: no cover
 
     @abstractmethod

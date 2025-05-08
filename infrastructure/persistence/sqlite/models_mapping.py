@@ -17,7 +17,7 @@ from core.models.product import Product as CoreProduct, Department as CoreDepart
 from core.models.inventory import InventoryMovement as CoreInventoryMovement
 from core.models.sale import Sale as CoreSale, SaleItem as CoreSaleItem
 from core.models.customer import Customer as CoreCustomer
-from core.models.credit import CreditPayment as CoreCreditPayment
+from core.models.credit_payment import CreditPayment as CoreCreditPayment
 from core.models.user import User as CoreUser
 from core.models.invoice import Invoice as CoreInvoice
 from core.models.cash_drawer import CashDrawerEntryType
@@ -73,16 +73,16 @@ class ProductOrm(Base):
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String, unique=True, index=True, nullable=False)
     description = Column(String, nullable=False)
-    cost_price = Column(Float, nullable=False, default=0.0)
-    sell_price = Column(Float, nullable=False, default=0.0)
-    wholesale_price = Column(Float, nullable=True) # Price 2
-    special_price = Column(Float, nullable=True) # Price 3
+    cost_price = Column(Numeric(10, 2), nullable=False, default=0.0)
+    sell_price = Column(Numeric(10, 2), nullable=False, default=0.0)
+    wholesale_price = Column(Numeric(10, 2), nullable=True) # Price 2
+    special_price = Column(Numeric(10, 2), nullable=True) # Price 3
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)
     unit = Column(String, nullable=False, default="Unidad")
     uses_inventory = Column(Boolean, nullable=False, default=True)
-    quantity_in_stock = Column(Float, nullable=False, default=0.0)
-    min_stock = Column(Float, nullable=True, default=0.0)
-    max_stock = Column(Float, nullable=True)
+    quantity_in_stock = Column(Numeric(10, 3), nullable=False, default=0.0) # Allow 3 decimal places for quantity
+    min_stock = Column(Numeric(10, 3), nullable=True, default=0.0) # Allow 3 decimal places for quantity
+    max_stock = Column(Numeric(10, 3), nullable=True) # Allow 3 decimal places for quantity
     last_updated = Column(DateTime, nullable=True, onupdate=datetime.datetime.now)
     notes = Column(String, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
@@ -103,7 +103,7 @@ class InventoryMovementOrm(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True) # User performing the movement
     timestamp = Column(DateTime, nullable=False, default=datetime.datetime.now, index=True)
     movement_type = Column(String, nullable=False, index=True) # 'SALE', 'PURCHASE', 'ADJUSTMENT', 'INITIAL'
-    quantity = Column(Float, nullable=False) # Positive for addition, negative for removal
+    quantity = Column(Numeric(10, 3), nullable=False) # Positive for addition, negative for removal, 3 decimal places
     description = Column(String, nullable=True)
     related_id = Column(Integer, nullable=True, index=True) # e.g., Sale ID, Purchase ID
 
@@ -122,7 +122,7 @@ class SaleOrm(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     date_time = Column(DateTime, nullable=False, default=datetime.datetime.utcnow, index=True)
-    total_amount = Column(Float, nullable=False, default=0.0) # Calculated from items
+    total_amount = Column(Numeric(12, 2), nullable=False, default=0.0) # Calculated from items
     customer_id = Column(SQLiteUUID, ForeignKey('customers.id'), nullable=True, index=True)
     is_credit_sale = Column(Boolean, nullable=False, default=False) # Added credit flag
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True) # User who performed the sale
@@ -152,8 +152,8 @@ class SaleItemOrm(Base):
     id = Column(Integer, primary_key=True, index=True)
     sale_id = Column(Integer, ForeignKey("sales.id"), nullable=False, index=True)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
-    quantity = Column(Float, nullable=False)
-    unit_price = Column(Float, nullable=False) # Price at the time of sale
+    quantity = Column(Numeric(10, 3), nullable=False) # Allow 3 decimal places for quantity
+    unit_price = Column(Numeric(10, 2), nullable=False) # Price at the time of sale
     product_code = Column(String, nullable=True) # Denormalized
     product_description = Column(String, nullable=True) # Denormalized
 
@@ -180,8 +180,8 @@ class CustomerOrm(Base):
     address = Column(String, nullable=True)
     cuit = Column(String, nullable=True, unique=True, index=True) # Often unique
     iva_condition = Column(String, nullable=True)
-    credit_limit = Column(Float, default=0.0, nullable=False)
-    credit_balance = Column(Float, default=0.0, nullable=False) # Current debt
+    credit_limit = Column(Numeric(12, 2), default=0.0, nullable=False)
+    credit_balance = Column(Numeric(12, 2), default=0.0, nullable=False) # Current debt
     is_active = Column(Boolean, default=True, index=True)
 
     # Relationships
@@ -200,7 +200,7 @@ class CreditPaymentOrm(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     customer_id = Column(SQLiteUUID, ForeignKey('customers.id'), nullable=False, index=True)
-    amount = Column(Float, nullable=False) # Store as Float, handle conversion if needed
+    amount = Column(Numeric(12, 2), nullable=False)
     timestamp = Column(DateTime, nullable=False, default=datetime.datetime.now, index=True)
     notes = Column(String, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True) # User registering the payment
@@ -265,9 +265,9 @@ class PurchaseOrderItemOrm(Base):
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
     product_code = Column(String, nullable=True) # Denormalized, allow null initially
     product_description = Column(String, nullable=True) # Denormalized, allow null initially
-    quantity_ordered = Column(Float, nullable=False) # Renamed from quantity, changed type
-    cost_price = Column(Float, nullable=False) # Changed type
-    quantity_received = Column(Float, nullable=False, default=0.0) # Added quantity_received
+    quantity_ordered = Column(Numeric(10, 3), nullable=False) # Renamed from quantity, changed type, 3 decimal places
+    cost_price = Column(Numeric(10, 2), nullable=False) # Changed type
+    quantity_received = Column(Numeric(10, 3), nullable=False, default=0.0) # Added quantity_received, 3 decimal places
 
     # Relationship: Many-to-One (Many Items belong to One PO)
     purchase_order = relationship("PurchaseOrderOrm", back_populates="items")
@@ -320,9 +320,8 @@ class CashDrawerEntryOrm(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     timestamp = Column(DateTime, nullable=False, index=True)
-    entry_type = Column(String, nullable=False, index=True)
-    # Temporarily change DECIMAL to Float for testing table creation
-    amount = Column(Float, nullable=False) 
+    entry_type = Column(String, nullable=False, index=True) # Will be mapped to CashDrawerEntryType enum
+    amount = Column(Numeric(12, 2), nullable=False) 
     description = Column(Text, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     drawer_id = Column(Integer, nullable=True, index=True)

@@ -1,19 +1,16 @@
-from sqlalchemy import Column, Integer, String, Boolean
-from sqlalchemy.orm import relationship
-from core.database import Base
+from typing import Optional
+from pydantic import BaseModel, Field, EmailStr
 
-class Supplier(Base):
-    __tablename__ = 'suppliers'
+class Supplier(BaseModel):
+    id: Optional[int] = None
+    name: str = Field(..., max_length=100)
+    contact_person: Optional[str] = Field(default=None, max_length=100)
+    phone: Optional[str] = Field(default=None, max_length=20) # Consider specific validation if needed
+    email: Optional[EmailStr] = Field(default=None, max_length=100)
+    address: Optional[str] = Field(default=None, max_length=255)
+    cuit: Optional[str] = Field(default=None, max_length=20)  # Clave Única de Identificación Tributaria (Argentina)
+    notes: Optional[str] = Field(default=None, max_length=500)
+    is_active: bool = True
     
-    id = Column(Integer, primary_key=True)
-    name = Column(String(100), nullable=False)
-    contact_person = Column(String(100))
-    phone = Column(String(20))
-    email = Column(String(100))
-    address = Column(String(255))
-    cuit = Column(String(20))  # Clave Única de Identificación Tributaria (Argentina)
-    notes = Column(String(500))
-    is_active = Column(Boolean, default=True)  # Track supplier status
-    
-    # Add the missing relationship
-    purchases = relationship("Purchase", back_populates="supplier")
+    class Config:
+        from_attributes = True # Updated from orm_mode for Pydantic v2

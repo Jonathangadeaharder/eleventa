@@ -11,14 +11,14 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from core.models.customer import Customer
-from core.models.credit import CreditPayment
+from core.models.credit_payment import CreditPayment
 from infrastructure.persistence.sqlite.repositories import (
     SqliteCustomerRepository,
     SqliteCreditPaymentRepository
 )
 from infrastructure.persistence.sqlite.database import engine, Base
 from sqlalchemy import delete
-from infrastructure.persistence.sqlite.models_mapping import CustomerOrm, CreditPaymentOrm
+from infrastructure.persistence.sqlite.models_mapping import CustomerOrm, CreditPaymentOrm, UserOrm
 from core.models.user import User
 
 @pytest.fixture
@@ -78,7 +78,8 @@ def test_negative_payment_amount_raises_error():
 
 @pytest.fixture
 def sample_user(test_db_session):
-    user = User(username="testuser", password_hash="hash", is_active=True)
+    # Use SqlAlchemy ORM model directly instead of Pydantic model
+    user = UserOrm(username="testuser", password_hash="hash", is_active=True)
     test_db_session.add(user)
     test_db_session.commit()
     return user
@@ -94,7 +95,7 @@ class TestSqliteCreditPaymentRepository:
             customer_id=sample_customer.id,
             amount=Decimal("150.00"),
             user_id=sample_user.id,
-            timestamp=datetime.datetime.now()
+            payment_date=datetime.datetime.now()
         )
         
         added = credit_payment_repo.add(payment)

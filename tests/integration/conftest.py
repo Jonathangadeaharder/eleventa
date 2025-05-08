@@ -228,21 +228,17 @@ def test_app(clean_db, authenticated_user, mock_external_services):
     from core.services.customer_service import CustomerService
     from core.services.sale_service import SaleService
     from core.services.invoicing_service import InvoicingService
+    from core.services.service_base import ServiceBase
     from infrastructure.persistence.sqlite.repositories import (
         SqliteProductRepository,
         SqliteCustomerRepository,
         SqliteSaleRepository,
-        SqliteInvoiceRepository
+        SqliteInvoiceRepository,
+        SqliteDepartmentRepository
     )
     
     # Unpack the clean_db tuple to get the session
     session, _ = clean_db
-    
-    # Create repositories with the session
-    product_repo = SqliteProductRepository(session)
-    customer_repo = SqliteCustomerRepository(session)
-    sale_repo = SqliteSaleRepository(session)
-    invoice_repo = SqliteInvoiceRepository(session)
     
     # Create repository factories for services that may need them
     @contextmanager
@@ -253,39 +249,56 @@ def test_app(clean_db, authenticated_user, mock_external_services):
             # Don't actually commit in tests
             pass
             
-    def product_repo_factory(session=None):
-        # Use the provided session or the fixture session
-        return SqliteProductRepository(session or clean_db[0])
+    def product_repo_factory(session_arg):
+        # ALWAYS use the provided session_arg to ensure we work with the correct transaction
+        return SqliteProductRepository(session_arg)
         
-    def customer_repo_factory(session=None):
-        # Use the provided session or the fixture session
-        return SqliteCustomerRepository(session or clean_db[0])
+    def customer_repo_factory(session_arg):
+        # ALWAYS use the provided session_arg to ensure we work with the correct transaction
+        return SqliteCustomerRepository(session_arg)
         
-    def sale_repo_factory(session=None):
-        # Use the provided session or the fixture session
-        return SqliteSaleRepository(session or clean_db[0])
+    def sale_repo_factory(session_arg):
+        # ALWAYS use the provided session_arg to ensure we work with the correct transaction
+        return SqliteSaleRepository(session_arg)
         
-    def invoice_repo_factory(session=None):
-        # Use the provided session or the fixture session
-        return SqliteInvoiceRepository(session or clean_db[0])
+    def invoice_repo_factory(session_arg):
+        # ALWAYS use the provided session_arg to ensure we work with the correct transaction
+        return SqliteInvoiceRepository(session_arg)
         
-    def credit_payment_repo_factory(session=None):
+    def credit_payment_repo_factory(session_arg):
         # Mock for now since it's not central to most tests
         return MagicMock()
 
-    def department_repo_factory(session=None):
-        from infrastructure.persistence.sqlite.repositories import SqliteDepartmentRepository
-        # Use the provided session or the fixture session
-        return SqliteDepartmentRepository(session or clean_db[0])
+    def department_repo_factory(session_arg):
+        # ALWAYS use the provided session_arg to ensure we work with the correct transaction
+        return SqliteDepartmentRepository(session_arg)
     
-    # Create services - use both direct repos and factories to ensure compatibility
-    product_service = ProductService(
-        product_repo=product_repo,
+    # Create a subclass of ServiceBase that overrides _with_session to always use our test session
+    class TestServiceBase(ServiceBase):
+        def _with_session(self, func, *args, **kwargs):
+            """Override _with_session to always use our test session instead of creating a new one."""
+            return func(session, *args, **kwargs)
+    
+    # Create services with our custom ServiceBase implementation
+    class TestProductService(ProductService, TestServiceBase):
+        pass
+        
+    class TestCustomerService(CustomerService, TestServiceBase):
+        pass
+        
+    class TestSaleService(SaleService, TestServiceBase):
+        pass
+        
+    class TestInvoicingService(InvoicingService, TestServiceBase):
+        pass
+    
+    # Initialize services with our factories
+    product_service = TestProductService(
         product_repo_factory=product_repo_factory, 
         department_repo_factory=department_repo_factory
     )
     
-    customer_service = CustomerService(
+    customer_service = TestCustomerService(
         customer_repo_factory=customer_repo_factory,
         credit_payment_repo_factory=credit_payment_repo_factory
     )
@@ -293,7 +306,7 @@ def test_app(clean_db, authenticated_user, mock_external_services):
     # Mock inventory service for simplicity
     inventory_service = MagicMock()
     
-    sale_service = SaleService(
+    sale_service = TestSaleService(
         sale_repo_factory=sale_repo_factory,
         product_repo_factory=product_repo_factory,
         customer_repo_factory=customer_repo_factory,
@@ -301,12 +314,9 @@ def test_app(clean_db, authenticated_user, mock_external_services):
         customer_service=customer_service
     )
     
-    invoicing_service = InvoicingService(
-        invoice_repo=invoice_repo,
+    invoicing_service = TestInvoicingService(
         invoice_repo_factory=invoice_repo_factory,
-        sale_repo=sale_repo,
         sale_repo_factory=sale_repo_factory,
-        customer_repo=customer_repo,
         customer_repo_factory=customer_repo_factory
     )
     
@@ -315,10 +325,10 @@ def test_app(clean_db, authenticated_user, mock_external_services):
         "session": session,
         "user": authenticated_user,
         "repositories": {
-            "product_repo": product_repo,
-            "customer_repo": customer_repo,
-            "sale_repo": sale_repo,
-            "invoice_repo": invoice_repo
+            "product_repo": product_repo_factory(session),
+            "customer_repo": customer_repo_factory(session),
+            "sale_repo": sale_repo_factory(session),
+            "invoice_repo": invoice_repo_factory(session)
         },
         "services": {
             "product_service": product_service,
@@ -494,10 +504,7 @@ def transactional_tests(clean_db):
 @pytest.fixture
 def direct_repo_services(clean_db):
     """
-    Creates services with direct repository instances for more reliable testing.
-    
-    This avoids the 'function' object has no attribute error by providing
-    properly instantiated repositories to the services.
+    Creates services with repository factory functions to match the updated service constructors.
     """
     from core.services.product_service import ProductService
     from core.services.customer_service import CustomerService
@@ -515,40 +522,51 @@ def direct_repo_services(clean_db):
     # Unpack the clean_db tuple to get the session
     session, _ = clean_db
     
-    # Create repositories with direct session reference
-    product_repo = SqliteProductRepository(session)
-    department_repo = SqliteDepartmentRepository(session)
-    customer_repo = SqliteCustomerRepository(session)
-    credit_payment_repo = SqliteCreditPaymentRepository(session)
-    sale_repo = SqliteSaleRepository(session)
-    invoice_repo = SqliteInvoiceRepository(session)
+    # Create factory functions that return repositories with the provided session
+    def product_repo_factory(session_arg=None):
+        return SqliteProductRepository(session_arg or session)
+        
+    def department_repo_factory(session_arg=None):
+        return SqliteDepartmentRepository(session_arg or session)
+        
+    def customer_repo_factory(session_arg=None):
+        return SqliteCustomerRepository(session_arg or session)
+        
+    def credit_payment_repo_factory(session_arg=None):
+        return SqliteCreditPaymentRepository(session_arg or session)
+        
+    def sale_repo_factory(session_arg=None):
+        return SqliteSaleRepository(session_arg or session)
+        
+    def invoice_repo_factory(session_arg=None):
+        return SqliteInvoiceRepository(session_arg or session)
     
-    # Create services using direct repository instances
+    # Create services using factory patterns
     product_service = ProductService(
-        product_repo=product_repo,
-        department_repo=department_repo
+        product_repo_factory=product_repo_factory,
+        department_repo_factory=department_repo_factory
     )
     
     customer_service = CustomerService(
-        customer_repo=customer_repo,
-        credit_payment_repo=credit_payment_repo
+        customer_repo_factory=customer_repo_factory,
+        credit_payment_repo_factory=credit_payment_repo_factory
     )
     
     # Mock inventory service
     inventory_service = MagicMock()
     
     sale_service = SaleService(
-        sale_repo=sale_repo,
-        product_repo=product_repo,
-        customer_repo=customer_repo,
+        sale_repo_factory=sale_repo_factory,
+        product_repo_factory=product_repo_factory,
+        customer_repo_factory=customer_repo_factory,
         inventory_service=inventory_service,
         customer_service=customer_service
     )
     
     invoicing_service = InvoicingService(
-        invoice_repo=invoice_repo,
-        sale_repo=sale_repo,
-        customer_repo=customer_repo
+        invoice_repo_factory=invoice_repo_factory,
+        sale_repo_factory=sale_repo_factory,
+        customer_repo_factory=customer_repo_factory
     )
     
     return {
@@ -559,11 +577,11 @@ def direct_repo_services(clean_db):
         "inventory_service": inventory_service,
         "session": session,
         "repositories": {
-            "product_repo": product_repo,
-            "department_repo": department_repo,
-            "customer_repo": customer_repo,
-            "sale_repo": sale_repo,
-            "invoice_repo": invoice_repo,
-            "credit_payment_repo": credit_payment_repo
+            "product_repo": product_repo_factory(),
+            "department_repo": department_repo_factory(),
+            "customer_repo": customer_repo_factory(),
+            "sale_repo": sale_repo_factory(),
+            "invoice_repo": invoice_repo_factory(),
+            "credit_payment_repo": credit_payment_repo_factory()
         }
     }

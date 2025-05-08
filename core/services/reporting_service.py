@@ -1,24 +1,28 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime, timedelta
 from decimal import Decimal
+from sqlalchemy.orm import Session
 
 from core.interfaces.repository_interfaces import ISaleRepository
-from ..models.sale import Sale
+from core.models.sale import Sale
+from core.services.service_base import ServiceBase
+from infrastructure.persistence.utils import session_scope
 
-class ReportingService:
+class ReportingService(ServiceBase):
     """
     Service for generating advanced reports and analytics on sales and business performance.
     Provides methods to retrieve aggregated data by time periods, departments, customers, etc.
     """
     
-    def __init__(self, sale_repository_factory):
+    def __init__(self, sale_repo_factory: Callable[[Session], ISaleRepository]):
         """
-        Initialize with repository factories.
+        Initialize with repository factory.
         
         Args:
-            sale_repository_factory: Factory function that returns an ISaleRepository instance
+            sale_repo_factory: Factory function that returns an ISaleRepository instance
         """
-        self.sale_repo_factory = sale_repository_factory
+        super().__init__()  # Initialize base class with default logger
+        self.sale_repo_factory = sale_repo_factory
     
     def get_sales_summary_by_period(
         self, 
@@ -37,8 +41,11 @@ class ReportingService:
         Returns:
             List of dictionaries with date and aggregated sales data
         """
-        with self.sale_repo_factory() as sale_repo:
+        def _get_sales_summary_by_period(session, start_time, end_time, group_by):
+            sale_repo = self._get_repository(self.sale_repo_factory, session)
             return sale_repo.get_sales_summary_by_period(start_time, end_time, group_by)
+            
+        return self._with_session(_get_sales_summary_by_period, start_time, end_time, group_by)
     
     def get_sales_by_payment_type(
         self, 
@@ -55,8 +62,11 @@ class ReportingService:
         Returns:
             List of dictionaries with payment type, total amount, and number of sales
         """
-        with self.sale_repo_factory() as sale_repo:
+        def _get_sales_by_payment_type(session, start_time, end_time):
+            sale_repo = self._get_repository(self.sale_repo_factory, session)
             return sale_repo.get_sales_by_payment_type(start_time, end_time)
+            
+        return self._with_session(_get_sales_by_payment_type, start_time, end_time)
     
     def get_sales_by_department(
         self, 
@@ -73,8 +83,11 @@ class ReportingService:
         Returns:
             List of dictionaries with department_id, department_name, total_amount, and num_items
         """
-        with self.sale_repo_factory() as sale_repo:
+        def _get_sales_by_department(session, start_time, end_time):
+            sale_repo = self._get_repository(self.sale_repo_factory, session)
             return sale_repo.get_sales_by_department(start_time, end_time)
+            
+        return self._with_session(_get_sales_by_department, start_time, end_time)
     
     def get_sales_by_customer(
         self, 
@@ -93,8 +106,11 @@ class ReportingService:
         Returns:
             List of dictionaries with customer_id, customer_name, total_amount, and num_sales
         """
-        with self.sale_repo_factory() as sale_repo:
+        def _get_sales_by_customer(session, start_time, end_time, limit):
+            sale_repo = self._get_repository(self.sale_repo_factory, session)
             return sale_repo.get_sales_by_customer(start_time, end_time, limit)
+            
+        return self._with_session(_get_sales_by_customer, start_time, end_time, limit)
     
     def get_top_selling_products(
         self, 
@@ -114,8 +130,11 @@ class ReportingService:
             List of dictionaries with product_id, product_code, product_description,
             quantity_sold, and total_amount
         """
-        with self.sale_repo_factory() as sale_repo:
+        def _get_top_selling_products(session, start_time, end_time, limit):
+            sale_repo = self._get_repository(self.sale_repo_factory, session)
             return sale_repo.get_top_selling_products(start_time, end_time, limit)
+            
+        return self._with_session(_get_top_selling_products, start_time, end_time, limit)
     
     def calculate_profit_for_period(
         self, 
@@ -132,8 +151,11 @@ class ReportingService:
         Returns:
             Dictionary with total_revenue, total_cost, total_profit, and profit_margin
         """
-        with self.sale_repo_factory() as sale_repo:
+        def _calculate_profit_for_period(session, start_time, end_time):
+            sale_repo = self._get_repository(self.sale_repo_factory, session)
             return sale_repo.calculate_profit_for_period(start_time, end_time)
+            
+        return self._with_session(_calculate_profit_for_period, start_time, end_time)
     
     def get_daily_sales_report(self, date: datetime) -> Dict[str, Any]:
         """
@@ -145,12 +167,15 @@ class ReportingService:
         Returns:
             Dictionary with various sales metrics for the day
         """
-        # Set time to start and end of the specified date
-        start_time = datetime.combine(date, datetime.min.time())
-        end_time = datetime.combine(date, datetime.max.time())
-        
-        # Create comprehensive report using multiple repo calls
-        with self.sale_repo_factory() as sale_repo:
+        def _get_daily_sales_report(session, date):
+            # Set time to start and end of the specified date
+            start_time = datetime.combine(date, datetime.min.time())
+            end_time = datetime.combine(date, datetime.max.time())
+            
+            # Get repository
+            sale_repo = self._get_repository(self.sale_repo_factory, session)
+            
+            # Gather data for the report
             profit_data = sale_repo.calculate_profit_for_period(start_time, end_time)
             payment_data = sale_repo.get_sales_by_payment_type(start_time, end_time)
             top_products = sale_repo.get_top_selling_products(start_time, end_time, 5)
@@ -170,6 +195,8 @@ class ReportingService:
                 'top_products': top_products,
                 'sales_by_department': department_data
             }
+            
+        return self._with_session(_get_daily_sales_report, date)
     
     def get_sales_trend(
         self, 
@@ -188,15 +215,16 @@ class ReportingService:
         Returns:
             List of dictionaries with date and sales data points
         """
-        # Map trend_type to appropriate group_by parameter
-        group_by_mapping = {
-            'daily': 'day',
-            'weekly': 'week',
-            'monthly': 'month'
-        }
-        group_by = group_by_mapping.get(trend_type, 'day')
-        
-        with self.sale_repo_factory() as sale_repo:
+        def _get_sales_trend(session, start_time, end_time, trend_type):
+            # Map trend_type to appropriate group_by parameter
+            group_by_mapping = {
+                'daily': 'day',
+                'weekly': 'week',
+                'monthly': 'month'
+            }
+            group_by = group_by_mapping.get(trend_type, 'day')
+            
+            sale_repo = self._get_repository(self.sale_repo_factory, session)
             trend_data = sale_repo.get_sales_summary_by_period(start_time, end_time, group_by)
             
             # Ensure complete date range (fill in missing dates with zero values)
@@ -223,6 +251,8 @@ class ReportingService:
                 return complete_data
             
             return trend_data
+            
+        return self._with_session(_get_sales_trend, start_time, end_time, trend_type)
     
     def get_comparative_report(
         self, 
@@ -243,7 +273,9 @@ class ReportingService:
         Returns:
             Dictionary with comparative metrics and percentage changes
         """
-        with self.sale_repo_factory() as sale_repo:
+        def _get_comparative_report(session, current_period_start, current_period_end, previous_period_start, previous_period_end):
+            sale_repo = self._get_repository(self.sale_repo_factory, session)
+            
             current_profit = sale_repo.calculate_profit_for_period(
                 current_period_start, current_period_end
             )
@@ -291,6 +323,8 @@ class ReportingService:
                 'current_payment_types': current_payment_types,
                 'previous_payment_types': previous_payment_types
             }
+            
+        return self._with_session(_get_comparative_report, current_period_start, current_period_end, previous_period_start, previous_period_end)
     
     def _calculate_percent_change(self, old_value: float, new_value: float) -> float:
         """

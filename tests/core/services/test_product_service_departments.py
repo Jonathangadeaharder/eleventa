@@ -28,8 +28,18 @@ def dept_repo():
 
 @pytest.fixture
 def svc(prod_repo, dept_repo):
-    # Use direct repository instances for simplicity in testing
-    return ProductService(product_repo=prod_repo, department_repo=dept_repo)
+    # Create factory functions that return the mock repositories
+    def product_repo_factory(session):
+        return prod_repo
+        
+    def department_repo_factory(session):
+        return dept_repo
+        
+    # Pass the factory functions to the service
+    return ProductService(
+        product_repo_factory=product_repo_factory,
+        department_repo_factory=department_repo_factory
+    )
 
 # Tests for department operations
 

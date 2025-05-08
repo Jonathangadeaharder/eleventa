@@ -1,21 +1,16 @@
-from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, DateTime
-from sqlalchemy.orm import relationship
-from core.database import Base
 from datetime import datetime
+from decimal import Decimal
+from typing import Optional
 import uuid
-from infrastructure.persistence.sqlite.types import SQLiteUUID
+from pydantic import BaseModel, Field
 
-class CreditPayment(Base):
-    __tablename__ = 'credit_payments'
+class CreditPayment(BaseModel):
+    id: Optional[int] = None
+    customer_id: uuid.UUID # Assuming Customer ID is UUID from Customer domain model
+    user_id: Optional[int] = None # Make user_id optional
+    amount: Decimal = Field(..., max_digits=10, decimal_places=2)
+    payment_date: datetime = Field(default_factory=datetime.utcnow)
+    description: Optional[str] = Field(default=None, max_length=255)
     
-    id = Column(Integer, primary_key=True)
-    amount = Column(Numeric(10, 2), nullable=False)
-    customer_id = Column(SQLiteUUID, ForeignKey('customers.id'), nullable=False)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    payment_date = Column(DateTime, default=datetime.utcnow)
-    description = Column(String(255))
-    
-    # Temporarily remove relationship references to simplify testing
-    # customer = relationship("CustomerOrm")
-    # user = relationship("UserOrm")
-    # invoice = relationship("Invoice", uselist=False, back_populates="credit_payment")
+    class Config:
+        from_attributes = True # Updated from orm_mode to from_attributes for Pydantic v2

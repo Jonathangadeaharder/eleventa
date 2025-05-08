@@ -10,6 +10,7 @@ import logging
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import Numeric
 # Import custom GUID type if used in the model (adjust path if necessary)
 # from infrastructure.persistence.sqlite.models_mapping import GUID
 
@@ -29,15 +30,15 @@ def upgrade() -> None:
     # Step 1: Try to create the table
     try:
         op.create_table('customers',
-            sa.Column('id', sa.Integer(), nullable=False),
+            sa.Column('id', sa.String(36), nullable=False),
             sa.Column('name', sa.String(), nullable=False),
             sa.Column('phone', sa.String(), nullable=True),
             sa.Column('email', sa.String(), nullable=True),
             sa.Column('address', sa.String(), nullable=True),
             sa.Column('cuit', sa.String(), nullable=True),
             sa.Column('iva_condition', sa.String(), nullable=True),
-            sa.Column('credit_limit', sa.Float(), nullable=False, server_default=sa.text('0.0')),
-            sa.Column('credit_balance', sa.Float(), nullable=False, server_default=sa.text('0.0')),
+            sa.Column('credit_limit', Numeric(12, 2), nullable=False, server_default=sa.text("'0.00'")),
+            sa.Column('credit_balance', Numeric(12, 2), nullable=False, server_default=sa.text("'0.00'")),
             sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.true()),
             sa.PrimaryKeyConstraint('id'),
             sa.UniqueConstraint('cuit')

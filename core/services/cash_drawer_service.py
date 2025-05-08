@@ -1,16 +1,26 @@
 from decimal import Decimal
 from datetime import datetime, date, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
+from sqlalchemy.orm import Session
 
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
 from core.interfaces.repository_interfaces import ICashDrawerRepository
+from core.services.service_base import ServiceBase
+from infrastructure.persistence.utils import session_scope
 
 
-class CashDrawerService:
+class CashDrawerService(ServiceBase):
     """Service for cash drawer operations."""
     
-    def __init__(self, cash_drawer_repository: ICashDrawerRepository):
-        self.repository = cash_drawer_repository
+    def __init__(self, cash_drawer_repo_factory: Callable[[Session], ICashDrawerRepository]):
+        """
+        Initialize the service with a repository factory.
+        
+        Args:
+            cash_drawer_repo_factory: Factory function to create cash drawer repository
+        """
+        super().__init__()  # Initialize base class with default logger
+        self.cash_drawer_repo_factory = cash_drawer_repo_factory
         
     def open_drawer(self, initial_amount: Decimal, description: str, user_id: int, drawer_id: Optional[int] = None) -> CashDrawerEntry:
         """
@@ -28,26 +38,31 @@ class CashDrawerService:
         Raises:
             ValueError: If the drawer is already open or if the initial amount is invalid
         """
-        # Validate that the drawer is not already open
-        if self.repository.is_drawer_open(drawer_id):
-            raise ValueError("Cash drawer is already open")
+        def _open_drawer(session, initial_amount, description, user_id, drawer_id):
+            repository = self._get_repository(self.cash_drawer_repo_factory, session)
             
-        # Validate initial amount
-        if initial_amount < 0:
-            raise ValueError("Initial amount cannot be negative")
+            # Validate that the drawer is not already open
+            if repository.is_drawer_open(drawer_id):
+                raise ValueError("Cash drawer is already open")
+                
+            # Validate initial amount
+            if initial_amount < 0:
+                raise ValueError("Initial amount cannot be negative")
+                
+            # Create the entry
+            entry = CashDrawerEntry(
+                timestamp=datetime.now(),
+                entry_type=CashDrawerEntryType.START,
+                amount=initial_amount,
+                description=description,
+                user_id=user_id,
+                drawer_id=drawer_id
+            )
             
-        # Create the entry
-        entry = CashDrawerEntry(
-            timestamp=datetime.now(),
-            entry_type=CashDrawerEntryType.START,
-            amount=initial_amount,
-            description=description,
-            user_id=user_id,
-            drawer_id=drawer_id
-        )
-        
-        # Add to repository
-        return self.repository.add_entry(entry)
+            # Add to repository
+            return repository.add_entry(entry)
+            
+        return self._with_session(_open_drawer, initial_amount, description, user_id, drawer_id)
         
     def add_cash(self, amount: Decimal, description: str, user_id: int, drawer_id: Optional[int] = None) -> CashDrawerEntry:
         """
@@ -65,26 +80,31 @@ class CashDrawerService:
         Raises:
             ValueError: If the drawer is not open or if the amount is invalid
         """
-        # Validate that the drawer is open
-        if not self.repository.is_drawer_open(drawer_id):
-            raise ValueError("Cash drawer is not open")
+        def _add_cash(session, amount, description, user_id, drawer_id):
+            repository = self._get_repository(self.cash_drawer_repo_factory, session)
             
-        # Validate amount
-        if amount <= 0:
-            raise ValueError("Amount must be positive")
+            # Validate that the drawer is open
+            if not repository.is_drawer_open(drawer_id):
+                raise ValueError("Cash drawer is not open")
+                
+            # Validate amount
+            if amount <= 0:
+                raise ValueError("Amount must be positive")
+                
+            # Create the entry
+            entry = CashDrawerEntry(
+                timestamp=datetime.now(),
+                entry_type=CashDrawerEntryType.IN,
+                amount=amount,
+                description=description,
+                user_id=user_id,
+                drawer_id=drawer_id
+            )
             
-        # Create the entry
-        entry = CashDrawerEntry(
-            timestamp=datetime.now(),
-            entry_type=CashDrawerEntryType.IN,
-            amount=amount,
-            description=description,
-            user_id=user_id,
-            drawer_id=drawer_id
-        )
-        
-        # Add to repository
-        return self.repository.add_entry(entry)
+            # Add to repository
+            return repository.add_entry(entry)
+            
+        return self._with_session(_add_cash, amount, description, user_id, drawer_id)
         
     def remove_cash(self, amount: Decimal, description: str, user_id: int, drawer_id: Optional[int] = None) -> CashDrawerEntry:
         """
@@ -102,31 +122,36 @@ class CashDrawerService:
         Raises:
             ValueError: If the drawer is not open, if the amount is invalid, or if there's insufficient cash
         """
-        # Validate that the drawer is open
-        if not self.repository.is_drawer_open(drawer_id):
-            raise ValueError("Cash drawer is not open")
+        def _remove_cash(session, amount, description, user_id, drawer_id):
+            repository = self._get_repository(self.cash_drawer_repo_factory, session)
             
-        # Validate amount
-        if amount <= 0:
-            raise ValueError("Amount must be positive")
+            # Validate that the drawer is open
+            if not repository.is_drawer_open(drawer_id):
+                raise ValueError("Cash drawer is not open")
+                
+            # Validate amount
+            if amount <= 0:
+                raise ValueError("Amount must be positive")
+                
+            # Check if there's enough cash in the drawer
+            current_balance = repository.get_current_balance(drawer_id)
+            if amount > current_balance:
+                raise ValueError(f"Insufficient cash in drawer. Current balance: {current_balance}")
+                
+            # Create the entry (using negative amount for removals)
+            entry = CashDrawerEntry(
+                timestamp=datetime.now(),
+                entry_type=CashDrawerEntryType.OUT,
+                amount=-amount,  # Store as negative to properly calculate balance
+                description=description,
+                user_id=user_id,
+                drawer_id=drawer_id
+            )
             
-        # Check if there's enough cash in the drawer
-        current_balance = self.repository.get_current_balance(drawer_id)
-        if amount > current_balance:
-            raise ValueError(f"Insufficient cash in drawer. Current balance: {current_balance}")
+            # Add to repository
+            return repository.add_entry(entry)
             
-        # Create the entry (using negative amount for removals)
-        entry = CashDrawerEntry(
-            timestamp=datetime.now(),
-            entry_type=CashDrawerEntryType.OUT,
-            amount=-amount,  # Store as negative to properly calculate balance
-            description=description,
-            user_id=user_id,
-            drawer_id=drawer_id
-        )
-        
-        # Add to repository
-        return self.repository.add_entry(entry)
+        return self._with_session(_remove_cash, amount, description, user_id, drawer_id)
         
     def get_drawer_summary(self, drawer_id: Optional[int] = None) -> Dict[str, Any]:
         """
@@ -138,41 +163,46 @@ class CashDrawerService:
         Returns:
             A dictionary with drawer summary information
         """
-        # Get drawer status
-        is_open = self.repository.is_drawer_open(drawer_id)
-        
-        # Get entries for today
-        entries_today = self.repository.get_today_entries(drawer_id)
-        
-        # Calculate initial amount (from START entry)
-        initial_amount = Decimal('0.00')
-        opened_at = None
-        opened_by = None
-        
-        for entry in entries_today:
-            if entry.entry_type == CashDrawerEntryType.START:
-                initial_amount = entry.amount
-                opened_at = entry.timestamp
-                opened_by = entry.user_id
-                break
-                
-        # Calculate totals
-        current_balance = self.repository.get_current_balance(drawer_id)
-        
-        total_in = sum([entry.amount for entry in entries_today 
-                        if entry.entry_type == CashDrawerEntryType.IN], Decimal('0.00'))
-                        
-        total_out = sum([abs(entry.amount) for entry in entries_today 
-                         if entry.entry_type == CashDrawerEntryType.OUT], Decimal('0.00'))
-        
-        # Build and return summary
-        return {
-            'is_open': is_open,
-            'current_balance': current_balance,
-            'initial_amount': initial_amount,
-            'total_in': total_in,
-            'total_out': total_out,
-            'entries_today': entries_today,
-            'opened_at': opened_at,
-            'opened_by': opened_by
-        }
+        def _get_drawer_summary(session, drawer_id):
+            repository = self._get_repository(self.cash_drawer_repo_factory, session)
+            
+            # Get drawer status
+            is_open = repository.is_drawer_open(drawer_id)
+            
+            # Get entries for today
+            entries_today = repository.get_today_entries(drawer_id)
+            
+            # Calculate initial amount (from START entry)
+            initial_amount = Decimal('0.00')
+            opened_at = None
+            opened_by = None
+            
+            for entry in entries_today:
+                if entry.entry_type == CashDrawerEntryType.START:
+                    initial_amount = entry.amount
+                    opened_at = entry.timestamp
+                    opened_by = entry.user_id
+                    break
+                    
+            # Calculate totals
+            current_balance = repository.get_current_balance(drawer_id)
+            
+            total_in = sum([entry.amount for entry in entries_today 
+                            if entry.entry_type == CashDrawerEntryType.IN], Decimal('0.00'))
+                            
+            total_out = sum([abs(entry.amount) for entry in entries_today 
+                             if entry.entry_type == CashDrawerEntryType.OUT], Decimal('0.00'))
+            
+            # Build and return summary
+            return {
+                'is_open': is_open,
+                'current_balance': current_balance,
+                'initial_amount': initial_amount,
+                'total_in': total_in,
+                'total_out': total_out,
+                'entries_today': entries_today,
+                'opened_at': opened_at,
+                'opened_by': opened_by
+            }
+            
+        return self._with_session(_get_drawer_summary, drawer_id)

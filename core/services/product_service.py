@@ -3,70 +3,31 @@
 from typing import List, Optional, Callable, Any
 from decimal import Decimal
 import logging
+from sqlalchemy.orm import Session
 
 from core.interfaces.repository_interfaces import IProductRepository, IDepartmentRepository
 from core.models.product import Product, Department
 from infrastructure.persistence.utils import session_scope
-from sqlalchemy.orm import Session
+from core.services.service_base import ServiceBase
 
-logger = logging.getLogger(__name__)
-# Configure basic logging if not already done elsewhere
-logging.basicConfig(level=logging.DEBUG)
-
-RepositoryFactory = Callable[[Session], Any]
-
-class ProductService:
+class ProductService(ServiceBase):
+    """Service for product and department management."""
+    
     def __init__(
         self,
-        product_repo_factory=None,
-        department_repo_factory=None,
-        product_repo=None,
-        department_repo=None
+        product_repo_factory: Callable[[Session], IProductRepository],
+        department_repo_factory: Callable[[Session], IDepartmentRepository]
     ):
         """
-        Initialize with either repository factories or direct repository instances.
+        Initialize with repository factories.
         
         Args:
             product_repo_factory: Factory function to create product repository
             department_repo_factory: Factory function to create department repository
-            product_repo: Direct product repository instance
-            department_repo: Direct department repository instance
-            
-        At least one form (factory or direct instance) must be provided for each repository type.
         """
+        super().__init__()  # Initialize base class with default logger
         self.product_repo_factory = product_repo_factory
         self.department_repo_factory = department_repo_factory
-        self.product_repo = product_repo
-        self.department_repo = department_repo
-        
-        # Validate we have at least one option for each repository
-        if not (self.product_repo_factory or self.product_repo):
-            raise ValueError("Either product_repo_factory or product_repo must be provided")
-        if not (self.department_repo_factory or self.department_repo):
-            raise ValueError("Either department_repo_factory or department_repo must be provided")
-        
-        # Add logging to check the type and content of factories
-        logger.debug(f"ProductService initialized with:")
-        logger.debug(f"  product_repo_factory: {product_repo_factory}")
-        logger.debug(f"  department_repo_factory: {department_repo_factory}")
-        logger.debug(f"  product_repo: {product_repo}")
-        logger.debug(f"  department_repo: {department_repo}")
-    
-    def _get_product_repo(self, session=None):
-        """Get appropriate product repository based on initialization."""
-        if self.product_repo:
-            return self.product_repo
-        elif self.product_repo_factory and session:
-            return self.product_repo_factory(session)
-        raise ValueError("No product repository available")
-        
-    def _get_department_repo(self, session=None):
-        """Get appropriate department repository based on initialization."""
-        if self.department_repo:
-            return self.department_repo
-        elif self.department_repo_factory and session:
-            return self.department_repo_factory(session)
-        raise ValueError("No department repository available")
 
     def _validate_product(self, session: Session, product: Product, is_update: bool = False, existing_product_id: Optional[int] = None):
         """Common validation logic for adding/updating products."""
@@ -79,9 +40,9 @@ class ProductService:
         if product.cost_price is not None and product.cost_price < 0:
             raise ValueError("Precio de costo debe ser positivo")
 
-        # Get repositories (either direct or from factory)
-        dept_repo = self._get_department_repo(session)
-        prod_repo = self._get_product_repo(session)
+        # Get repositories from factories
+        dept_repo = self._get_repository(self.department_repo_factory, session)
+        prod_repo = self._get_repository(self.product_repo_factory, session)
 
         # Check department existence
         if product.department_id is not None:
@@ -100,27 +61,27 @@ class ProductService:
 
     def add_product(self, product_data: Product) -> Product:
         """Adds a new product after validation."""
-        # If we have direct repositories, use them without session management
-        if self.product_repo and self.department_repo:
-            self._validate_product(None, product_data, is_update=False)
-            logger.info(f"Adding product with code: {product_data.code}")
-            return self.product_repo.add(product_data)
-        else:
-            # Use session management with factories
-            with session_scope() as session:
-                self._validate_product(session, product_data, is_update=False)
-                prod_repo = self._get_product_repo(session)
-                logger.info(f"Adding product with code: {product_data.code}")
-                added_product = prod_repo.add(product_data)
-                return added_product
+        def _add_product(session, product_data):
+            self._validate_product(session, product_data, is_update=False)
+            
+            # Get repository from factory
+            prod_repo = self._get_repository(self.product_repo_factory, session)
+            
+            self.logger.info(f"Adding product with code: {product_data.code}")
+            added_product = prod_repo.add(product_data)
+            return added_product
+            
+        return self._with_session(_add_product, product_data)
 
     def update_product(self, product_update_data: Product) -> None:
         """Updates an existing product after validation."""
-        if product_update_data.id is None:
-            raise ValueError("Product ID must be provided for update.")
+        def _update_product(session, product_update_data):
+            if product_update_data.id is None:
+                raise ValueError("Product ID must be provided for update.")
 
-        with session_scope() as session:
-            prod_repo = self._get_product_repo(session)
+            # Get repository from factory
+            prod_repo = self._get_repository(self.product_repo_factory, session)
+            
             existing_product = prod_repo.get_by_id(product_update_data.id)
             if not existing_product:
                 raise ValueError(f"Producto con ID {product_update_data.id} no encontrado")
@@ -128,13 +89,17 @@ class ProductService:
             # Validate the incoming data, considering it's an update
             self._validate_product(session, product_update_data, is_update=True, existing_product_id=product_update_data.id)
 
-            logger.info(f"Updating product with ID: {product_update_data.id}")
-            prod_repo.update(product_update_data)
+            self.logger.info(f"Updating product with ID: {product_update_data.id}")
+            return prod_repo.update(product_update_data)
+            
+        return self._with_session(_update_product, product_update_data)
 
     def delete_product(self, product_id: int) -> None:
         """Deletes a product if it doesn't have stock or doesn't use inventory."""
-        with session_scope() as session:
-            prod_repo = self._get_product_repo(session)
+        def _delete_product(session, product_id):
+            # Get repository from factory
+            prod_repo = self._get_repository(self.product_repo_factory, session)
+            
             product = prod_repo.get_by_id(product_id)
             if product:
                 has_inventory = product.uses_inventory if hasattr(product, 'uses_inventory') else False
@@ -144,80 +109,89 @@ class ProductService:
                     
                 if has_inventory and quantity_in_stock > 0:
                     raise ValueError(f"Producto '{product.code}' no puede ser eliminado porque tiene stock ({quantity_in_stock})")
-                logger.info(f"Deleting product with ID: {product_id}")
-                prod_repo.delete(product_id)
+                self.logger.info(f"Deleting product with ID: {product_id}")
+                return prod_repo.delete(product_id)
             else:
-                logger.warning(f"Attempted to delete non-existent product with ID: {product_id}")
+                self.logger.warning(f"Attempted to delete non-existent product with ID: {product_id}")
+                return None
+                
+        return self._with_session(_delete_product, product_id)
 
     def find_product(self, search_term: Optional[str] = None) -> List[Product]:
         """Finds products based on a search term or returns all if no term is provided."""
-        with session_scope() as session:
-            prod_repo = self._get_product_repo(session)
+        def _find_product(session, search_term):
+            # Get repository from factory
+            prod_repo = self._get_repository(self.product_repo_factory, session)
+            
             if search_term:
-                logger.debug(f"Searching products with term: '{search_term}'")
+                self.logger.debug(f"Searching products with term: '{search_term}'")
                 return prod_repo.search(search_term)
             else:
-                logger.debug("Getting all products")
+                self.logger.debug("Getting all products")
                 return prod_repo.get_all()
+                
+        return self._with_session(_find_product, search_term)
 
     def get_all_products(self, department_id=None) -> List[Product]:
-         """Gets all products, optionally filtered by department_id."""
-         logger.debug(f"Getting all products via get_all_products, department_id={department_id}")
-         with session_scope() as session:
-             prod_repo = self._get_product_repo(session)
-             products = prod_repo.get_all()
-             
-             # Filter by department_id if provided
-             if department_id is not None:
-                 products = [p for p in products if p.department_id == department_id]
-                 
-             return products
+        """Gets all products, optionally filtered by department_id."""
+        def _get_all_products(session, department_id):
+            self.logger.debug(f"Getting all products via get_all_products, department_id={department_id}")
+            
+            # Get repository from factory
+            prod_repo = self._get_repository(self.product_repo_factory, session)
+            
+            products = prod_repo.get_all()
+            
+            # Filter by department_id if provided
+            if department_id is not None:
+                products = [p for p in products if p.department_id == department_id]
+                
+            return products
+            
+        return self._with_session(_get_all_products, department_id)
 
     def get_product_by_code(self, code: str) -> Optional[Product]:
         """Gets a product by its code."""
-        logger.debug(f"Getting product with code: {code}")
-        with session_scope() as session:
-            # Instantiate the repository with the session
-            prod_repo = self._get_product_repo(session)
-            # Then call the method on the instantiated repository
+        def _get_product_by_code(session, code):
+            self.logger.debug(f"Getting product with code: {code}")
+            
+            # Get repository from factory
+            prod_repo = self._get_repository(self.product_repo_factory, session)
+            
             return prod_repo.get_by_code(code)
+            
+        return self._with_session(_get_product_by_code, code)
 
-    def get_product_by_id(self, product_id: Any, session: Optional[Session] = None) -> Optional[Product]:
+    def get_product_by_id(self, product_id: Any) -> Optional[Product]:
         """
         Gets a product by its ID.
         
         Args:
             product_id: The ID of the product (can be int or another type)
-            session: Optional SQLAlchemy session to use instead of creating a new one
             
         Returns:
             Product object if found, None otherwise
         """
-        logger.debug(f"Getting product with ID: {product_id}, type: {type(product_id)}")
-        
-        if session:
-            # Use the provided session directly
-            prod_repo = self._get_product_repo(session)
+        def _get_product_by_id(session, product_id):
+            self.logger.debug(f"Getting product with ID: {product_id}, type: {type(product_id)}")
+            
+            # Get repository from factory
+            prod_repo = self._get_repository(self.product_repo_factory, session)
+            
             product = prod_repo.get_by_id(product_id)
             if not product:
-                logger.debug(f"Product with ID {product_id} not found")
+                self.logger.debug(f"Product with ID {product_id} not found")
             return product
-        else:
-            # Use session_scope as before
-            with session_scope() as session:
-                prod_repo = self._get_product_repo(session)
-                product = prod_repo.get_by_id(product_id)
-                if not product:
-                    logger.debug(f"Product with ID {product_id} not found")
-                return product
+            
+        return self._with_session(_get_product_by_id, product_id)
 
     def _validate_department(self, session: Session, department: Department, is_update: bool = False):
         """Common validation for department add/update."""
         if not department.name:
             raise ValueError("Nombre de departamento es requerido")
         
-        # Get the appropriate repository
-        dept_repo = self._get_department_repo(session)
+        # Get repository from factory
+        dept_repo = self._get_repository(self.department_repo_factory, session)
         
         # Check name uniqueness
         existing = dept_repo.get_by_name(department.name)
@@ -228,63 +202,61 @@ class ProductService:
 
     def add_department(self, department_data: Department) -> Department:
         """Adds a new department after validation."""
-        # If we have direct repositories, use them without session management
-        if self.department_repo:
-            self._validate_department(None, department_data, is_update=False)
-            logger.info(f"Adding department with name: {department_data.name}")
-            return self.department_repo.add(department_data)
-        else:
-            # Use session management with factories
-            with session_scope() as session:
-                self._validate_department(session, department_data, is_update=False)
-                dept_repo = self._get_department_repo(session)
-                logger.info(f"Adding department with name: {department_data.name}")
-                added_department = dept_repo.add(department_data)
-                return added_department
+        def _add_department(session, department_data):
+            self._validate_department(session, department_data, is_update=False)
+            
+            # Get repository from factory
+            dept_repo = self._get_repository(self.department_repo_factory, session)
+            
+            self.logger.info(f"Adding department with name: {department_data.name}")
+            added_department = dept_repo.add(department_data)
+            return added_department
+            
+        return self._with_session(_add_department, department_data)
 
     def get_all_departments(self) -> List[Department]:
-         """Gets all departments."""
-         logger.debug("Entering get_all_departments")
-         logger.debug(f"  Using department_repo_factory: {self.department_repo_factory}") # Log factory again before use
-         with session_scope() as session:
-             logger.debug("  Session scope created successfully.")
-             try:
-                 # Log just before instantiation
-                 logger.debug("  Attempting to instantiate SqliteDepartmentRepository...")
-                 dept_repo = self._get_department_repo(session)
-                 logger.debug(f"  SqliteDepartmentRepository instantiated: {type(dept_repo)}")
-                 return dept_repo.get_all()
-             except Exception as e:
-                 logger.error(f"  Error instantiating or using dept_repo: {e}", exc_info=True)
-                 raise # Re-raise the exception
+        """Gets all departments."""
+        def _get_all_departments(session):
+            self.logger.debug("Getting all departments")
+            
+            # Get repository from factory
+            dept_repo = self._get_repository(self.department_repo_factory, session)
+            
+            return dept_repo.get_all()
+            
+        return self._with_session(_get_all_departments)
 
     def delete_department(self, department_id: int) -> None:
         """Deletes a department if it's not in use by any products."""
-        with session_scope() as session:
-            dept_repo = self._get_department_repo(session)
-            prod_repo = self._get_product_repo(session)
+        def _delete_department(session, department_id):
+            # Get repositories from factories
+            dept_repo = self._get_repository(self.department_repo_factory, session)
+            prod_repo = self._get_repository(self.product_repo_factory, session)
 
             department = dept_repo.get_by_id(department_id)
             if not department:
-                 logger.warning(f"Attempted to delete non-existent department with ID: {department_id}")
-                 return
+                self.logger.warning(f"Attempted to delete non-existent department with ID: {department_id}")
+                return None
 
-            # Check if department is in use using the dedicated method
+            # Check if department is in use
             products_in_dept = prod_repo.get_by_department_id(department_id)
             if products_in_dept:
-                 # Use a more specific error message if needed, or keep the current one
-                 raise ValueError(f"Departamento '{department.name}' no puede ser eliminado, está en uso por {len(products_in_dept)} producto(s).")
+                raise ValueError(f"Departamento '{department.name}' no puede ser eliminado, está en uso por {len(products_in_dept)} producto(s).")
 
-            logger.info(f"Deleting department with ID: {department_id}")
-            dept_repo.delete(department_id)
+            self.logger.info(f"Deleting department with ID: {department_id}")
+            return dept_repo.delete(department_id)
+            
+        return self._with_session(_delete_department, department_id)
 
     def update_department(self, department_data: Department) -> Department:
         """Updates an existing department after validation."""
-        if department_data.id is None:
-            raise ValueError("Department ID must be provided for update.")
+        def _update_department(session, department_data):
+            if department_data.id is None:
+                raise ValueError("Department ID must be provided for update.")
+                
+            # Get repository from factory
+            dept_repo = self._get_repository(self.department_repo_factory, session)
             
-        with session_scope() as session:
-            dept_repo = self._get_department_repo(session)
             existing_department = dept_repo.get_by_id(department_data.id)
             if not existing_department:
                 raise ValueError(f"Departamento con ID {department_data.id} no encontrado")
@@ -292,8 +264,8 @@ class ProductService:
             # Validate the incoming data, considering it's an update
             self._validate_department(session, department_data, is_update=True)
             
-            logger.info(f"Updating department with ID: {department_data.id}")
+            self.logger.info(f"Updating department with ID: {department_data.id}")
             updated_department = dept_repo.update(department_data)
             return updated_department
-
-    # Additional helper methods if needed
+            
+        return self._with_session(_update_department, department_data)

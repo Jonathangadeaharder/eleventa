@@ -133,4 +133,16 @@ dmypy.json
 cython_debug/
 
 # VS Code files
-.vscode/ 
+.vscode/
+
+# Custom output directories
+pdfs/
+receipts/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE specific
+.idea/ 

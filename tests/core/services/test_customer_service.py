@@ -2,9 +2,10 @@ import pytest
 from unittest.mock import MagicMock, patch, ANY
 from decimal import Decimal
 from dataclasses import replace
+import uuid
 
 from core.models.customer import Customer
-from core.models.credit import CreditPayment
+from core.models.credit_payment import CreditPayment
 from core.interfaces.repository_interfaces import ICustomerRepository, ICreditPaymentRepository
 from core.services.customer_service import CustomerService
 from infrastructure.persistence.utils import session_scope # For mocking
@@ -202,7 +203,7 @@ def test_get_all_customers(mock_session_scope, customer_service, mock_customer_r
     expected_customers = [customer_1, customer_2]
     mock_customer_repo.get_all.return_value = expected_customers
     result = customer_service.get_all_customers()
-    mock_customer_repo.get_all.assert_called_once()
+    mock_customer_repo.get_all.assert_called_once_with(limit=None, offset=None)
     assert result == expected_customers
     # mock_session_scope.assert_called_once()
 
@@ -215,7 +216,7 @@ def test_find_customer(mock_session_scope, customer_service, mock_customer_repo,
     expected_customers = [customer_1]
     mock_customer_repo.search.return_value = expected_customers
     result = customer_service.find_customer(search_term)
-    mock_customer_repo.search.assert_called_once_with(search_term)
+    mock_customer_repo.search.assert_called_once_with(search_term, limit=None, offset=None)
     assert result == expected_customers
     # mock_session_scope.assert_called_once()
 
@@ -280,8 +281,18 @@ def test_apply_payment_success(mock_session_scope, customer_service, mock_custom
     # Mock repo calls
     mock_customer_repo.get_by_id.return_value = customer_1
     mock_customer_repo.update_balance.return_value = True
-    # Mock payment creation
-    expected_payment_log = CreditPayment(id=10, customer_id=customer_id, amount=payment_amount, notes=notes, user_id=user_id)
+    
+    # Expected UUID for customer_id
+    expected_uuid = uuid.UUID(f'00000000-0000-0000-0000-{customer_id:012d}')
+    
+    # Mock payment creation with UUID for customer_id
+    expected_payment_log = CreditPayment(
+        id=10,
+        customer_id=expected_uuid,  # Use the same UUID format as in the service
+        amount=payment_amount,
+        notes=notes,
+        user_id=user_id
+    )
     mock_credit_payment_repo.add.return_value = expected_payment_log
 
     # Act
@@ -296,17 +307,17 @@ def test_apply_payment_success(mock_session_scope, customer_service, mock_custom
     mock_customer_repo.get_by_id.assert_called_once_with(customer_id)
     mock_customer_repo.update_balance.assert_called_once_with(customer_id, expected_new_balance) # Pass Decimal
     mock_credit_payment_repo.add.assert_called_once()
-    # Check the payment object passed to the repo
+    
+    # Check payment was created with correct values
     call_args, _ = mock_credit_payment_repo.add.call_args
-    payment_obj_passed = call_args[0]
-    assert isinstance(payment_obj_passed, CreditPayment)
-    assert payment_obj_passed.customer_id == customer_id
-    assert payment_obj_passed.amount == payment_amount
-    assert payment_obj_passed.notes == notes
-    assert payment_obj_passed.user_id == user_id
-    # Check the returned payment object
+    payment_obj = call_args[0]
+    assert isinstance(payment_obj, CreditPayment)
+    assert payment_obj.customer_id == expected_uuid
+    assert payment_obj.amount == payment_amount
+    assert payment_obj.user_id == user_id
+    
+    # Check result matches expected
     assert result == expected_payment_log
-    # mock_session_scope.assert_called_once()
 
 @patch('core.services.customer_service.session_scope')
 def test_apply_payment_customer_not_found(mock_session_scope, customer_service, mock_customer_repo):
@@ -379,8 +390,18 @@ def test_get_customer_payments_success(mock_session_scope, customer_service, moc
     """Test retrieving payments for a customer successfully."""
     # Arrange
     customer_id = 1
-    payment1 = CreditPayment(id=10, customer_id=customer_id, amount=Decimal('50.00'))
-    payment2 = CreditPayment(id=11, customer_id=customer_id, amount=Decimal('25.50'))
+    payment1 = CreditPayment(
+        id=10, 
+        customer_id=uuid.UUID('00000000-0000-0000-0000-000000000001'),  # Convert int to UUID
+        amount=Decimal('50.00'),
+        user_id=5  # Add required user_id field
+    )
+    payment2 = CreditPayment(
+        id=11, 
+        customer_id=uuid.UUID('00000000-0000-0000-0000-000000000001'),  # Convert int to UUID
+        amount=Decimal('25.50'),
+        user_id=5  # Add required user_id field
+    )
     expected_payments = [payment1, payment2]
 
     mock_credit_payment_repo.get_for_customer.return_value = expected_payments
