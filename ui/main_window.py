@@ -18,6 +18,7 @@ from ui.views.invoices_view import InvoicesView
 from ui.views.corte_view import CorteView
 from ui.views.reports_view import ReportsView
 from ui.views.configuration_view import ConfigurationView
+from ui.views.cash_drawer_view import CashDrawerView
 from core.services.product_service import ProductService
 from core.services.inventory_service import InventoryService
 from core.services.sale_service import SaleService
@@ -26,6 +27,7 @@ from core.services.purchase_service import PurchaseService
 from core.services.invoicing_service import InvoicingService
 from core.services.corte_service import CorteService
 from core.services.reporting_service import ReportingService
+from core.services.cash_drawer_service import CashDrawerService
 from core.models.user import User
 from ui.views.suppliers_view import SuppliersView
 from ui.views.purchases_view import PurchasesView
@@ -54,6 +56,7 @@ class MainWindow(QMainWindow):
         invoicing_service: InvoicingService,
         corte_service: CorteService,
         reporting_service: ReportingService,  # Add ReportingService parameter
+        cash_drawer_service: CashDrawerService,  # Add CashDrawerService parameter
         parent=None
     ):
         super().__init__(parent)
@@ -70,6 +73,7 @@ class MainWindow(QMainWindow):
         self.invoicing_service = invoicing_service
         self.corte_service = corte_service
         self.reporting_service = reporting_service  # Store the ReportingService
+        self.cash_drawer_service = cash_drawer_service  # Store the CashDrawerService
 
         self.stacked_widget = QStackedWidget(self)
         self.setCentralWidget(self.stacked_widget)
@@ -99,6 +103,10 @@ class MainWindow(QMainWindow):
             inventory_service=self.inventory_service,
             current_user=self.current_user
         )
+        cash_drawer_view = CashDrawerView(
+            cash_drawer_service=self.cash_drawer_service,
+            user_id=self.current_user.id if self.current_user else None
+        )
 
         self.views = {
             "Sales": sales_view,
@@ -111,6 +119,7 @@ class MainWindow(QMainWindow):
             "Reports": reports_view,
             "Configuration": config_view,
             "Suppliers": suppliers_view,
+            "CashDrawer": cash_drawer_view,
         }
 
         self.view_indices = {}
@@ -161,6 +170,7 @@ class MainWindow(QMainWindow):
             ("F6 Facturas", "Invoices", "invoices", "F6"),
             ("F7 Corte", "Corte", "corte", "F7"),
             ("F8 Reportes", "Reports", "reports", "F8"),
+            ("F9 Caja", "CashDrawer", "cash_drawer", "F9"),
             ("Configuración", "Configuration", "config", None),
             ("Provee&dores", "Suppliers", "suppliers", None),
         ]
@@ -261,6 +271,9 @@ if __name__ == '__main__':
     class MockReportingService:
         def get_report_data(self): return {}
 
+    class MockCashDrawerService:
+        def get_cash_drawer_data(self, user_id): return {}
+
     mock_user = User(id=0, username="testuser", password_hash="")
 
     app = QApplication(sys.argv)
@@ -273,7 +286,8 @@ if __name__ == '__main__':
         purchase_service=MockPurchaseService(),
         invoicing_service=MockInvoicingService(),
         corte_service=MockCorteService(),
-        reporting_service=MockReportingService()
+        reporting_service=MockReportingService(),
+        cash_drawer_service=MockCashDrawerService()
     )
 
     main_win.show()

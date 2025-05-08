@@ -186,8 +186,6 @@ class ProductDialog(QDialog):
 
     def _connect_signals(self):
         self.inventory_checkbox.stateChanged.connect(self._toggle_inventory_fields)
-        self.save_button.clicked.connect(self.accept)
-        self.cancel_button.clicked.connect(self.reject)
 
     @Slot(int)
     def _toggle_inventory_fields(self, state):

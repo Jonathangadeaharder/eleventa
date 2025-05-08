@@ -41,6 +41,9 @@ class MockCorteService:
 class MockReportingService:
     def get_report_data(self): return {}
 
+class MockCashDrawerService:
+    def get_drawer_summary(self, drawer_id=None): return {'is_open': False, 'current_balance': 0, 'entries_today': []}
+
 @pytest.mark.smoke
 @pytest.mark.ui
 def test_main_window_starts_and_shows(safe_qtbot):
@@ -60,7 +63,8 @@ def test_main_window_starts_and_shows(safe_qtbot):
             purchase_service=MockPurchaseService(),
             invoicing_service=MockInvoicingService(),
             corte_service=MockCorteService(),
-            reporting_service=MockReportingService()
+            reporting_service=MockReportingService(),
+            cash_drawer_service=MockCashDrawerService()
         )
         
         # Add the widget to safe_qtbot for tracking

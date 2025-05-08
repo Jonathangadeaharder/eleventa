@@ -118,10 +118,11 @@ class ReceiveStockItemTableModel(QAbstractTableModel):
 class PurchaseOrderDialog(QDialog):
     """Dialog for creating a new Purchase Order."""
 
-    def __init__(self, purchase_service, product_service, parent=None):
+    def __init__(self, purchase_service, product_service, current_user=None, parent=None):
         super().__init__(parent)
         self.purchase_service = purchase_service
         self.product_service = product_service
+        self.current_user = current_user
         self.current_po_items: List[PurchaseOrderItem] = [] # Store items being added
 
         self.setWindowTitle("Nueva Orden de Compra")
@@ -356,11 +357,14 @@ class PurchaseOrderDialog(QDialog):
 
 # --- Receive Stock Dialog ---
 class ReceiveStockDialog(QDialog):
-    def __init__(self, purchase_service, inventory_service, purchase_order: PurchaseOrder, parent=None):
+    """Dialog for receiving items from a purchase order."""
+    
+    def __init__(self, purchase_service, inventory_service, purchase_order, current_user=None, parent=None):
         super().__init__(parent)
         self.purchase_service = purchase_service
-        self.inventory_service = inventory_service # Need inventory service to update stock
+        self.inventory_service = inventory_service
         self.purchase_order = purchase_order
+        self.current_user = current_user
 
         self.setWindowTitle(f"Recibir Mercadería - Orden #{purchase_order.id}")
         self.setMinimumSize(800, 400) # Adjust size
