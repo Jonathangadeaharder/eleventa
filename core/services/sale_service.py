@@ -101,13 +101,25 @@ class SaleService(ServiceBase):
         else:
             return self._with_session(_create_sale, items_data, user_id, payment_type, customer_id, is_credit_sale)
 
-    def get_sale(self, sale_id: int) -> Sale:
-        """Get a sale by ID."""
+    def get_sale_by_id(self, sale_id: int) -> Optional[Sale]:
+        """Get a sale by its ID. Returns None if not found."""
         def _get_sale(session, sale_id):
             sale_repo = self._get_repository(self.sale_repo_factory, session)
             return sale_repo.get_by_id(sale_id)
-            
         return self._with_session(_get_sale, sale_id)
+
+    def assign_customer_to_sale(self, sale_id: int, customer_id: int) -> bool:
+        """Assign a customer to an existing sale. Returns True if successful."""
+        def _assign_customer(session, sale_id, customer_id):
+            sale_repo = self._get_repository(self.sale_repo_factory, session)
+            sale = sale_repo.get_by_id(sale_id)
+            if sale:
+                # Assume update method exists in repository
+                update_data = {"customer_id": customer_id}
+                sale_repo.update(sale_id, update_data)
+                return True
+            return False
+        return self._with_session(_assign_customer, sale_id, customer_id)
 
     def update_sale(self, sale_id: int, update_data: dict) -> Sale:
         """Update a sale."""

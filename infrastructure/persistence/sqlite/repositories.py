@@ -719,7 +719,7 @@ class SqliteInventoryRepository(IInventoryRepository):
             self.session.rollback()
             logging.error(f"Error adding inventory movement: {e}")
             raise
-
+            
     def get_movements_for_product(self, product_id: int, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> List[InventoryMovement]:
         """Retrieves all inventory movements for a specific product, ordered by timestamp."""
         stmt = select(InventoryMovementOrm).where(InventoryMovementOrm.product_id == product_id)
@@ -1073,6 +1073,30 @@ class SqliteSaleRepository(ISaleRepository):
         """Get a cash drawer entry by ID."""
         orm_entry = self.session.query(CashDrawerEntryOrm).filter(CashDrawerEntryOrm.id == entry_id).first()
         return self._orm_to_model(orm_entry) if orm_entry else None
+
+    def update(self, sale_id: int, data: Dict[str, Any]) -> Optional[Sale]:
+        """Updates specific fields of a sale identified by its ID."""
+        try:
+            # Retrieve the SaleOrm object using the primary key
+            sale_orm = self.session.get(SaleOrm, sale_id)
+            if not sale_orm:
+                logging.warning(f"Sale with ID {sale_id} not found for update.")
+                return None
+
+            # Update attributes from the data dictionary
+            for key, value in data.items():
+                if hasattr(sale_orm, key):
+                    setattr(sale_orm, key, value)
+                else:
+                    logging.warning(f"Attempted to update non-existent attribute '{key}' on SaleOrm for sale ID {sale_id}")
+            
+            self.session.commit()
+            self.session.refresh(sale_orm) # Refresh to get any DB-generated values or updated state
+            return _map_sale_orm_to_model(sale_orm)
+        except Exception as e:
+            self.session.rollback()
+            logging.error(f"Error updating sale ID {sale_id} with data {data}: {e}")
+            raise
 
 class SqliteCustomerRepository(ICustomerRepository):
     """SQLite implementation of the customer repository interface."""

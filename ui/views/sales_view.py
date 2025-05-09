@@ -590,9 +590,15 @@ class SalesView(QWidget):
     def cancel_current_sale(self):
         if not self.sale_item_model.get_all_items():
             self._clear_sale()
+            self.invoice_button.setEnabled(False)
+            if hasattr(self, 'current_sale_id'):
+                delattr(self, 'current_sale_id')
             return
         if ask_confirmation(self, "Cancelar Venta", "¿Está seguro?"):
             self._clear_sale()
+            self.invoice_button.setEnabled(False)
+            if hasattr(self, 'current_sale_id'):
+                delattr(self, 'current_sale_id')
 
     def open_pdf_file(self, file_path):
         """Open a PDF file with the default system viewer."""
@@ -706,20 +712,67 @@ class SalesView(QWidget):
         except Exception as e:
             show_error_message(self, "Error al Finalizar", f"No se pudo registrar la venta: {e}")
 
+    def _prompt_and_assign_customer_to_sale(self, sale_id: int) -> bool:
+        """Prompts the user to select a customer and assigns it to the given sale. Returns True if successful."""
+        # Load customers as in _select_customer
+        if not hasattr(self, '_customers') or not self._customers:
+            self._load_customers()
+        from ui.dialogs.select_customer_dialog import SelectCustomerDialog
+        dialog = SelectCustomerDialog(self._customers, self)
+        if dialog.exec():
+            selected_customer = dialog.get_selected_customer()
+            if selected_customer:
+                try:
+                    if not hasattr(self.sale_service, 'assign_customer_to_sale'):
+                        show_error_message(self, "Error de Implementación", "SaleService no tiene el método 'assign_customer_to_sale'.")
+                        return False
+                    self.sale_service.assign_customer_to_sale(sale_id, selected_customer.id)
+                    show_info_message(self, "Cliente Asignado", "Cliente asignado correctamente a la venta para facturación.")
+                    return True
+                except Exception as e:
+                    show_error_message(self, "Error al Asignar Cliente", f"Ocurrió un error al intentar asignar el cliente: {e}")
+                    return False
+        return False
+
     @Slot()
     def generate_invoice_from_sale(self):
-        """Generate an invoice from the most recently completed sale."""
+        """Generate an invoice from the most recently completed sale. Prompts to assign a customer if missing."""
         if not hasattr(self, 'current_sale_id'):
             show_error_message(self, "No hay una venta reciente para facturar.")
             return
-            
+
         try:
+            # Check for sale and customer
+            if not hasattr(self.sale_service, 'get_sale_by_id'):
+                show_error_message(self, "Error de Implementación", "SaleService no tiene el método 'get_sale_by_id'.")
+                return
+            sale = self.sale_service.get_sale_by_id(self.current_sale_id)
+            if not sale:
+                show_error_message(self, "Error", f"No se encontró la venta ID {self.current_sale_id}.")
+                self.invoice_button.setEnabled(False)
+                if hasattr(self, 'current_sale_id'):
+                    delattr(self, 'current_sale_id')
+                return
+            if not getattr(sale, 'customer_id', None):
+                if ask_confirmation(self, "Cliente Requerido", "Esta venta no tiene un cliente asignado. ¿Desea asignar uno para facturación?"):
+                    if not self._prompt_and_assign_customer_to_sale(self.current_sale_id):
+                        show_info_message(self, "Facturación Cancelada", "No se asignó un cliente. La facturación requiere un cliente.")
+                        return
+                    # Re-fetch sale after assignment
+                    sale = self.sale_service.get_sale_by_id(self.current_sale_id)
+                    if not getattr(sale, 'customer_id', None):
+                        show_error_message(self, "Error", "No se pudo asignar el cliente. Facturación cancelada.")
+                        return
+                else:
+                    show_info_message(self, "Facturación Cancelada", "La facturación requiere un cliente.")
+                    return
+
             # We need to check if the parent window has an invoicing_service
             main_window = self.window()
             if not hasattr(main_window, 'invoicing_service'):
                 show_error_message(self, "No se puede acceder al servicio de facturación.")
                 return
-                
+            
             # Check if the sale already has an invoice
             invoice = main_window.invoicing_service.get_invoice_by_sale_id(self.current_sale_id)
             if invoice:
@@ -730,30 +783,29 @@ class SalesView(QWidget):
                     "Factura Existente"
                 )
                 if response:
-                    # Generate and display the PDF
                     filename = main_window.invoicing_service.generate_invoice_pdf(invoice.id)
                     self.open_pdf_file(filename)
+                self.invoice_button.setEnabled(False)
+                if hasattr(self, 'current_sale_id'):
+                    delattr(self, 'current_sale_id')
                 return
-                
             # Generate a new invoice for the sale
             invoice = main_window.invoicing_service.create_invoice_from_sale(self.current_sale_id)
-            
-            # Show success message
             show_info_message(self, "Factura Generada", f"Factura generada correctamente. Número: {invoice.invoice_number}")
-            
-            # Ask if user wants to view the invoice
             response = ask_confirmation(
                 self, 
                 "¿Desea ver la factura generada?",
                 "Ver Factura"
             )
             if response:
-                # Generate and display the PDF
                 filename = main_window.invoicing_service.generate_invoice_pdf(invoice.id)
                 self.open_pdf_file(filename)
-                
         except Exception as e:
             show_error_message(self, "Error al Generar Factura", f"Error al generar la factura: {str(e)}")
+        else:
+            self.invoice_button.setEnabled(False)
+            if hasattr(self, 'current_sale_id'):
+                delattr(self, 'current_sale_id')
 
     def _clear_sale(self):
         """Clears the sale items, total, and customer selection."""
@@ -763,9 +815,7 @@ class SalesView(QWidget):
         self.selected_customer = None
         self.customer_label.setText("Cliente: Ninguno")
         self.product_combo.setFocus()
-        self.invoice_button.setEnabled(False)  # Disable invoice button
-        if hasattr(self, 'current_sale_id'):
-            delattr(self, 'current_sale_id')
+        # Do NOT clear current_sale_id here; keep it so Facturar works after sale
         # update_total is called automatically by modelReset signal
         
     def _edit_selected_item_quantity(self, index):
