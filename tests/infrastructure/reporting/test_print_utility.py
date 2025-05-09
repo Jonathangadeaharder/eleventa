@@ -192,10 +192,11 @@ class TestPrintManager:
             assert result == "test_receipt.pdf"
             
             # Check that generate_receipt_pdf was called correctly
+            expected_path = os.path.join(self.print_manager.receipt_dir, os.path.basename(mock_generate.call_args[0][2]))
             mock_generate.assert_called_once_with(
                 self.receipt_data['sale'],
                 self.print_manager._get_store_info.return_value,
-                mock_generate.call_args[0][2]  # The auto-generated filename
+                expected_path
             )
             
             # Check the auto-generated filename format
@@ -211,14 +212,15 @@ class TestPrintManager:
             test_filename = "custom_receipt.pdf"
             result = self.print_manager._generate_receipt(self.receipt_data, test_filename)
             
-            # Check that the method returned the filename
+            # Check that the method returned the filename from the mocked generate_receipt_pdf
             assert result == "test_receipt.pdf"
-            
-            # Check that generate_receipt_pdf was called with the custom filename
+
+            # Check that generate_receipt_pdf was called with the custom filename (now absolute)
+            expected_receipt_path = os.path.join(self.print_manager.receipt_dir, os.path.basename(test_filename))
             mock_generate.assert_called_once_with(
                 self.receipt_data['sale'],
                 self.print_manager._get_store_info.return_value,
-                test_filename
+                expected_receipt_path
             )
     
     def test_generate_invoice(self):
@@ -253,13 +255,14 @@ class TestPrintManager:
         test_filename = "custom_invoice.pdf"
         result = self.print_manager._generate_invoice(self.invoice_data, test_filename)
         
-        # Check that the method returned the filename
+        # Check that the method returned the filename from the mocked invoice_builder
         assert result == "test_invoice.pdf"
-        
-        # Check that invoice_builder.generate_invoice_pdf was called with the custom filename
+
+        # Check that invoice_builder.generate_invoice_pdf was called with the custom filename (now absolute)
+        expected_invoice_path = os.path.join(self.print_manager.default_pdf_dir, os.path.basename(test_filename))
         self.print_manager.invoice_builder.generate_invoice_pdf.assert_called_once_with(
             self.invoice_data['invoice'],
-            test_filename
+            expected_invoice_path
         )
     
     def test_generate_cash_drawer_report(self):
@@ -302,13 +305,14 @@ class TestPrintManager:
         test_filename = "custom_cash_drawer.pdf"
         result = self.print_manager._generate_cash_drawer_report(self.cash_drawer_data, test_filename)
         
-        # Check that the method returned the filename
-        assert result == test_filename
-        
-        # Check that report_builder.generate_report_pdf was called with the custom filename
+        # Check that the method returned the filename (now absolute)
+        expected_cash_drawer_path = os.path.join(self.print_manager.default_pdf_dir, os.path.basename(test_filename))
+        assert result == expected_cash_drawer_path
+
+        # Check that report_builder.generate_report_pdf was called with the custom filename (now absolute)
         self.print_manager.report_builder.generate_report_pdf.assert_called_once()
         args, kwargs = self.print_manager.report_builder.generate_report_pdf.call_args
-        assert kwargs['filename'] == test_filename
+        assert kwargs['filename'] == expected_cash_drawer_path
         
         # Test with failure
         self.print_manager.report_builder.generate_report_pdf.return_value = False
@@ -548,19 +552,14 @@ class TestPrintManager:
             
             # Test PrintType.CASH_DRAWER with PrintDestination.PDF_FILE and custom filename
             custom_filename = "custom_drawer_report.pdf"
-            result = self.print_manager.print(
-                print_type=PrintType.CASH_DRAWER,
-                data=self.cash_drawer_data,
-                destination=PrintDestination.PDF_FILE,
-                filename=custom_filename
-            )
-            
-            # Check that the method returned the PDF path
-            assert result == test_pdf_path
-            
-            # Check that the generate method was called with the custom filename
-            mock_generate_cash_drawer.assert_called_once_with(self.cash_drawer_data, custom_filename)
-            
+            with patch.object(self.print_manager, '_generate_cash_drawer_report', return_value=os.path.join(self.print_manager.default_pdf_dir, os.path.basename(custom_filename))) as mock_generate_cash_drawer:
+                result = self.print_manager.print(
+                    PrintType.CASH_DRAWER, self.cash_drawer_data, PrintDestination.PDF_FILE, filename=custom_filename
+                )
+                expected_path_for_cash_drawer_custom = os.path.join(self.print_manager.default_pdf_dir, os.path.basename(custom_filename))
+                assert result == expected_path_for_cash_drawer_custom
+                mock_generate_cash_drawer.assert_called_once_with(self.cash_drawer_data, custom_filename) # _generate_cash_drawer_report receives relative, then makes it absolute internally
+
             # Test with invalid print type - by mocking the ValueError but catching it in print()
             # since the implementation catches all exceptions and returns False
             mock_generate_report.side_effect = ValueError("Invalid print type")

@@ -7,6 +7,11 @@ import platform
 import subprocess
 from enum import Enum
 from typing import Dict, Any, Optional, Callable, Union
+from datetime import datetime
+import logging
+
+# Configure basic logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(module)s - %(funcName)s - %(message)s')
 
 # Import existing report builders
 from infrastructure.reporting.report_builder import ReportBuilder
@@ -34,8 +39,14 @@ class PrintManager:
     
     def __init__(self):
         """Initialize the print manager with default settings."""
-        self.default_pdf_dir = "pdfs"
-        self.receipt_dir = "receipts"
+        # Get the absolute path of the script's directory
+        base_dir = os.path.abspath(os.path.dirname(__file__))
+        # For robustness, ensure the script is in a known location relative to project root or use a dedicated project root function
+        # Assuming this script is in infrastructure/reporting, to get project root:
+        project_root = os.path.abspath(os.path.join(base_dir, '..', '..')) 
+        
+        self.default_pdf_dir = os.path.join(project_root, "pdfs")
+        self.receipt_dir = os.path.join(project_root, "receipts")
         
         # Ensure directories exist
         os.makedirs(self.default_pdf_dir, exist_ok=True)
@@ -86,6 +97,11 @@ class PrintManager:
         Returns:
             String with file path if saved to PDF, or boolean for other destinations
         """
+        logging.debug(f"PrintManager.print called with type: {print_type}, dest: {destination}, filename: {filename}")
+        # Update store info if it's not set (can happen if settings are changed after init)
+        self._get_store_info()
+        self.invoice_builder.store_info = self.store_info # Ensure invoice builder also gets updated store_info
+        
         try:
             # Generate the appropriate document based on type
             if print_type == PrintType.REPORT:
@@ -97,15 +113,24 @@ class PrintManager:
             elif print_type == PrintType.CASH_DRAWER:
                 pdf_path = self._generate_cash_drawer_report(data, filename)
             else:
-                raise ValueError(f"Unsupported print type: {print_type}")
-            
+                logging.error(f"Invalid print type: {print_type}")
+                raise ValueError(f"Invalid print type: {print_type}")
+
+            logging.debug(f"Generated pdf_path (should be absolute): {pdf_path}")
+
             # Handle the output based on destination
             if destination == PrintDestination.PDF_FILE:
                 # Just return the path
                 result = pdf_path
             elif destination == PrintDestination.PREVIEW:
-                # Open the PDF in the default viewer
-                result = self._open_pdf(pdf_path)
+                # Open the PDF for preview
+                logging.debug(f"Attempting to open for preview: {pdf_path}")
+                success = self._open_pdf(pdf_path)
+                if callback:
+                    user_friendly_path = os.path.relpath(pdf_path, self.default_pdf_dir) \
+                        if pdf_path.startswith(self.default_pdf_dir) else pdf_path
+                    callback(user_friendly_path, success)
+                return success
             elif destination == PrintDestination.PRINTER:
                 # Send to printer
                 result = self._print_to_printer(pdf_path, printer_name)
@@ -127,6 +152,7 @@ class PrintManager:
     
     def _generate_report(self, data: Dict[str, Any], filename: Optional[str] = None) -> str:
         """Generate a business report PDF."""
+        logging.debug(f"_generate_report received filename: {filename}")
         # Extract report parameters from data
         report_title = data.get('title', 'Business Report')
         is_landscape = data.get('is_landscape', False)
@@ -135,7 +161,15 @@ class PrintManager:
         if not filename:
             timestamp = data.get('timestamp', '').replace(' ', '_').replace('/', '-')
             report_type = data.get('report_type', 'report')
-            filename = f"{self.default_pdf_dir}/{report_type}_{timestamp}.pdf"
+            # Use absolute path for filename
+            filename = os.path.join(self.default_pdf_dir, f"{report_type}_{timestamp}.pdf")
+            logging.debug(f"Auto-generated absolute filename: {filename}")
+        elif not os.path.isabs(filename):
+            original_filename_for_log = filename
+            filename = os.path.join(self.default_pdf_dir, os.path.basename(filename))
+            logging.debug(f"Converted relative filename '{original_filename_for_log}' to absolute: {filename}")
+        else:
+            logging.debug(f"Using provided absolute filename: {filename}")
         
         # Generate the report using the report builder
         success = self.report_builder.generate_report_pdf(
@@ -159,8 +193,11 @@ class PrintManager:
         # Generate filename if not provided
         if not filename:
             sale_id = getattr(sale, 'id', 'unknown')
-            timestamp = getattr(sale, 'timestamp', '').strftime('%Y%m%d_%H%M%S')
-            filename = f"{self.receipt_dir}/receipt_{sale_id}_{timestamp}.pdf"
+            timestamp = getattr(sale, 'timestamp', datetime.now()).strftime('%Y%m%d_%H%M%S') if hasattr(getattr(sale, 'timestamp', None), 'strftime') else datetime.now().strftime('%Y%m%d_%H%M%S')
+            # Use absolute path for filename
+            filename = os.path.join(self.receipt_dir, f"receipt_{sale_id}_{timestamp}.pdf")
+        elif not os.path.isabs(filename):
+            filename = os.path.join(self.receipt_dir, os.path.basename(filename))
         
         # Generate the receipt
         return generate_receipt_pdf(sale, store_info, filename)
@@ -173,8 +210,11 @@ class PrintManager:
         # Generate filename if not provided
         if not filename:
             invoice_id = getattr(invoice, 'id', 'unknown')
-            timestamp = data.get('timestamp', '').replace(' ', '_').replace('/', '-')
-            filename = f"{self.default_pdf_dir}/invoice_{invoice_id}_{timestamp}.pdf"
+            timestamp = data.get('timestamp', datetime.now().strftime('%Y-%m-%d_%H-%M-%S')).replace(' ', '_').replace('/', '-')
+            # Use absolute path for filename
+            filename = os.path.join(self.default_pdf_dir, f"invoice_{invoice_id}_{timestamp}.pdf")
+        elif not os.path.isabs(filename):
+            filename = os.path.join(self.default_pdf_dir, os.path.basename(filename))
         
         # Generate the invoice using the invoice builder
         return self.invoice_builder.generate_invoice_pdf(invoice, filename)
@@ -188,8 +228,11 @@ class PrintManager:
         
         # Generate filename if not provided
         if not filename:
-            timestamp = data.get('timestamp', '').replace(' ', '_').replace('/', '-')
-            filename = f"{self.default_pdf_dir}/cash_drawer_{drawer_id}_{timestamp}.pdf"
+            timestamp = data.get('timestamp', datetime.now().strftime('%Y-%m-%d_%H-%M-%S')).replace(' ', '_').replace('/', '-')
+            # Use absolute path for filename
+            filename = os.path.join(self.default_pdf_dir, f"cash_drawer_{drawer_id}_{timestamp}.pdf")
+        elif not os.path.isabs(filename):
+            filename = os.path.join(self.default_pdf_dir, os.path.basename(filename))
         
         # Prepare report data in the format expected by report builder
         report_data = {
@@ -218,9 +261,16 @@ class PrintManager:
     
     def _open_pdf(self, pdf_path: str) -> bool:
         """Open a PDF file with the system's default PDF viewer."""
+        logging.debug(f"_open_pdf received path: {pdf_path}, is_abs: {os.path.isabs(pdf_path)}")
         try:
             system = platform.system()
             
+            if not os.path.isabs(pdf_path):
+                logging.warning(f"_open_pdf received a relative path: {pdf_path}. This might lead to errors.")
+                # Attempt to make it absolute assuming it's relative to CWD, though this is risky
+                # pdf_path = os.path.abspath(pdf_path)
+                # logging.warning(f"Attempted to convert to absolute: {pdf_path}")
+
             if system == 'Windows':
                 os.startfile(pdf_path)
             elif system == 'Darwin':  # macOS

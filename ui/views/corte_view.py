@@ -12,7 +12,7 @@ from core.services.corte_service import CorteService
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
 from ui.models.table_models import CashDrawerEntryTableModel
 from ui.widgets.filter_dropdowns import PeriodFilterWidget, FilterBoxWidget, FilterDropdown
-from infrastructure.reporting.print_utility import print_manager, PrintType, PrintDestination
+from infrastructure.reporting.print_utility import print_manager as default_print_manager, PrintType, PrintDestination
 
 
 class CorteView(QWidget):
@@ -21,19 +21,22 @@ class CorteView(QWidget):
     Shows sales totals by payment type, cash movements, and calculates expected cash in drawer.
     """
     
-    def __init__(self, corte_service: CorteService, user_id: int = None):
+    def __init__(self, corte_service: CorteService, user_id: int = None, print_manager=None):
+        print('[DEBUG] CorteView.__init__ start')
         super().__init__()
         self.corte_service = corte_service
         self.user_id = user_id
         self.current_data = None
-        
+        self.print_manager = print_manager or default_print_manager
         # Create table models for cash entries
         self.cash_in_model = CashDrawerEntryTableModel()
         self.cash_out_model = CashDrawerEntryTableModel()
-        
+        print('[DEBUG] CorteView.__init__ before _init_ui')
         self._init_ui()
+        print('[DEBUG] CorteView.__init__ end')
     
     def _init_ui(self):
+        print('[DEBUG] CorteView._init_ui start')
         """Initialize the UI components"""
         main_layout = QVBoxLayout(self)
         
@@ -302,7 +305,7 @@ class CorteView(QWidget):
             self.current_data['cash_sales'] = cash_sales
             
             # Reset actual cash input and difference
-            self.actual_cash_input.setValue(expected_cash)
+            self.actual_cash_input.setValue(float(expected_cash))
             self._calculate_cash_difference()
             
             # Update cash in/out tables
@@ -316,21 +319,15 @@ class CorteView(QWidget):
         """Calculate and display the difference between expected and actual cash."""
         if self.current_data is None:
             return
-        
         expected_cash = (
-            self.current_data['starting_balance'] + 
-            self.current_data.get('cash_sales', Decimal("0.00")) + 
-            self.current_data['cash_in_total'] - 
+            self.current_data['starting_balance'] +
+            self.current_data.get('cash_sales', Decimal("0.00")) +
+            self.current_data['cash_in_total'] -
             self.current_data['cash_out_total']
         )
-        
-        actual_cash = self.actual_cash_input.value()
+        actual_cash = Decimal(str(self.actual_cash_input.value()))
         difference = actual_cash - expected_cash
-        
-        # Display difference with color coding
         self.cash_difference_label.setText(f"${difference:.2f}")
-        
-        # Use color to indicate positive (green) or negative (red) difference
         if difference < 0:
             self.cash_difference_label.setStyleSheet("color: red;")
         elif difference > 0:
@@ -338,72 +335,32 @@ class CorteView(QWidget):
         else:
             self.cash_difference_label.setStyleSheet("")
     
+    @Slot()
     def _on_do_corte(self):
-        """Execute the 'Corte' operation - finalize current period and save results."""
-        if self.current_data is None:
-            QMessageBox.warning(self, "Advertencia", "No hay datos para realizar el corte.")
-            return
-        
-        # Ask for confirmation
-        response = QMessageBox.question(
-            self, 
-            "Confirmar Corte", 
-            "¿Está seguro que desea realizar el corte? Esta operación no se puede deshacer.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        
-        if response == QMessageBox.StandardButton.Yes:
-            try:
-                # Get the current actual cash value
-                actual_cash = self.actual_cash_input.value()
-                
-                # Call service to finalize the corte
-                self.corte_service.finalize_corte(
-                    self.period_filter.get_period_range()[0],  # start_time
-                    self.period_filter.get_period_range()[1],  # end_time
-                    actual_cash,
-                    self.user_id
-                )
-                
-                QMessageBox.information(
-                    self, 
-                    "Corte Realizado", 
-                    "El corte de caja se ha realizado exitosamente."
-                )
-                
-                # Refresh the report
-                self._on_period_changed(*self.period_filter.get_period_range())
-                
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Error al realizar el corte: {str(e)}")
+        """Refresh the corte report when the 'Hacer Corte' button is clicked."""
+        try:
+            start_time, end_time = self.period_filter.get_period_range()
+            self._refresh_corte_report(start_time, end_time)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
     
     def _print_report(self):
         """Print the current corte report."""
         if self.current_data is None:
             QMessageBox.warning(self, "Advertencia", "No hay datos para imprimir el reporte.")
             return
-            
         try:
-            # Format date range for the report title
             start_time, end_time = self.period_filter.get_period_range()
             start_str = start_time.strftime('%d/%m/%Y')
             end_str = end_time.strftime('%d/%m/%Y')
-            
-            # Prepare the data for printing
             timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-            
-            # Get cash sales from payment type breakdown if exists
             cash_sales = self.current_data['sales_by_payment_type'].get('Efectivo', Decimal("0.00"))
-            
-            # Calculate expected cash
             expected_cash = (
-                self.current_data['starting_balance'] + 
-                cash_sales + 
-                self.current_data['cash_in_total'] - 
+                self.current_data['starting_balance'] +
+                cash_sales +
+                self.current_data['cash_in_total'] -
                 self.current_data['cash_out_total']
             )
-            
-            # Prepare report data
             print_data = {
                 'title': f"Corte de Caja - {start_str} a {end_str}",
                 'report_type': 'corte',
@@ -418,21 +375,17 @@ class CorteView(QWidget):
                 'cash_in_total': self.current_data['cash_in_total'],
                 'cash_out_total': self.current_data['cash_out_total'],
                 'expected_cash': expected_cash,
-                'actual_cash': self.actual_cash_input.value(),
-                'difference': self.actual_cash_input.value() - expected_cash,
+                'actual_cash': Decimal(str(self.actual_cash_input.value())),
+                'difference': Decimal(str(self.actual_cash_input.value())) - expected_cash,
                 'cash_in_entries': self.current_data['cash_in_entries'],
                 'cash_out_entries': self.current_data['cash_out_entries']
             }
-            
-            # Use the print manager to generate and show the PDF
-            result = print_manager.print(
+            result = self.print_manager.print(
                 print_type=PrintType.REPORT,
                 data=print_data,
-                destination=PrintDestination.PREVIEW  # Open in PDF viewer
+                destination=PrintDestination.PREVIEW
             )
-            
             if not result:
                 QMessageBox.warning(self, "Error", "Ocurrió un error al generar el reporte.")
-                
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al imprimir el reporte: {str(e)}")

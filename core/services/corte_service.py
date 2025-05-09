@@ -1,5 +1,5 @@
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict, List, Optional, Any, Callable
 from sqlalchemy.orm import Session
 
@@ -155,10 +155,13 @@ class CorteService(ServiceBase):
             if not cash_drawer_repo.is_drawer_open(drawer_id):
                 raise ValueError("Cash drawer is not open, cannot register closing balance")
                 
+            # Round actual_amount to 2 decimal places
+            rounded_actual_amount = actual_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
             closing_entry = CashDrawerEntry(
                 timestamp=datetime.now(),
                 entry_type=CashDrawerEntryType.CLOSE,
-                amount=actual_amount,
+                amount=rounded_actual_amount,
                 description=description,
                 user_id=user_id,
                 drawer_id=drawer_id

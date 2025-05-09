@@ -7,6 +7,7 @@ from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
 from core.interfaces.repository_interfaces import ICashDrawerRepository
 from core.services.service_base import ServiceBase
 from infrastructure.persistence.utils import session_scope
+from decimal import Decimal, ROUND_HALF_UP
 
 
 class CashDrawerService(ServiceBase):
@@ -49,11 +50,14 @@ class CashDrawerService(ServiceBase):
             if initial_amount < 0:
                 raise ValueError("Initial amount cannot be negative")
                 
+            # Round amount to 2 decimal places
+            rounded_initial_amount = initial_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
             # Create the entry
             entry = CashDrawerEntry(
                 timestamp=datetime.now(),
                 entry_type=CashDrawerEntryType.START,
-                amount=initial_amount,
+                amount=rounded_initial_amount,
                 description=description,
                 user_id=user_id,
                 drawer_id=drawer_id
@@ -91,11 +95,14 @@ class CashDrawerService(ServiceBase):
             if amount <= 0:
                 raise ValueError("Amount must be positive")
                 
+            # Round amount to 2 decimal places
+            rounded_amount = amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
             # Create the entry
             entry = CashDrawerEntry(
                 timestamp=datetime.now(),
                 entry_type=CashDrawerEntryType.IN,
-                amount=amount,
+                amount=rounded_amount,
                 description=description,
                 user_id=user_id,
                 drawer_id=drawer_id
@@ -138,11 +145,14 @@ class CashDrawerService(ServiceBase):
             if amount > current_balance:
                 raise ValueError(f"Insufficient cash in drawer. Current balance: {current_balance}")
                 
+            # Round amount to 2 decimal places before negating
+            rounded_amount = amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
             # Create the entry (using negative amount for removals)
             entry = CashDrawerEntry(
                 timestamp=datetime.now(),
                 entry_type=CashDrawerEntryType.OUT,
-                amount=-amount,  # Store as negative to properly calculate balance
+                amount=-rounded_amount,  # Store as negative to properly calculate balance
                 description=description,
                 user_id=user_id,
                 drawer_id=drawer_id

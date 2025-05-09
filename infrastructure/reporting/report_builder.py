@@ -1,6 +1,8 @@
 from typing import List, Dict, Any
 from datetime import datetime
 import os
+import logging
+from decimal import Decimal, InvalidOperation
 
 # Required imports for PDF generation
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
@@ -51,9 +53,15 @@ class ReportBuilder:
         Returns:
             bool: True if PDF generation was successful, False otherwise
         """
+        logging.debug(f"ReportBuilder.generate_report_pdf called with filename: {filename}, is_abs: {os.path.isabs(filename)}")
         try:
             # Create PDF directory if it doesn't exist
-            os.makedirs(os.path.dirname(os.path.abspath(filename)), exist_ok=True)
+            output_dir = os.path.dirname(filename) # If filename is absolute, output_dir will be too.
+            if not os.path.isabs(output_dir):
+                logging.warning(f"ReportBuilder received filename '{filename}' resulting in relative output_dir '{output_dir}'. This is unexpected.")
+            
+            logging.debug(f"Ensuring directory exists: {output_dir}")
+            os.makedirs(output_dir, exist_ok=True)
             
             # Set page orientation
             pagesize = landscape(letter) if is_landscape else letter
@@ -511,12 +519,16 @@ class ReportBuilder:
                 }
                 entry_type_display = type_map.get(entry_type, entry_type)
                 
-                # Get amount
-                amount = entry.get('amount', 0)
-                if isinstance(amount, (int, float)):
-                    amount_display = f"${amount:.2f}"
-                else:
-                    amount_display = str(amount)
+                # Get and format amount robustly
+                amount_val = entry.get('amount')
+                try:
+                    if amount_val is None:
+                        amount_val = Decimal('0.00')
+                    elif not isinstance(amount_val, Decimal):
+                        amount_val = Decimal(str(amount_val)) # Convert from str, int, float
+                    amount_display = f"${amount_val:.2f}"
+                except (ValueError, TypeError, InvalidOperation):
+                    amount_display = "$Error"
                 
                 cash_in_data.append([
                     str(timestamp),
@@ -564,12 +576,16 @@ class ReportBuilder:
                 }
                 entry_type_display = type_map.get(entry_type, entry_type)
                 
-                # Get amount
-                amount = entry.get('amount', 0)
-                if isinstance(amount, (int, float)):
-                    amount_display = f"${abs(amount):.2f}"
-                else:
-                    amount_display = str(abs(float(amount)))
+                # Get and format amount robustly
+                amount_val = entry.get('amount')
+                try:
+                    if amount_val is None:
+                        amount_val = Decimal('0.00')
+                    elif not isinstance(amount_val, Decimal):
+                        amount_val = Decimal(str(amount_val)) # Convert from str, int, float
+                    amount_display = f"${abs(amount_val):.2f}" # Use abs for cash out
+                except (ValueError, TypeError, InvalidOperation):
+                    amount_display = "$Error"
                 
                 cash_out_data.append([
                     str(timestamp),

@@ -308,7 +308,7 @@ class InvoicesView(QWidget):
         try:
             system = platform.system()
             if system == 'Windows':
-                os.startfile(filename)
+                os.startfile(os.path.abspath(filename))
             elif system == 'Darwin':  # macOS
                 subprocess.call(['open', filename])
             else:  # Linux and others

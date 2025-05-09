@@ -96,6 +96,15 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "ui: mark a test as a ui test")
 
 # Common fixtures that can be used across all tests
+
+import pytest
+from unittest.mock import MagicMock
+
+@pytest.fixture
+def mock_print_manager():
+    mock_pm = MagicMock()
+    mock_pm.print.return_value = True
+    return mock_pm
 @pytest.fixture
 def mock_cash_drawer_service():
     """Create a mock CashDrawerService for testing."""

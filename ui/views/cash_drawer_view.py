@@ -11,7 +11,7 @@ from datetime import datetime
 from infrastructure.reporting.receipt_builder import format_currency
 
 # Import the print manager
-from infrastructure.reporting.print_utility import print_manager, PrintType, PrintDestination
+from infrastructure.reporting.print_utility import print_manager as default_print_manager, PrintType, PrintDestination
 
 from core.services.cash_drawer_service import CashDrawerService
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
@@ -39,11 +39,12 @@ def calculate_difference(expected: Decimal, actual: Decimal) -> Decimal:
 class CashDrawerView(QWidget):
     """View for managing cash drawer operations."""
     
-    def __init__(self, cash_drawer_service: CashDrawerService, user_id: int, parent=None):
+    def __init__(self, cash_drawer_service: CashDrawerService, user_id: int, parent=None, print_manager=None):
         super().__init__(parent)
         self.service = cash_drawer_service
         self.user_id = user_id
         self.current_drawer_id = None
+        self.print_manager = print_manager or default_print_manager
         self._init_ui()
         self._connect_signals()
         self._refresh_data()
@@ -338,7 +339,7 @@ class CashDrawerView(QWidget):
             }
             
             # Use the print manager to generate and open the PDF
-            result = print_manager.print(
+            result = self.print_manager.print(
                 print_type=PrintType.CASH_DRAWER,
                 data=print_data,
                 destination=PrintDestination.PREVIEW  # Open in PDF viewer

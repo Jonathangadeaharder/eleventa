@@ -835,45 +835,34 @@ class SqliteSaleRepository(ISaleRepository):
         else:
              raise ValueError("Invalid group_by value. Use 'day', 'month', or 'year'.")
 
-        # MANUALLY BUILD data by iterating over all sales in the period
-        query = self.session.query(SaleOrm)
+        # Use SQLAlchemy for aggregation
+        query = self.session.query(
+            date_func.label('date'),
+            func.sum(SaleOrm.total_amount).label('total_sales'),
+            func.count(SaleOrm.id).label('num_sales')
+        )
+
         if start_date:
             query = query.filter(SaleOrm.date_time >= start_date)
         if end_date:
             query = query.filter(SaleOrm.date_time <= end_date)
-            
-        sales = query.all()
-        
-        # Group sales by date
-        summary_by_date = {}
-        for sale in sales:
-            # Format date according to group_by
-            date_str = None
-            if group_by == 'day':
-                date_str = sale.date_time.strftime('%Y-%m-%d')
-            elif group_by == 'month':
-                date_str = sale.date_time.strftime('%Y-%m')
-            elif group_by == 'year':
-                date_str = sale.date_time.strftime('%Y')
-                
-            # Initialize if this date hasn't been seen yet
-            if date_str not in summary_by_date:
-                summary_by_date[date_str] = {
-                    'date': date_str,
-                    'total_sales': 0.0,
-                    'num_sales': 0
-                }
-                
-            # Add this sale to the summary
-            summary_by_date[date_str]['total_sales'] += float(sale.total_amount)
-            summary_by_date[date_str]['num_sales'] += 1
-        
-        # Convert dict to list and sort by date
-        result_list = list(summary_by_date.values())
-        result_list.sort(key=lambda x: x['date'])
+
+        query = query.group_by(date_func).order_by(date_func)
+
+        results = query.all()
+
+        # Convert results to the expected dictionary format
+        result_list = [
+            {
+                'date': row.date,
+                'total_sales': float(row.total_sales) if row.total_sales is not None else 0.0,
+                'num_sales': row.num_sales
+            }
+            for row in results
+        ]
         
         # Debug print the raw results
-        print(f"Raw query results: {result_list}")
+        # print(f"Raw query results: {result_list}") # Keep this commented out or remove for production
         
         return result_list
 

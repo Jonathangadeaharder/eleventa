@@ -152,12 +152,13 @@ def test_get_sales_summary_by_period(test_db_session, create_product, create_cus
     
     repository = SqliteSaleRepository(test_db_session)
     
-    # Create sales for different dates
-    now = datetime.now()
-    yesterday = now - timedelta(days=1)
-    two_days_ago = now - timedelta(days=2)
+    # Create sales for different dates with fixed values
+    # Use a fixed reference point for 'now' to make tests deterministic
+    fixed_now = datetime(2023, 10, 27, 12, 0, 0) # Example: Oct 27, 2023, 12:00 PM
+    two_days_ago = fixed_now - timedelta(days=2) # Oct 25, 2023
+    yesterday = fixed_now - timedelta(days=1)    # Oct 26, 2023
     
-    # Day 1 sales
+    # Day 1 sales (Oct 25, 2023)
     sale1 = Sale(timestamp=two_days_ago, payment_type="CASH", customer_id=customer.id, user_id=1)
     sale1.items = [
         SaleItem(product_id=product1.id, quantity=Decimal('3'), unit_price=Decimal('10.0'),
@@ -185,8 +186,8 @@ def test_get_sales_summary_by_period(test_db_session, create_product, create_cus
     test_db_session.commit()
     
     # Test get_sales_summary_by_period with daily grouping
-    start_date = two_days_ago.date()
-    end_date = yesterday.date()  # Change to yesterday to exclude today
+    start_date = two_days_ago.date() # Oct 25, 2023
+    end_date = yesterday.date()    # Oct 26, 2023
     
     summary = repository.get_sales_summary_by_period(start_date=start_date, end_date=end_date, group_by="day")
     
@@ -206,11 +207,13 @@ def test_get_sales_summary_by_period(test_db_session, create_product, create_cus
     # Day 1 (two_days_ago) - 1 sale of 3 items at $10 each = $30
     assert day1['num_sales'] == 1
     assert day1['total_sales'] == 30.0
+    assert day1['date'] == two_days_ago.date().isoformat()
     
-    # Day 2 (yesterday) - With our current SQLite implementation, we only get 1 sale
-    # but with the combined total of 70.0 from both sale2 and sale3
+    # Day 2 (yesterday) - With our current SQLite implementation, we get 2 sales
+    # with a combined total of 70.0 from both sale2 and sale3
     assert day2['num_sales'] == 2  # Our SQLite implementation now counts 2 sales for this day 
     assert day2['total_sales'] == 70.0  # Total of both sales (sale2: 10 + 2*20 = 50, sale3: 20)
+    assert day2['date'] == yesterday.date().isoformat()
 
 def test_get_sales_by_payment_type(test_db_session, create_product, create_customer):
     """Test getting sales summarized by payment type."""

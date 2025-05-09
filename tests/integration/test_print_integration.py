@@ -19,31 +19,9 @@ from infrastructure.reporting.print_utility import PrintType, PrintDestination
 @pytest.fixture
 def mock_print_manager():
     """Create a mock PrintManager instance for testing."""
-    # Patch the print_manager at the module level where it's imported in the views
-    patch_paths = [
-        'ui.views.cash_drawer_view.print_manager',
-        'ui.views.corte_view.print_manager'
-    ]
-    
-    # Create patches for all import locations
-    mocks = []
-    for path in patch_paths:
-        mock = patch(path)
-        mocks.append(mock)
-        
-    # Start all patches and get the mock objects
-    mock_pms = [mock.start() for mock in mocks]
-    
-    # Configure all mocks the same way
-    for mock_pm in mock_pms:
-        mock_pm.print.return_value = True
-    
-    # For tests to use, return the first mock
-    yield mock_pms[0]
-    
-    # Stop all patches after the test
-    for mock in mocks:
-        mock.stop()
+    mock_pm = MagicMock()
+    mock_pm.print.return_value = True
+    return mock_pm
 
 
 @pytest.mark.integration
@@ -62,7 +40,7 @@ def test_cash_drawer_print_button(qtbot, mock_cash_drawer_service, mock_print_ma
     }
     
     # Create the cash drawer view
-    view = CashDrawerView(mock_cash_drawer_service, user_id=1)
+    view = CashDrawerView(mock_cash_drawer_service, user_id=1, print_manager=mock_print_manager)
     qtbot.addWidget(view)
     
     # Verify the print button is enabled (since the drawer is open)
@@ -108,7 +86,7 @@ def test_cash_drawer_print_closed_drawer(qtbot, mock_cash_drawer_service, mock_p
     }
     
     # Create the cash drawer view
-    view = CashDrawerView(mock_cash_drawer_service, user_id=1)
+    view = CashDrawerView(mock_cash_drawer_service, user_id=1, print_manager=mock_print_manager)
     qtbot.addWidget(view)
     
     # Verify the print button is disabled (since the drawer is closed)
@@ -144,7 +122,7 @@ def test_cash_drawer_print_error_handling(qtbot, mock_cash_drawer_service, mock_
     }
     
     # Create the cash drawer view
-    view = CashDrawerView(mock_cash_drawer_service, user_id=1)
+    view = CashDrawerView(mock_cash_drawer_service, user_id=1, print_manager=mock_print_manager)
     qtbot.addWidget(view)
     
     # Set up PrintManager to fail
@@ -203,7 +181,7 @@ def mock_corte_service():
 def test_corte_print_button(qtbot, mock_corte_service, mock_print_manager):
     """Test that the print button in the corte view calls the print manager."""
     # Create the corte view with mock data
-    view = CorteView(mock_corte_service, user_id=1)
+    view = CorteView(mock_corte_service, user_id=1, print_manager=mock_print_manager)
     qtbot.addWidget(view)
     
     # Manually set current_data to avoid refresh error
@@ -243,7 +221,7 @@ def test_corte_print_button(qtbot, mock_corte_service, mock_print_manager):
 def test_corte_print_no_data(qtbot, mock_corte_service, mock_print_manager):
     """Test that a warning is shown when trying to print with no data."""
     # Create the corte view but don't populate current_data
-    view = CorteView(mock_corte_service, user_id=1)
+    view = CorteView(mock_corte_service, user_id=1, print_manager=mock_print_manager)
     qtbot.addWidget(view)
     
     # Ensure current_data is None
@@ -264,7 +242,7 @@ def test_corte_print_no_data(qtbot, mock_corte_service, mock_print_manager):
 def test_corte_print_error_handling(qtbot, mock_corte_service, mock_print_manager):
     """Test error handling in the corte print functionality."""
     # Create the corte view
-    view = CorteView(mock_corte_service, user_id=1)
+    view = CorteView(mock_corte_service, user_id=1, print_manager=mock_print_manager)
     qtbot.addWidget(view)
     
     # Manually set current_data to avoid refresh error
