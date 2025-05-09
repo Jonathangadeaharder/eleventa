@@ -55,10 +55,14 @@ class ReportBuilder:
         """
         logging.debug(f"ReportBuilder.generate_report_pdf called with filename: {filename}, is_abs: {os.path.isabs(filename)}")
         try:
+            # Ensure filename is absolute
+            abs_filename = os.path.abspath(filename)
+            logging.debug(f"Absolute filename for report: {abs_filename}")
+
             # Create PDF directory if it doesn't exist
-            output_dir = os.path.dirname(filename) # If filename is absolute, output_dir will be too.
-            if not os.path.isabs(output_dir):
-                logging.warning(f"ReportBuilder received filename '{filename}' resulting in relative output_dir '{output_dir}'. This is unexpected.")
+            output_dir = os.path.dirname(abs_filename) # If filename is absolute, output_dir will be too.
+            if not os.path.isabs(output_dir): # This check might become redundant but kept for safety
+                logging.warning(f"ReportBuilder received filename '{filename}' (abs: '{abs_filename}') resulting in relative output_dir '{output_dir}'. This is unexpected.")
             
             logging.debug(f"Ensuring directory exists: {output_dir}")
             os.makedirs(output_dir, exist_ok=True)
@@ -68,7 +72,7 @@ class ReportBuilder:
             
             # Create the PDF document
             doc = SimpleDocTemplate(
-                filename,
+                abs_filename, # Use absolute filename here
                 pagesize=pagesize,
                 rightMargin=72,
                 leftMargin=72,

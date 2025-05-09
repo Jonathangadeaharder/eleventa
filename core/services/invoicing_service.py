@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 import os
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 # Required imports for PDF generation
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -130,22 +131,45 @@ class InvoicingService(ServiceBase):
             
             try:
                 # Save to repository
-                return invoice_repo.add(invoice)
-            except ValueError as e:
-                # Handle race conditions
-                msg = str(e).lower()
-                if (
-                    "already have an invoice" in msg or
-                    "sale may already have an invoice" in msg or
-                    "already exists" in msg or
-                    "duplicate" in msg
-                ):
-                    # Do one more check to verify
-                    double_check = invoice_repo.get_by_sale_id(sale_id)
-                    if double_check:
+                new_invoice = invoice_repo.add(invoice)
+                # Attempt to flush to catch DB errors sooner, though commit is the final point.
+                # The session's commit will happen in the _with_session wrapper if successful.
+                return new_invoice
+            except (ValueError, IntegrityError) as e: # Catch both ValueError and IntegrityError
+                # Log the original error for debugging
+                self.logger.warning(f"Caught error during invoice add for sale {sale_id}: {type(e).__name__} - {e}")
+                
+                # Check if it's a known duplicate scenario or a constraint violation
+                error_msg_lower = str(e).lower()
+                is_potential_duplicate = (
+                    "already has an invoice" in error_msg_lower or
+                    "already exists" in error_msg_lower or
+                    "duplicate" in error_msg_lower or
+                    # SQLite specific message for unique constraint
+                    ("unique constraint failed" in error_msg_lower and "invoices.sale_id" in error_msg_lower) or
+                    # PostgreSQL specific message for unique constraint
+                    ("duplicate key value violates unique constraint" in error_msg_lower and "invoices_sale_id_key" in error_msg_lower)
+                )
+
+                if is_potential_duplicate:
+                    # It's highly likely a duplicate. Perform a final check in the current session.
+                    # This re-check might not be strictly necessary if the IntegrityError is specific enough,
+                    # but it doesn't hurt to confirm.
+                    final_check_invoice = invoice_repo.get_by_sale_id(sale_id)
+                    if final_check_invoice:
+                        # Confirmed: an invoice for this sale_id already exists.
+                        # This is the expected path for concurrent attempts where one succeeds and others hit the constraint.
                         raise ValueError(f"Sale with ID {sale_id} already has an invoice (duplicate)")
-                # Re-raise any other errors
-                raise ValueError(f"Invoice creation failed: {e}")
+                    else:
+                        # This is an odd state: an IntegrityError suggestive of a duplicate occurred,
+                        # but no invoice is found. Could be a different constraint or complex race.
+                        # Log this specific unusual case.
+                        self.logger.error(f"IntegrityError suggested duplicate for sale {sale_id}, but no existing invoice found on re-check. Original error: {e}")
+                        raise ValueError(f"Invoice creation for sale {sale_id} failed due to a database constraint, but was not a confirmable duplicate: {e}")
+                else:
+                    # Re-raise other ValueErrors or IntegrityErrors not related to duplicates.
+                    self.logger.error(f"Unexpected error during invoice creation for sale {sale_id}: {e}")
+                    raise ValueError(f"Invoice creation failed with an unexpected database error: {e}")
                 
         return self._with_session(_create_invoice_from_sale, sale_id)
     

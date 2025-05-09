@@ -400,7 +400,7 @@ class ReportingService(ServiceBase):
         )
         
         if success:
-            return filename
+            return os.path.abspath(filename)
         else:
             raise RuntimeError(f"Error generating sales by period report PDF")
     
@@ -465,7 +465,7 @@ class ReportingService(ServiceBase):
         )
         
         if success:
-            return filename
+            return os.path.abspath(filename)
         else:
             raise RuntimeError(f"Error generating sales by department report PDF")
     
@@ -531,7 +531,7 @@ class ReportingService(ServiceBase):
         )
         
         if success:
-            return filename
+            return os.path.abspath(filename)
         else:
             raise RuntimeError(f"Error generating sales by customer report PDF")
     
@@ -598,7 +598,7 @@ class ReportingService(ServiceBase):
         )
         
         if success:
-            return filename
+            return os.path.abspath(filename)
         else:
             raise RuntimeError(f"Error generating top products report PDF")
     
@@ -679,6 +679,6 @@ class ReportingService(ServiceBase):
         )
         
         if success:
-            return filename
+            return os.path.abspath(filename)
         else:
             raise RuntimeError(f"Error generating profit analysis report PDF")
