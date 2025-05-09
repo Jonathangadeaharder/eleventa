@@ -160,6 +160,39 @@ class SaleService(ServiceBase):
             
         return self._with_session(_generate_receipt_pdf, sale_id, output_dir)
 
+    def generate_presupuesto_pdf(self, items_data: List[Any], total_amount: Decimal, 
+                                 output_dir: str, customer_name: Optional[str] = None, 
+                                 user_name: Optional[str] = None) -> str:
+        """Generate a PDF for a 'Presupuesto' (Quote) and return the file path."""
+        if not os.path.exists(output_dir):
+            try:
+                os.makedirs(output_dir)
+                self.logger.info(f"Created output directory: {output_dir}")
+            except OSError as e:
+                self.logger.error(f"Error creating output directory {output_dir}: {e}")
+                raise  # Re-raise the exception if directory creation fails
+
+        presupuesto_uuid = str(uuid.uuid4())[:8] # Short UUID for ID
+        filename = f"presupuesto_{presupuesto_uuid}.pdf"
+        file_path = os.path.join(output_dir, filename)
+        
+        try:
+            create_presupuesto_pdf_content(
+                filename=file_path, 
+                items=items_data, 
+                total_amount=total_amount,
+                customer_name=customer_name,
+                user_name=user_name,
+                presupuesto_id=presupuesto_uuid
+            )
+            self.logger.info(f"Presupuesto PDF generated: {file_path}")
+            return file_path
+        except Exception as e:
+            self.logger.error(f"Failed to generate presupuesto PDF {file_path}: {e}")
+            # Depending on desired behavior, could re-raise or return None/error indicator
+            raise # Re-raise to let the caller (UI) handle the error message
+
+
 def create_receipt_pdf(sale: Sale, filename: str) -> None:
     """Generate a PDF receipt for the given sale and save it to the specified filename."""
     doc = SimpleDocTemplate(filename, pagesize=letter)
@@ -234,4 +267,102 @@ def create_receipt_pdf(sale: Sale, filename: str) -> None:
         print(f"Error generating receipt PDF for sale ID {sale.id}: {e}")
         # Depending on the application's error handling, you might want to log this
         # or raise a custom exception.
+        raise
+
+
+def create_presupuesto_pdf_content(filename: str, items: List[Any], total_amount: Decimal, 
+                                   customer_name: Optional[str] = None, 
+                                   user_name: Optional[str] = None, 
+                                   presupuesto_id: Optional[str] = None) -> None:
+    """Generate a PDF for a 'Presupuesto' (Quote) and save it to the specified filename."""
+    doc = SimpleDocTemplate(filename, pagesize=letter)
+    styles = getSampleStyleSheet()
+    story = []
+
+    # Title
+    title_style = styles['h1']
+    title_style.alignment = 1 # Center alignment
+    story.append(Paragraph("PRESUPUESTO", title_style))
+    story.append(Spacer(1, 0.3 * inch))
+
+    # Presupuesto Info
+    info_style = styles['Normal']
+    info_style.leading = 14 # একটু বেশি লাইন স্পেসিং
+
+    if presupuesto_id:
+        story.append(Paragraph(f"<b>Presupuesto ID:</b> {presupuesto_id}", info_style))
+    story.append(Paragraph(f"<b>Fecha:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", info_style))
+    if customer_name:
+        story.append(Paragraph(f"<b>Cliente:</b> {customer_name}", info_style))
+    if user_name:
+        story.append(Paragraph(f"<b>Atendido por:</b> {user_name}", info_style))
+    story.append(Spacer(1, 0.2 * inch))
+
+    # Items Table
+    data = [[
+        Paragraph("<b>Código</b>", styles['Normal']),
+        Paragraph("<b>Descripción</b>", styles['Normal']),
+        Paragraph("<b>Cant.</b>", styles['Normal']),
+        Paragraph("<b>P. Unit.</b>", styles['Normal']),
+        Paragraph("<b>Subtotal</b>", styles['Normal'])
+    ]]
+
+    for item in items:
+        # Ensure all monetary values are Decimals and formatted
+        # Assuming item is a dict-like or object with attributes: product_code, product_description, quantity, unit_price, subtotal
+        try:
+            quantity_val = Decimal(item.get('quantity') if isinstance(item, dict) else getattr(item, 'quantity', 0))
+            unit_price_val = Decimal(item.get('unit_price') if isinstance(item, dict) else getattr(item, 'unit_price', 0))
+            subtotal_val = Decimal(item.get('subtotal') if isinstance(item, dict) else getattr(item, 'subtotal', 0))
+
+            data.append([
+                item.get('product_code') if isinstance(item, dict) else getattr(item, 'product_code', "N/A"),
+                item.get('product_description') if isinstance(item, dict) else getattr(item, 'product_description', "N/A"),
+                f"{quantity_val:.2f}",
+                f"${unit_price_val:.2f}",
+                f"${subtotal_val:.2f}"
+            ])
+        except Exception as e:
+            # Log error or handle gracefully if item structure is unexpected
+            print(f"Error processing item for PDF: {item}. Error: {e}")
+            data.append(["Error", "Error processing item", "", "", ""])
+
+    # Total row
+    total_decimal = Decimal(total_amount)
+    data.append([
+        "", "", "", 
+        Paragraph("<b>TOTAL:</b>", styles['Normal']), 
+        Paragraph(f"<b>${total_decimal:.2f}</b>", styles['Normal'])
+    ])
+
+    table = Table(data, colWidths=[0.8*inch, 3*inch, 0.6*inch, 1*inch, 1.1*inch])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#CCCCCC')), # Header background
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('ALIGN', (2, 1), (2, -1), 'RIGHT'), # Quantity right aligned
+        ('ALIGN', (3, 1), (3, -1), 'RIGHT'), # Unit Price right aligned
+        ('ALIGN', (4, 1), (4, -1), 'RIGHT'), # Subtotal right aligned
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'), # Header font
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'), # Total row font bold
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -2), colors.beige), # Item rows background
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    story.append(table)
+    story.append(Spacer(1, 0.3 * inch))
+
+    # Footer Notes
+    footer_style = styles['Normal']
+    footer_style.fontSize = 9
+    story.append(Paragraph("Este presupuesto es válido por 15 días a partir de la fecha de emisión.", footer_style))
+    story.append(Paragraph("Los precios están sujetos a cambios sin previo aviso después de la fecha de validez.", footer_style))
+    story.append(Paragraph("Este documento no es un comprobante fiscal.", footer_style))
+
+    try:
+        doc.build(story)
+    except Exception as e:
+        # Log the error more visibly if possible, or raise a specific exception
+        print(f"Error building PDF '{filename}': {str(e)}")
+        # Potentially re-raise or handle to inform the caller
         raise

@@ -3,13 +3,12 @@ from PySide6.QtWidgets import (
     QTableView, QPushButton, QHeaderView, QMessageBox,
     QComboBox, QFrame, QDialog, QDialogButtonBox, QRadioButton,
     QAbstractItemView, QFormLayout, QDoubleSpinBox, QSizePolicy, QSpacerItem,
-    QGroupBox
+    QGroupBox, QCompleter
 )
-from PySide6.QtCore import Qt, Slot, QTimer, QStringListModel, QPoint
-from PySide6.QtWidgets import QCompleter
-from PySide6.QtGui import QIcon, QFont, QPixmap, QKeySequence
+from PySide6.QtGui import QIcon, QKeySequence, QPixmap
+from PySide6.QtCore import Qt, Slot, QTimer, QPoint, QStringListModel, QStandardPaths
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import os
 import subprocess
 import sys
@@ -178,10 +177,15 @@ class SalesView(QWidget):
         self.add_button = QPushButton("Agregar")
         self.add_button.setIcon(QIcon(":/icons/icons/new.png")) # Reverted to original resource path
         style_secondary_button(self.add_button)
+
+        self.remove_item_button = QPushButton("Quitar Artículo") # Define remove_item_button here
+        self.remove_item_button.setIcon(QIcon(":/icons/icons/delete.png"))
+        style_secondary_button(self.remove_item_button)
         
         entry_layout.addWidget(self.code_label)
         entry_layout.addWidget(self.product_combo)
         entry_layout.addWidget(self.add_button)
+        entry_layout.addWidget(self.remove_item_button) # Add remove_item_button here
         header_layout.addLayout(entry_layout)
         
         # Spacer
@@ -253,81 +257,55 @@ class SalesView(QWidget):
         
         main_layout.addWidget(table_container, 1)  # Give table stretch factor of 1
 
-        # --- Bottom Layout (Total + Actions) ---
-        bottom_container = QFrame()
-        bottom_container.setFrameShape(QFrame.Shape.StyledPanel)
-        bottom_container.setFrameShadow(QFrame.Shadow.Raised)
-        bottom_container.setStyleSheet("""
-            QFrame {
-                background-color: #f5f5f5;
-                border-radius: 6px;
-                border: 1px solid #e0e0e0;
-            }
+        # --- Total Amount Display --- #
+        total_layout = QHBoxLayout()
+        total_layout.addStretch()
+        self.total_label = QLabel("TOTAL: $ 0.00")
+        self.total_label.setStyleSheet("""
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+            padding: 10px;
+            background-color: #e9e9e9;
+            border-radius: 5px;
         """)
-        
-        bottom_layout = QHBoxLayout(bottom_container)
-        bottom_layout.setContentsMargins(15, 10, 15, 10)
+        total_layout.addWidget(self.total_label)
+        main_layout.addLayout(total_layout)
 
-        # Total amount display
-        total_layout = QVBoxLayout()
-        total_layout.setSpacing(2)
-        
-        total_label = QLabel("Total:")
-        total_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        self.total_amount_label = QLabel("$0.00")
-        style_total_label(self.total_amount_label)
-        self.total_amount_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.total_amount_label.setMinimumWidth(150)
-        
-        total_layout.addWidget(total_label)
-        total_layout.addWidget(self.total_amount_label)
-        bottom_layout.addLayout(total_layout)
+        # --- Action Buttons --- # 
+        action_buttons_layout = QHBoxLayout()
+        action_buttons_layout.setSpacing(10)
 
-        bottom_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, 
-                                                QSizePolicy.Policy.Minimum))
+        self.presupuesto_button = QPushButton("Presupuesto") # New Presupuesto button
+        self.presupuesto_button.setIcon(QIcon(":/icons/icons/print.png")) # Placeholder icon, consider a specific one
+        style_secondary_button(self.presupuesto_button)
 
-        # Action buttons
-        actions_layout = QVBoxLayout()
-        actions_layout.setSpacing(8)
-        
-        buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(8)
-        
-        self.remove_item_button = QPushButton("Quitar Artículo")
-        self.remove_item_button.setIcon(QIcon(":/icons/icons/delete.png")) # Reverted to original
-        style_secondary_button(self.remove_item_button)
-        
-        self.cancel_button = QPushButton("Cancelar Venta")
+        self.cancel_button = QPushButton("Cancelar Venta (F3)")
         self.cancel_button.setIcon(QIcon(":/icons/icons/cancel.png")) # Reverted to original
         style_secondary_button(self.cancel_button)
-        
-        buttons_layout.addWidget(self.remove_item_button)
-        buttons_layout.addWidget(self.cancel_button)
-        
-        actions_layout.addLayout(buttons_layout)
-        
-        # Add finalizing and invoice buttons
-        finalizing_layout = QHBoxLayout()
-        finalizing_layout.setSpacing(8)
-        
-        self.finalize_button = QPushButton("Finalizar Venta (F12)")
+
+        self.finalize_button = QPushButton("Cobrar (F10)")
+        self.finalize_button.setIcon(QIcon(":/icons/icons/money.png")) # Reverted to original
         style_primary_button(self.finalize_button)
-        self.finalize_button.setIcon(QIcon(":/icons/icons/save.png")) # Reverted to original
-        finalizing_layout.addWidget(self.finalize_button)
-        
-        self.invoice_button = QPushButton("Facturar")
+        self.finalize_button.setFixedHeight(40) # Make finalize button taller
+        self.finalize_button.setStyleSheet(self.finalize_button.styleSheet() + "font-size: 14px;")
+
+        self.invoice_button = QPushButton("Facturar (F4)") # Added (F4) shortcut hint
+        self.invoice_button.setIcon(QIcon(":/icons/icons/invoice.png"))
         style_secondary_button(self.invoice_button)
-        self.invoice_button.setIcon(QIcon(":/icons/icons/invoice.png")) # Reverted to original
-        self.invoice_button.setEnabled(False)  # Disabled by default until a sale is completed
-        finalizing_layout.addWidget(self.invoice_button)
+        self.invoice_button.setEnabled(False) # Initially disabled until a sale is made
+
+        action_buttons_layout.addStretch(1)
+        action_buttons_layout.addWidget(self.presupuesto_button) # Add Presupuesto button here
+        action_buttons_layout.addWidget(self.cancel_button)
+        action_buttons_layout.addWidget(self.invoice_button) # Add invoice button to layout
+        action_buttons_layout.addStretch(1)
+        action_buttons_layout.addWidget(self.finalize_button)
+        action_buttons_layout.addStretch(1)
         
-        actions_layout.addLayout(finalizing_layout)
-        
-        bottom_layout.addLayout(actions_layout)
-        
-        main_layout.addWidget(bottom_container)
-        
+        main_layout.addLayout(action_buttons_layout)
+        self.setLayout(main_layout)
+
         # Set focus to code entry
         self.product_combo.setFocus()
 
@@ -342,6 +320,7 @@ class SalesView(QWidget):
         self.sale_item_model.dataChanged.connect(self.update_total) # Connect dataChanged
         self.sale_item_model.modelReset.connect(self.update_total)  # Connect modelReset
         self.invoice_button.clicked.connect(self.generate_invoice_from_sale)
+        self.presupuesto_button.clicked.connect(self._generate_presupuesto_pdf) # Connect new button
 
         # Connect search signal for product combo
         self.product_combo.lineEdit().textEdited.connect(self._search_and_suggest_products)
@@ -576,7 +555,7 @@ class SalesView(QWidget):
         total = Decimal("0.00")
         for item in self.sale_item_model.get_all_items():
             total += item.subtotal
-        self.total_amount_label.setText(f"Total: $ {total:.2f}")
+        self.total_label.setText(f"TOTAL: $ {total:.2f}")
         self._current_total = total # Store current total for payment dialog
 
     @Slot()
@@ -827,3 +806,68 @@ class SalesView(QWidget):
             item = self.sale_item_model.get_item_at_row(row)
             if item:
                 print(f"Edit quantity for item {item.description} would be handled here")
+
+    @Slot()
+    def _generate_presupuesto_pdf(self):
+        """Generates a PDF for the current items as a 'Presupuesto' (Quote)."""
+        if not self.sale_item_model.rowCount():
+            show_info_message(self, "Presupuesto Vacío", "No hay artículos para generar un presupuesto.")
+            return
+
+        items = self.sale_item_model.get_all_items()
+        customer_name = self.selected_customer.name if self.selected_customer else None
+        user_name = getattr(self.current_user, 'username', getattr(self.current_user, 'name', 'Usuario Desconocido'))
+        total_amount = self._current_total
+
+        # Use QStandardPaths for a user-specific documents directory
+        try:
+            documents_location = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
+            if not documents_location:
+                # Fallback if DocumentsLocation is not available for some reason
+                home_dir = os.path.expanduser("~")
+                output_dir_base = os.path.join(home_dir, "Eleventa_Presupuestos")
+            else:
+                output_dir_base = os.path.join(documents_location, "Eleventa", "Presupuestos")
+            
+            output_dir = output_dir_base
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True) # exist_ok=True avoids error if dir exists
+        except OSError as e:
+            show_error_message(self, "Error al Crear Directorio", 
+                               f"No se pudo crear el directorio para presupuestos.\nDirectorio base: {output_dir_base}\nError: {e}")
+            return
+        except Exception as e: # Catch any other unexpected error during path creation
+            show_error_message(self, "Error de Directorio", f"Error inesperado al configurar directorio de presupuestos: {e}")
+            return
+
+        try:
+            items_data = [
+                {
+                    "product_code": item.product_code,
+                    "product_description": item.product_description,
+                    "quantity": item.quantity,
+                    "unit_price": item.unit_price,
+                    "subtotal": item.subtotal
+                }
+                for item in items
+            ]
+
+            pdf_file_path = self.sale_service.generate_presupuesto_pdf(
+                items_data=items_data,
+                total_amount=total_amount,
+                output_dir=output_dir,
+                customer_name=customer_name,
+                user_name=user_name
+            )
+
+            if pdf_file_path:
+                show_info_message(self, "Presupuesto Generado", f"Presupuesto guardado en: {pdf_file_path}")
+                self.open_pdf_file(pdf_file_path)
+            else:
+                show_error_message(self, "Error al Generar Presupuesto", "No se pudo generar el archivo PDF del presupuesto (ruta no devuelta).")
+
+        except Exception as e:
+            print(f"Error generating presupuesto PDF: {e}", flush=True) # Replaced self.logger.error
+            import traceback
+            traceback.print_exc() # Print full traceback for debugging
+            show_error_message(self, "Error al Generar Presupuesto", f"Ocurrió un error: {str(e)}")
