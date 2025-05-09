@@ -136,7 +136,7 @@ def test_get_sale_by_id(mock_sale_service):
     mock_sale_service.sale_repo_factory().get_by_id.return_value = mock_sale
 
     # Act
-    sale = mock_sale_service.get_sale(sale_id)
+    sale = mock_sale_service.get_sale_by_id(sale_id)
 
     # Assert
     assert sale is not None
