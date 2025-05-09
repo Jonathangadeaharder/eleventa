@@ -5,6 +5,12 @@ from decimal import Decimal
 import uuid
 from datetime import datetime
 
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+from reportlab.lib.units import inch
+
 from core.services.service_base import ServiceBase
 from infrastructure.persistence.utils import session_scope
 from core.models.sale import Sale, SaleItem
@@ -144,5 +150,76 @@ class SaleService(ServiceBase):
 
 def create_receipt_pdf(sale: Sale, filename: str) -> None:
     """Generate a PDF receipt for the given sale and save it to the specified filename."""
-    # Implementation would go here
-    pass
+    doc = SimpleDocTemplate(filename, pagesize=letter)
+    styles = getSampleStyleSheet()
+    story = []
+
+    # Title
+    story.append(Paragraph("Receipt", styles['h1']))
+    story.append(Spacer(1, 0.2 * inch))
+
+    # Sale Info
+    story.append(Paragraph(f"Sale ID: {sale.id if sale.id is not None else 'N/A'}", styles['Normal']))
+    story.append(Paragraph(f"Date: {sale.timestamp.strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal']))
+    if sale.payment_type:
+        story.append(Paragraph(f"Payment Type: {sale.payment_type}", styles['Normal']))
+    # Placeholder for Customer and User Info - can be expanded later
+    if sale.customer_id:
+        story.append(Paragraph(f"Customer ID: {sale.customer_id}", styles['Normal']))
+    if sale.user_id:
+        story.append(Paragraph(f"User ID: {sale.user_id}", styles['Normal']))
+    story.append(Spacer(1, 0.2 * inch))
+
+    # Items Table
+    # Headers: "Code", "Description", "Qty", "Price", "Subtotal"
+    data = [["Code", "Description", "Qty", "Unit Price", "Subtotal"]]
+    for item in sale.items:
+        data.append([
+            item.product_code if item.product_code else "N/A",
+            item.product_description if item.product_description else "N/A",
+            f"{item.quantity:.2f}",
+            f"${item.unit_price:.2f}",
+            f"${item.subtotal:.2f}"
+        ])
+    
+    # Add total row to data
+    data.append(["", "", "", Paragraph("<b>TOTAL:</b>", styles['Normal']), Paragraph(f"<b>${sale.total:.2f}</b>", styles['Normal'])])
+
+    table = Table(data, colWidths=[0.7*inch, 2.5*inch, 0.5*inch, 1*inch, 1*inch]) # Adjusted column widths
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4F81BD')), # Header background
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('BACKGROUND', (0, 1), (-1, -2), colors.HexColor('#DCE6F1')), # Item rows background
+        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+        # Total row specific styles
+        ('SPAN', (0, -1), (2, -1)), # Span first three cells of total row
+        ('ALIGN', (3, -1), (4, -1), 'RIGHT'), # Align TOTAL: and amount to the right
+        ('FONTNAME', (3, -1), (4, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (3, -1), (4, -1), 10),
+        ('VALIGN', (3, -1), (4, -1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0, -1), (-1, -1), 8),
+        ('TOPPADDING', (0, -1), (-1, -1), 8),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#C5D9F1')), # Total row background
+    ]))
+    story.append(table)
+    story.append(Spacer(1, 0.3 * inch))
+
+    # Footer Message
+    story.append(Paragraph("Thank you for your purchase!", styles['Normal']))
+
+    try:
+        doc.build(story)
+        print(f"Receipt {filename} generated successfully for sale ID {sale.id}")
+    except Exception as e:
+        print(f"Error generating receipt PDF for sale ID {sale.id}: {e}")
+        # Depending on the application's error handling, you might want to log this
+        # or raise a custom exception.
+        raise
