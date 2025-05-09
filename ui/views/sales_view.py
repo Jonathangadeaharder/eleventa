@@ -422,38 +422,50 @@ class SalesView(QWidget):
     @Slot(str)
     def _search_and_suggest_products(self, text: str):
         """Searches products based on input and updates the completer for product suggestions."""
-        if not text or len(text) < 2:
+        line_edit = self.product_combo.lineEdit()
+        combo_box = self.product_combo
+
+        # If text is too short or empty, clear suggestions and hide popup
+        if not text or len(text) < 2: # Min 2 chars to search
             self._suggestion_model.setStringList([])
             self._display_map = {}
             self._selected_suggested_product = None
+            if self._completer.popup() and self._completer.popup().isVisible():
+                self._completer.popup().hide()
             return
 
-        products = self.product_service.find_product(text)
-        displays = [
-            f"{p.code} – {p.description} (Stock: {p.quantity_in_stock:.2f})"
-            for p in products
-        ]
-        self._display_map = dict(zip(displays, products))
-        self._suggestion_model.setStringList(displays)
-        
-        # Show completer popup, then use QTimer.singleShot to accurately position it
-        line_edit = self.product_combo.lineEdit() # The QLineEdit inside the QComboBox
-        combo_box = self.product_combo      # The QComboBox itself
-        self._completer.complete()  # Show the popup (initial position may be incorrect)
+        # Text is valid, attempt to find products
+        products = self.product_service.find_product(text) # Service call
 
-        popup = self._completer.popup()
-        if popup:
-            popup.setFixedWidth(line_edit.width()) # Ensure popup width matches the input field
+        if products:
+            displays = [
+                f"{p.code} – {p.description} (Stock: {p.quantity_in_stock:.2f})"
+                for p in products
+            ]
+            self._display_map = dict(zip(displays, products))
+            self._suggestion_model.setStringList(displays)
+            line_edit.setFocus() # Keep focus on the line edit
+        else:
+            # No products found for the search term
+            self._suggestion_model.setStringList([])
+            self._display_map = {}
+            self._selected_suggested_product = None
 
-            # Defer the move operation to allow Qt to process initial popup display
-            def move_popup_action():
-                # Calculate global X for left alignment with the line_edit
-                global_x = line_edit.mapToGlobal(QPoint(0, 0)).x()
-                # Calculate global Y to position below the entire combo_box
-                global_y = combo_box.mapToGlobal(QPoint(0, combo_box.height() + 4)).y() # 4px offset
-                popup.move(global_x, global_y)
-
-            QTimer.singleShot(0, move_popup_action)
+        # Popup positioning logic: only show and position if there are suggestions
+        if self._suggestion_model.stringList(): # Check if model has strings
+            self._completer.complete() # Trigger completer (it uses the model)
+            popup = self._completer.popup()
+            if popup:
+                popup.setFixedWidth(line_edit.width())
+                def move_popup_action():
+                    global_x = line_edit.mapToGlobal(QPoint(0, 0)).x()
+                    global_y = combo_box.mapToGlobal(QPoint(0, combo_box.height() + 4)).y()
+                    popup.move(global_x, global_y)
+                QTimer.singleShot(0, move_popup_action)
+        else:
+            # If, after all checks, there are no suggestions, ensure popup is hidden
+            if self._completer.popup() and self._completer.popup().isVisible():
+                self._completer.popup().hide()
 
     @Slot(str)
     def _on_completer_activated(self, display: str):
