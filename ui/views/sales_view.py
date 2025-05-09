@@ -5,8 +5,9 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QFormLayout, QDoubleSpinBox, QSizePolicy, QSpacerItem,
     QGroupBox
 )
-from PySide6.QtCore import Qt, Slot, QTimer
-from PySide6.QtGui import QIcon, QFont, QPixmap
+from PySide6.QtCore import Qt, Slot, QTimer, QStringListModel, QPoint
+from PySide6.QtWidgets import QCompleter
+from PySide6.QtGui import QIcon, QFont, QPixmap, QKeySequence
 from decimal import Decimal
 from typing import List, Optional
 import os
@@ -18,6 +19,7 @@ from ui.models.table_models import SaleItemTableModel
 from core.models.sale import SaleItem
 from core.models.customer import Customer
 from core.models.user import User
+from core.models.product import Product
 from core.services.product_service import ProductService
 from core.services.sale_service import SaleService
 from core.services.customer_service import CustomerService
@@ -145,20 +147,40 @@ class SalesView(QWidget):
         entry_layout = QHBoxLayout()
         entry_layout.setSpacing(8)
         
-        code_label = QLabel("Código:")
-        code_label.setStyleSheet("font-weight: bold;")
+        self.code_label = QLabel("Código/Nombre:")
+        self.code_label.setStyleSheet("font-weight: bold;")
         
-        self.code_entry = QLineEdit()
-        self.code_entry.setPlaceholderText("Ingrese código de producto...")
-        self.code_entry.setMinimumWidth(250)
-        style_text_input(self.code_entry)
+        self.product_combo = QComboBox()
+        self.product_combo.setEditable(True)
+        self.product_combo.setPlaceholderText("Buscar por código o nombre...")
+        self.product_combo.setMinimumWidth(300)
+        style_text_input(self.product_combo.lineEdit())
+        self.product_combo.setFocusPolicy(Qt.FocusPolicy.StrongFocus) # Explicit focus policy
+        self.product_combo.lineEdit().setFocusPolicy(Qt.FocusPolicy.StrongFocus) # Explicit focus policy for lineEdit
+        self.product_combo.view().setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        # Add a top margin to the QComboBox view to prevent overlap
+        self.product_combo.setStyleSheet("""
+            QComboBox QAbstractItemView {
+                margin-top: 5px; /* Increased margin */
+            }
+        """)
+        # --- QCompleter integration for non-blocking product suggestions ---
+        self._suggestion_model = QStringListModel(self)
+        self._completer = QCompleter(self._suggestion_model, self)
+        self._completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self._completer.setFilterMode(Qt.MatchContains)
+        le = self.product_combo.lineEdit()
+        le.setCompleter(self._completer)
+        self._display_map = {}
+        self._selected_suggested_product = None
+        self._completer.activated[str].connect(self._on_completer_activated)
         
         self.add_button = QPushButton("Agregar")
         self.add_button.setIcon(QIcon(":/icons/icons/new.png")) # Reverted to original resource path
         style_secondary_button(self.add_button)
         
-        entry_layout.addWidget(code_label)
-        entry_layout.addWidget(self.code_entry)
+        entry_layout.addWidget(self.code_label)
+        entry_layout.addWidget(self.product_combo)
         entry_layout.addWidget(self.add_button)
         header_layout.addLayout(entry_layout)
         
@@ -307,33 +329,56 @@ class SalesView(QWidget):
         main_layout.addWidget(bottom_container)
         
         # Set focus to code entry
-        self.code_entry.setFocus()
+        self.product_combo.setFocus()
 
     def _connect_signals(self):
-        """Connect signals to slots."""
-        # Connect product entry signals
-        self.code_entry.returnPressed.connect(self.add_item_from_entry)
+        """Connect UI signals to slots."""
         self.add_button.clicked.connect(self.add_item_from_entry)
-        
-        # Connect customer selection
-        self.select_customer_button.clicked.connect(self._select_customer)
-        
-        # Connect action buttons
+        self.table_view.doubleClicked.connect(self._edit_selected_item_quantity) # Placeholder
         self.remove_item_button.clicked.connect(self.remove_selected_item)
         self.cancel_button.clicked.connect(self.cancel_current_sale)
         self.finalize_button.clicked.connect(self.finalize_current_sale)
+        self.select_customer_button.clicked.connect(self._select_customer)
+        self.sale_item_model.dataChanged.connect(self.update_total) # Connect dataChanged
+        self.sale_item_model.modelReset.connect(self.update_total)  # Connect modelReset
         self.invoice_button.clicked.connect(self.generate_invoice_from_sale)
-        
-        # Connect model signals for automatic updates
-        self.sale_item_model.modelReset.connect(self.update_total)
-        self.sale_item_model.dataChanged.connect(self.update_total)
 
-    def keyPressEvent(self, event):
-        """Handle key press events."""
-        if event.key() == Qt.Key.Key_F12:
+        # Connect search signal for product combo
+        self.product_combo.lineEdit().textEdited.connect(self._search_and_suggest_products)
+        self.product_combo.activated.connect(self._product_selected_from_combo) # Handle selection
+
+    def _product_selected_from_combo(self, index: int):
+        # This can be used if we want to immediately add when selected, or pre-fill something.
+        # For now, we'll let the user press "Add" or Enter.
+        # If user selects an item, then presses enter on the lineedit, it should add.
+        # The QComboBox's lineEdit() QLineEdit emits returnPressed when Enter is pressed.
+        # pass
+        # When a product is selected from the dropdown, add it to the sale immediately.
+        # The 'index' argument is provided by the 'activated' signal but not directly used by add_item_from_entry,
+        # as it fetches the current selection from the combobox itself.
+        if index >= 0: # Ensure a valid item was selected (index -1 means no selection or text edited)
+            # Check if the item at index has valid product data before proceeding
+            product_data = self.product_combo.itemData(index)
+            if product_data and isinstance(product_data, Product):
+                self.add_item_from_entry()
+            # else: item might be a placeholder or an error, do nothing or log
+
+    def keyPressEvent(self, event: QKeySequence):
+        """Handle global key presses for shortcuts."""
+        super().keyPressEvent(event)
+        if event.key() == Qt.Key.Key_F10:
             self.finalize_current_sale()
-        else:
-            super().keyPressEvent(event)
+        elif event.key() == Qt.Key.Key_F5:
+            # Potentially refresh products or other data, if applicable
+            pass
+        elif event.matches(QKeySequence.StandardKey.Delete):
+            if self.table_view.hasFocus():
+                self.remove_selected_item()
+        elif event.key() == Qt.Key.Key_Enter or event.key() == Qt.Key.Key_Return:
+            if self.product_combo.lineEdit().hasFocus():
+                self.add_item_from_entry()
+            elif self.finalize_button.hasFocus(): # Check if finalize button has focus
+                self.finalize_current_sale()
 
     # --- Customer Handling --- #
     @Slot()
@@ -374,49 +419,145 @@ class SalesView(QWidget):
             return self.customer_combo.currentData()
 
     # --- Existing Slots / Methods (add_item, update_total, remove_item, cancel_current_sale) --- #
+    @Slot(str)
+    def _search_and_suggest_products(self, text: str):
+        """Searches products based on input and updates the completer for product suggestions."""
+        if not text or len(text) < 2:
+            self._suggestion_model.setStringList([])
+            self._display_map = {}
+            self._selected_suggested_product = None
+            return
+
+        products = self.product_service.find_product(text)
+        displays = [
+            f"{p.code} – {p.description} (Stock: {p.quantity_in_stock:.2f})"
+            for p in products
+        ]
+        self._display_map = dict(zip(displays, products))
+        self._suggestion_model.setStringList(displays)
+        
+        # Show completer popup, then use QTimer.singleShot to accurately position it
+        line_edit = self.product_combo.lineEdit() # The QLineEdit inside the QComboBox
+        combo_box = self.product_combo      # The QComboBox itself
+        self._completer.complete()  # Show the popup (initial position may be incorrect)
+
+        popup = self._completer.popup()
+        if popup:
+            popup.setFixedWidth(line_edit.width()) # Ensure popup width matches the input field
+
+            # Defer the move operation to allow Qt to process initial popup display
+            def move_popup_action():
+                # Calculate global X for left alignment with the line_edit
+                global_x = line_edit.mapToGlobal(QPoint(0, 0)).x()
+                # Calculate global Y to position below the entire combo_box
+                global_y = combo_box.mapToGlobal(QPoint(0, combo_box.height() + 4)).y() # 4px offset
+                popup.move(global_x, global_y)
+
+            QTimer.singleShot(0, move_popup_action)
+
+    @Slot(str)
+    def _on_completer_activated(self, display: str):
+        product = self._display_map.get(display)
+        if not product:
+            self._selected_suggested_product = None
+            return
+        le = self.product_combo.lineEdit()
+        le.setText(display)
+        le.setCursorPosition(len(display))
+        self._selected_suggested_product = product
+
     @Slot()
     def add_item_from_entry(self):
-        code = self.code_entry.text().strip()
-        if not code: return
-        try:
-            # Ensure product service call is correct
-            product = self.product_service.get_product_by_code(code)
-            if product:
-                quantity = Decimal("1")
-                # Make sure sell_price is not None
-                if product.sell_price is None:
-                    show_error_message(self, "Error de Precio", f"El producto '{product.code}' no tiene un precio de venta definido.")
-                    self.code_entry.selectAll()
-                    self.code_entry.setFocus()
-                    return
-                
-                # Make sure to properly convert float price to Decimal
-                unit_price = Decimal(str(product.sell_price))
-                
-                sale_item = SaleItem(
-                    product_id=product.id,
-                    quantity=quantity,
-                    unit_price=unit_price,
-                    product_code=product.code,
-                    product_description=product.description
-                )
-                
-                # Log for debugging
-                print(f"Adding product: {product.code}, price: {product.sell_price}, as Decimal: {unit_price}")
-                
-                self.sale_item_model.add_item(sale_item)
-                self.code_entry.clear()
-                self.code_entry.setFocus()
-                
-                # Explicitly update the total
-                self.update_total()
+        product_to_add: Optional[Product] = None
+
+        # Prefer product selected from completer
+        if self._selected_suggested_product:
+            product_to_add = self._selected_suggested_product
+            self._selected_suggested_product = None
+            print(f"Product selected from completer: {product_to_add.code}")
+        else:
+            # Try to get product from combobox selection first
+            selected_data = self.product_combo.currentData()
+            if selected_data and isinstance(selected_data, Product):
+                product_to_add = selected_data
+                print(f"Product selected from combo: {product_to_add.code}")
             else:
-                show_error_message(self, "Producto No Encontrado", f"No se encontró un producto con el código: {code}")
-                self.code_entry.selectAll()
-                self.code_entry.setFocus()
+                # If no selection or data is not Product, use the text (code or name fragment)
+                code_or_name = self.product_combo.currentText().strip()
+                if not code_or_name:
+                    self.product_combo.setFocus()
+                    return
+
+                print(f"Attempting to find product by text: {code_or_name}")
+                try:
+                    # Attempt to get by code first for exact match
+                    product_by_code = self.product_service.get_product_by_code(code_or_name)
+                    if product_by_code:
+                        product_to_add = product_by_code
+                    else:
+                        # If not found by exact code, try find_product and take the best match if unambiguous
+                        # This part might need more sophisticated logic if find_product returns multiple items
+                        # For now, we assume if user typed something not exactly a code, and didn't pick
+                        # from dropdown, they might expect an error or a chance to refine.
+                        # Or, if find_product returns one exact match for the text, use that.
+                        possible_products = self.product_service.find_product(code_or_name)
+                        if len(possible_products) == 1:
+                            product_to_add = possible_products[0]
+                        elif len(possible_products) > 1:
+                            # Ambiguous: multiple products match. User should select from dropdown.
+                            # Or, if the current text is an exact code of one of them:
+                            for p in possible_products:
+                                if p.code == code_or_name:
+                                    product_to_add = p
+                                    break
+                            if not product_to_add:
+                                show_error_message(self, "Producto ambiguo", 
+                                                   f"Múltiples productos coinciden con '{code_or_name}'. Por favor, seleccione uno de la lista.")
+                                self.product_combo.setFocus()
+                                self.product_combo.showPopup() # Encourage selection
+                                return
+                except Exception as e: # Catch errors during product fetch
+                    show_error_message(self, "Error de Búsqueda", f"Error al buscar producto: {e}")
+                    self.product_combo.setFocus()
+                    return
+
+        if not product_to_add:
+            show_error_message(self, "Producto No Encontrado", f"No se encontró un producto con el texto: {self.product_combo.currentText().strip()}")
+            self.product_combo.lineEdit().selectAll()
+            self.product_combo.setFocus()
+            return
+
+        # At this point, product_to_add should be a valid Product object
+        try:
+            quantity = Decimal("1") # Default quantity
+            if product_to_add.sell_price is None:
+                show_error_message(self, "Error de Precio", f"El producto '{product_to_add.code}' no tiene un precio de venta definido.")
+                self.product_combo.lineEdit().selectAll()
+                self.product_combo.setFocus()
+                return
+            
+            unit_price = Decimal(str(product_to_add.sell_price))
+            
+            sale_item = SaleItem(
+                product_id=product_to_add.id,
+                quantity=quantity,
+                unit_price=unit_price,
+                product_code=product_to_add.code,
+                product_description=product_to_add.description
+            )
+            
+            print(f"Adding product: {product_to_add.code}, price: {product_to_add.sell_price}, as Decimal: {unit_price}")
+            
+            self.sale_item_model.add_item(sale_item)
+            self.product_combo.clearEditText() # Clear the text input
+            self.product_combo.clear() # Clear the combo box items
+            self.product_combo.setFocus()
+            
+            self.update_total()
+            
         except Exception as e:
             show_error_message(self, "Error", f"Ocurrió un error al agregar el producto: {e}")
-            self.code_entry.setFocus()
+            self.product_combo.setFocus()
 
     @Slot()
     def update_total(self):
@@ -605,11 +746,22 @@ class SalesView(QWidget):
     def _clear_sale(self):
         """Clears the sale items, total, and customer selection."""
         self.sale_item_model.clear()
-        self.code_entry.clear()
+        self.product_combo.clearEditText() # Clear the text part of QComboBox
+        self.product_combo.clear()       # Clear the items in QComboBox
         self.selected_customer = None
         self.customer_label.setText("Cliente: Ninguno")
-        self.code_entry.setFocus()
+        self.product_combo.setFocus()
         self.invoice_button.setEnabled(False)  # Disable invoice button
         if hasattr(self, 'current_sale_id'):
             delattr(self, 'current_sale_id')
         # update_total is called automatically by modelReset signal
+        
+    def _edit_selected_item_quantity(self, index):
+        """Edit the quantity of the selected sale item."""
+        # This is a placeholder method that could be implemented in the future
+        # For now, we'll just print a message to show it was called
+        row = index.row()
+        if row >= 0:
+            item = self.sale_item_model.get_item_at_row(row)
+            if item:
+                print(f"Edit quantity for item {item.description} would be handled here")
