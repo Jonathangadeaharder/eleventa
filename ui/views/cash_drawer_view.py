@@ -16,7 +16,7 @@ from infrastructure.reporting.print_utility import print_manager as default_prin
 from core.services.cash_drawer_service import CashDrawerService
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
 from ui.models.table_models import CashDrawerTableModel
-from ui.dialogs.cash_drawer_dialogs import OpenDrawerDialog, CashMovementDialog
+from ui.dialogs.cash_drawer_dialogs import OpenDrawerDialog, CashMovementDialog, CloseCashDrawerDialog
 
 # Utility function to parse currency input
 
@@ -263,12 +263,15 @@ class CashDrawerView(QWidget):
             # Drawer is open, ask if user wants to close it
             # For now, just show message - in real app would implement proper closing flow
             print("Drawer is open, showing information message")
-            QMessageBox.information(
-                self, 
-                "Cierre de Caja", 
-                "El cierre de caja no está implementado en esta versión.\n"
-                "Por favor, implemente la lógica de cierre de caja según sus requisitos."
-            )
+            print("Drawer is open, attempting to open CloseCashDrawerDialog")
+            close_dialog = CloseCashDrawerDialog(self.service, self.user_id, self)
+            if close_dialog.exec():
+                print("CloseCashDrawerDialog executed successfully")
+                if close_dialog.entry: # Check if the dialog successfully created an entry
+                    print("CloseCashDrawerDialog entry created, refreshing data")
+                    self._refresh_data()
+            else:
+                print("CloseCashDrawerDialog execution cancelled or failed")
         else:
             # Drawer is closed, open it
             # Use the correct dialog class name (alias) and parent

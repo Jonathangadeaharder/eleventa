@@ -216,3 +216,43 @@ class CashDrawerService(ServiceBase):
             }
             
         return self._with_session(_get_drawer_summary, drawer_id)
+
+    def close_drawer(self, actual_amount: Decimal, description: str, user_id: int, drawer_id: Optional[int] = None) -> CashDrawerEntry:
+        """
+        Close the cash drawer with the actual counted amount.
+
+        Args:
+            actual_amount: The actual amount counted in the drawer.
+            description: Description for the closing entry.
+            user_id: ID of the user closing the drawer.
+            drawer_id: Optional drawer ID for multi-drawer support.
+
+        Returns:
+            The created cash drawer entry for the closing.
+
+        Raises:
+            ValueError: If the drawer is not open or if the actual amount is invalid.
+        """
+        def _close_drawer(session, actual_amount, description, user_id, drawer_id):
+            repository = self._get_repository(self.cash_drawer_repo_factory, session)
+
+            if not repository.is_drawer_open(drawer_id):
+                raise ValueError("Cash drawer is not open. Cannot perform closing.")
+
+            if actual_amount < 0:
+                raise ValueError("Actual amount cannot be negative.")
+
+            rounded_actual_amount = actual_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+            entry = CashDrawerEntry(
+                timestamp=datetime.now(),
+                entry_type=CashDrawerEntryType.CLOSE,
+                amount=rounded_actual_amount,  # This is the counted amount
+                description=description,
+                user_id=user_id,
+                drawer_id=drawer_id
+            )
+
+            return repository.add_entry(entry)
+
+        return self._with_session(_close_drawer, actual_amount, description, user_id, drawer_id)

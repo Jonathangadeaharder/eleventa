@@ -1,12 +1,12 @@
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-    QFrame, QComboBox, QDateEdit, QDoubleSpinBox, QGridLayout,
-    QSplitter, QTableView, QHeaderView, QSizePolicy, QMessageBox
-)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QGridLayout, 
+                               QFrame, QTableView, QHeaderView, QPushButton, 
+                               QSplitter, QMessageBox, QDoubleSpinBox, QHBoxLayout)
+from decimal import Decimal # Added Decimal import
 from PySide6.QtCore import Qt, QDate, Slot
 from PySide6.QtGui import QFont, QColor
-from datetime import datetime, time, timedelta
-from decimal import Decimal
+from decimal import Decimal # Added Decimal import
+from datetime import datetime # Added datetime import
+import logging # Added logging import
 
 from core.services.corte_service import CorteService
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
@@ -28,6 +28,7 @@ class CorteView(QWidget):
         self.user_id = user_id
         self.current_data = None
         self.print_manager = print_manager or default_print_manager
+        self.logger = logging.getLogger(__name__) # Initialized logger
         # Create table models for cash entries
         self.cash_in_model = CashDrawerEntryTableModel()
         self.cash_out_model = CashDrawerEntryTableModel()
@@ -268,7 +269,7 @@ class CorteView(QWidget):
             
             # Update sales summary
             self.total_sales_label.setText(f"${corte_data['total_sales']:.2f}")
-            self.sale_count_label.setText(str(corte_data['num_sales']))
+            self.sale_count_label.setText(str(corte_data['sale_count']))
             
             # Update payment type breakdown
             for payment_type, amount in corte_data['sales_by_payment_type'].items():
@@ -309,8 +310,8 @@ class CorteView(QWidget):
             self._calculate_cash_difference()
             
             # Update cash in/out tables
-            self.cash_in_model.update_entries(corte_data['cash_in_entries'])
-            self.cash_out_model.update_entries(corte_data['cash_out_entries'])
+            self.cash_in_model.update_data(corte_data['cash_in_entries'])
+            self.cash_out_model.update_data(corte_data['cash_out_entries'])
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al cargar el reporte: {str(e)}")
@@ -337,12 +338,59 @@ class CorteView(QWidget):
     
     @Slot()
     def _on_do_corte(self):
-        """Refresh the corte report when the 'Hacer Corte' button is clicked."""
+        """Perform the end-of-day cash drawer closing (Corte)."""
         try:
+            if self.current_data is None:
+                QMessageBox.warning(self, "Advertencia", "No hay datos de corte cargados. Por favor, genere un reporte primero.")
+                return
+
+            reply = QMessageBox.question(self, 'Confirmar Cierre de Caja',
+                                       "¿Está seguro de que desea cerrar la caja con el monto ingresado? Esta acción no se puede deshacer.",
+                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                       QMessageBox.StandardButton.No)
+
+            if reply == QMessageBox.StandardButton.No:
+                return
+
+            actual_cash_value = self.actual_cash_input.value()
+            actual_cash_decimal = Decimal(str(actual_cash_value))
+            
+            # Get selected drawer ID from the register filter
+            drawer_id = self.register_filter.get_selected_value()
+            
+            if drawer_id is None:
+                # Handle case where no drawer is selected, though it shouldn't happen with current setup
+                # For now, let's assume 'Caja Principal' with ID 1 if nothing is selected, though this should be robustly handled.
+                # This part might need adjustment based on how FilterDropdown is implemented or if a default is guaranteed.
+                # For this implementation, we'll try to get it, and if not, default to 1 with a log or raise an error.
+                # For now, let's assume it's always 1 as per the initial setup in _init_ui
+                drawer_id = 1 # Defaulting to Caja Principal ID
+                # A more robust way: drawer_id = self.register_filter.get_current_data() if self.register_filter.get_current_data() is not None else 1
+
+            description = f"Cierre de caja del día {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            
+            # Call the service to register the closing balance
+            self.corte_service.register_closing_balance(
+                drawer_id=drawer_id, 
+                actual_amount=actual_cash_decimal, 
+                description=description, 
+                user_id=self.user_id
+            )
+            
+            QMessageBox.information(self, "Éxito", "La caja ha sido cerrada exitosamente.")
+            
+            # Refresh the report view to reflect the changes (e.g., new closing entry)
             start_time, end_time = self.period_filter.get_period_range()
             self._refresh_corte_report(start_time, end_time)
+            
+            # Optionally, disable the 'Hacer Corte' button or change its text
+            # self.do_corte_btn.setEnabled(False) # Example
+
+        except ValueError as ve:
+            QMessageBox.critical(self, "Error de Validación", str(ve))
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            self.logger.error(f"Error during _on_do_corte: {e}", exc_info=True) # Assuming self.logger exists
+            QMessageBox.critical(self, "Error", f"Ocurrió un error al cerrar la caja: {str(e)}")
     
     def _print_report(self):
         """Print the current corte report."""
@@ -368,7 +416,7 @@ class CorteView(QWidget):
                 'start_date': start_str,
                 'end_date': end_str,
                 'total_sales': self.current_data['total_sales'],
-                'num_sales': self.current_data['num_sales'],
+                'num_sales': self.current_data['sale_count'],
                 'sales_by_payment_type': self.current_data['sales_by_payment_type'],
                 'starting_balance': self.current_data['starting_balance'],
                 'cash_sales': cash_sales,

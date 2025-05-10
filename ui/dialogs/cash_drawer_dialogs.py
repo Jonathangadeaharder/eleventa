@@ -403,6 +403,89 @@ class CashDrawerHistoryDialog(QDialog):
         self.out_label.setText(locale.currency(float(total_out), grouping=True))
         self.balance_label.setText(locale.currency(float(balance), grouping=True))
 
+class CloseCashDrawerDialog(QDialog):
+    """Dialog for closing the cash drawer."""
+
+    def __init__(self, cash_drawer_service: CashDrawerService, user_id: int, parent=None):
+        super().__init__(parent)
+        self.cash_drawer_service = cash_drawer_service
+        self.user_id = user_id
+        self.entry = None  # Will store the created entry
+
+        self.actual_amount_field = None
+        self.description_field = None
+
+        self.init_ui()
+
+    def init_ui(self):
+        """Initialize the UI."""
+        self.setWindowTitle("Cerrar Caja")
+        self.setMinimumWidth(350)
+
+        main_layout = QVBoxLayout(self)
+        form_layout = QFormLayout()
+
+        self.actual_amount_field = QDoubleSpinBox()
+        self.actual_amount_field.setRange(0, 1000000)  # Allow 0 for cases where drawer might be empty
+        self.actual_amount_field.setDecimals(2)
+        self.actual_amount_field.setSingleStep(100)
+        self.actual_amount_field.setPrefix("$ ")
+
+        self.description_field = QPlainTextEdit()
+        self.description_field.setPlaceholderText("Descripción del cierre (opcional)")
+        self.description_field.setMaximumHeight(80)
+
+        form_layout.addRow("Monto Real en Caja:", self.actual_amount_field)
+        form_layout.addRow("Descripción:", self.description_field)
+
+        # Display expected balance if possible (read-only)
+        try:
+            # This requires the service to have a method to get expected balance or similar
+            # For now, we'll assume it's passed or calculated elsewhere if needed.
+            # current_balance = self.cash_drawer_service.get_expected_balance_for_close() # Example
+            # balance_label = QLabel(f"Balance esperado: {locale.currency(float(current_balance), grouping=True)}")
+            # form_layout.addRow("", balance_label)
+            pass # Placeholder for future enhancement
+        except Exception as e:
+            print(f"Could not fetch expected balance for close dialog: {e}")
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+
+        main_layout.addLayout(form_layout)
+        main_layout.addWidget(button_box)
+
+    def accept(self):
+        """Handle dialog acceptance."""
+        try:
+            actual_amount = Decimal(str(self.actual_amount_field.value()))
+            description = self.description_field.toPlainText() or f"Cierre de caja - {date.today().strftime('%Y-%m-%d')}"
+
+            # Call the service to close the drawer
+            self.entry = self.cash_drawer_service.close_drawer(
+                actual_amount=actual_amount,
+                description=description,
+                user_id=self.user_id
+                # drawer_id can be passed if multi-drawer support is active
+            )
+
+            QMessageBox.information(
+                self,
+                "Éxito",
+                f"Caja cerrada exitosamente con un monto de {locale.currency(float(actual_amount), grouping=True)}."
+            )
+            super().accept()
+
+        except ValueError as ve:
+            QMessageBox.warning(self, "Error de Validación", str(ve))
+        except Exception as e:
+            # Log the error for debugging
+            print(f"Error closing cash drawer: {e}") 
+            QMessageBox.critical(self, "Error", f"Ocurrió un error al cerrar la caja: {str(e)}")
+            # Do not call super().accept() on critical error, so dialog stays open
+
+
 # Add aliases for backward compatibility with cash_drawer_view.py
 OpenDrawerDialog = OpenCashDrawerDialog
 CashMovementDialog = AddRemoveCashDialog
