@@ -319,6 +319,7 @@ class SalesView(QWidget):
         self.select_customer_button.clicked.connect(self._select_customer)
         self.sale_item_model.dataChanged.connect(self.update_total) # Connect dataChanged
         self.sale_item_model.modelReset.connect(self.update_total)  # Connect modelReset
+        self.sale_item_model.rowsRemoved.connect(self.update_total) # Connect rowsRemoved
         self.invoice_button.clicked.connect(self.generate_invoice_from_sale)
         self.presupuesto_button.clicked.connect(self._generate_presupuesto_pdf) # Connect new button
 
