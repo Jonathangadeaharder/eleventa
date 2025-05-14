@@ -13,7 +13,6 @@ from core.interfaces.repository_interfaces import (
     IProductRepository, IDepartmentRepository,
     ICustomerRepository, ISaleRepository, 
     IInventoryRepository, ICreditPaymentRepository,
-    ISupplierRepository, IPurchaseOrderRepository,
     IUserRepository, IInvoiceRepository,
     ICashDrawerRepository
 )
@@ -107,14 +106,6 @@ def mock_user_repository(custom_methods: Dict[str, Callable] = None) -> MagicMoc
     """Create a mock user repository with standard behavior."""
     return mock_repository(IUserRepository, custom_methods)
 
-def mock_supplier_repository(custom_methods: Dict[str, Callable] = None) -> MagicMock:
-    """Create a mock supplier repository with standard behavior."""
-    return mock_repository(ISupplierRepository, custom_methods)
-
-def mock_purchase_order_repository(custom_methods: Dict[str, Callable] = None) -> MagicMock:
-    """Create a mock purchase order repository with standard behavior."""
-    return mock_repository(IPurchaseOrderRepository, custom_methods)
-
 # Pytest fixtures for commonly used mock repositories
 @pytest.fixture
 def mock_product_repo():
@@ -150,16 +141,6 @@ def mock_invoice_repo():
 def mock_user_repo():
     """Fixture that provides a mock user repository."""
     return mock_user_repository()
-
-@pytest.fixture
-def mock_supplier_repo():
-    """Fixture that provides a mock supplier repository."""
-    return mock_supplier_repository()
-
-@pytest.fixture
-def mock_purchase_order_repo():
-    """Fixture that provides a mock purchase order repository."""
-    return mock_purchase_order_repository()
 
 # Helper patch functions to use with pytest.fixture
 def patch_repository(target_path: str, repo_interface: Type, custom_methods: Dict[str, Callable] = None):

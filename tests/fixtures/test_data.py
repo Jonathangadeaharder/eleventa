@@ -16,8 +16,8 @@ from core.models.customer import Customer
 from core.models.sale import Sale, SaleItem
 from core.models.invoice import Invoice
 from core.models.user import User
-from core.models.supplier import Supplier
-from core.models.purchase import PurchaseOrder, PurchaseOrderItem
+# from core.models.supplier import Supplier
+# from core.models.purchase import PurchaseOrder, PurchaseOrderItem
 
 # Factory methods for creating test entities
 def create_department(
@@ -182,69 +182,6 @@ def create_user(
         is_admin=is_admin
     )
 
-def create_supplier(
-    id: Optional[int] = None,
-    name: str = "Test Supplier",
-    contact_person: Optional[str] = "Supplier Contact",
-    phone: Optional[str] = "555-9876",
-    email: Optional[str] = "supplier@example.com",
-    address: Optional[str] = "456 Supplier St"
-) -> Supplier:
-    """Create a supplier with default test values."""
-    return Supplier(
-        id=id,
-        name=name,
-        contact_person=contact_person,
-        phone=phone,
-        email=email,
-        address=address
-    )
-
-def create_purchase_order_item(
-    id: Optional[int] = None,
-    purchase_order_id: Optional[int] = None,
-    product_id: int = 1,
-    product_code: str = "TST001",
-    product_description: str = "Test Product",
-    quantity_ordered: float = 10.0,
-    cost_price: float = 5.0,
-    quantity_received: float = 0.0
-) -> PurchaseOrderItem:
-    """Create a purchase order item with default test values."""
-    return PurchaseOrderItem(
-        id=id,
-        purchase_order_id=purchase_order_id,
-        product_id=product_id,
-        product_code=product_code,
-        product_description=product_description,
-        quantity_ordered=quantity_ordered,
-        cost_price=cost_price,
-        quantity_received=quantity_received
-    )
-
-def create_purchase_order(
-    id: Optional[int] = None,
-    supplier_id: int = 1,
-    order_date: datetime = None,
-    items: List[PurchaseOrderItem] = None,
-    status: str = "PENDING"
-) -> PurchaseOrder:
-    """Create a purchase order with default test values."""
-    if order_date is None:
-        order_date = datetime.now()
-        
-    if items is None:
-        # Create a default purchase order item
-        items = [create_purchase_order_item()]
-        
-    return PurchaseOrder(
-        id=id,
-        supplier_id=supplier_id,
-        order_date=order_date,
-        items=items,
-        status=status
-    )
-
 # Test Data Builder classes for complex object creation
 class ProductBuilder:
     """
@@ -401,16 +338,6 @@ def test_invoice(test_sale, test_customer):
 def test_user():
     """Fixture that returns a test user."""
     return create_user()
-
-@pytest.fixture
-def test_supplier():
-    """Fixture that returns a test supplier."""
-    return create_supplier()
-
-@pytest.fixture
-def test_purchase_order(test_supplier):
-    """Fixture that returns a test purchase order linked to the test supplier."""
-    return create_purchase_order(supplier_id=test_supplier.id if test_supplier.id else 1)
 
 @pytest.fixture
 def test_data_factory(clean_db):

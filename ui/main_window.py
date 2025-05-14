@@ -23,14 +23,11 @@ from core.services.product_service import ProductService
 from core.services.inventory_service import InventoryService
 from core.services.sale_service import SaleService
 from core.services.customer_service import CustomerService
-from core.services.purchase_service import PurchaseService
 from core.services.invoicing_service import InvoicingService
 from core.services.corte_service import CorteService
 from core.services.reporting_service import ReportingService
 from core.services.cash_drawer_service import CashDrawerService
 from core.models.user import User
-from ui.views.suppliers_view import SuppliersView
-from ui.views.purchases_view import PurchasesView
 
 # Placeholder for future views (keep for other views)
 class PlaceholderWidget(QWidget):
@@ -52,7 +49,6 @@ class MainWindow(QMainWindow):
         inventory_service: InventoryService,
         sale_service: SaleService,
         customer_service: CustomerService,
-        purchase_service: PurchaseService,
         invoicing_service: InvoicingService,
         corte_service: CorteService,
         reporting_service: ReportingService,  # Add ReportingService parameter
@@ -69,7 +65,6 @@ class MainWindow(QMainWindow):
         self.inventory_service = inventory_service
         self.sale_service = sale_service
         self.customer_service = customer_service
-        self.purchase_service = purchase_service
         self.invoicing_service = invoicing_service
         self.corte_service = corte_service
         self.reporting_service = reporting_service  # Store the ReportingService
@@ -88,7 +83,7 @@ class MainWindow(QMainWindow):
         )
         products_view = ProductsView(self.product_service)
         inventory_view = InventoryView(self.inventory_service, self.product_service)
-        customers_view = CustomersView(self.customer_service)
+        customers_view = CustomersView(self.customer_service, user_id=self.current_user.id)
         invoices_view = InvoicesView(self.invoicing_service)
         corte_view = CorteView(
             corte_service=self.corte_service, 
@@ -97,13 +92,6 @@ class MainWindow(QMainWindow):
         # Update ReportsView to use ReportingService instead of placeholder
         reports_view = ReportsView(self.reporting_service)  # Pass ReportingService
         config_view = ConfigurationView()  # Use the new ConfigurationView
-        suppliers_view = SuppliersView(self.purchase_service)
-        purchases_view = PurchasesView(
-            purchase_service=self.purchase_service,
-            product_service=self.product_service,
-            inventory_service=self.inventory_service,
-            current_user=self.current_user
-        )
         cash_drawer_view = CashDrawerView(
             cash_drawer_service=self.cash_drawer_service,
             user_id=self.current_user.id if self.current_user else None
@@ -114,12 +102,10 @@ class MainWindow(QMainWindow):
             "Products": products_view,
             "Inventory": inventory_view,
             "Customers": customers_view,
-            "Purchases": purchases_view,
             "Invoices": invoices_view,
             "Corte": corte_view,
             "Reports": reports_view,
             "Configuration": config_view,
-            "Suppliers": suppliers_view,
             "CashDrawer": cash_drawer_view,  # Enable the real CashDrawerView
         }
 
@@ -196,13 +182,11 @@ class MainWindow(QMainWindow):
             ("F2 Clientes", "Customers", "customers", "F2"),
             ("F3 Productos", "Products", "products", "F3"),
             ("F4 Inventario", "Inventory", "inventory", "F4"),
-            ("F5 Compras", "Purchases", "purchases", "F5"),
-            ("F6 Facturas", "Invoices", "invoices", "F6"),
-            ("F7 Corte", "Corte", "corte", "F7"),
-            ("F8 Reportes", "Reports", "reports", "F8"),
-            ("F9 Caja", "CashDrawer", "cash_drawer", "F9"),
+            ("F5 Facturas", "Invoices", "invoices", "F5"),
+            ("F6 Corte", "Corte", "corte", "F6"),
+            ("F7 Reportes", "Reports", "reports", "F7"),
+            ("F8 Caja", "CashDrawer", "cash_drawer", "F8"),
             ("Configuración", "Configuration", "config", None),
-            ("Provee&dores", "Suppliers", "suppliers", None),
         ]
 
         for text, view_name, icon_name, shortcut in actions:
@@ -323,15 +307,6 @@ if __name__ == '__main__':
     class MockCustomerService:
         def get_all_customers(self): return []
         def find_customer(self, term): return []
-
-    class MockPurchaseService:
-        def get_all_suppliers(self): return []
-        def find_supplier(self, term): return []
-        def get_all_purchase_orders(self): return []
-        def find_suppliers(self, term):
-            return self.find_supplier(term)
-        def find_purchase_orders(self, *args, **kwargs):
-            return []
 
     class MockSaleService:
         def get_all_sales(self): return []

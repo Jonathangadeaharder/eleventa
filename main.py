@@ -10,7 +10,6 @@ from core.services.customer_service import CustomerService
 from core.services.corte_service import CorteService
 from core.services.inventory_service import InventoryService
 from core.services.invoicing_service import InvoicingService
-from core.services.purchase_service import PurchaseService
 from core.services.product_service import ProductService
 from core.services.reporting_service import ReportingService
 from core.services.sale_service import SaleService
@@ -20,14 +19,14 @@ from core.services.cash_drawer_service import CashDrawerService
 from core.interfaces.repository_interfaces import (
     IProductRepository, IDepartmentRepository, IInventoryRepository, ISaleRepository,
     ICustomerRepository, ICreditPaymentRepository, IUserRepository,
-    IPurchaseOrderRepository, ISupplierRepository, ICashDrawerRepository,
+    ICashDrawerRepository,
     IInvoiceRepository
 )
 from infrastructure.persistence.sqlite.database import init_db, SessionLocal
 from infrastructure.persistence.sqlite.repositories import (
     SqliteProductRepository, SqliteDepartmentRepository, SqliteInventoryRepository,
     SqliteSaleRepository, SqliteCustomerRepository, SqliteCreditPaymentRepository,
-    SqliteSupplierRepository, SqlitePurchaseOrderRepository, SqliteUserRepository,
+    SqliteUserRepository,
     SqliteCashDrawerRepository, SqliteInvoiceRepository
 )
 from infrastructure.persistence.utils import session_scope
@@ -87,8 +86,6 @@ def main(test_mode=False, test_user=None, mock_services=None):
         def get_sale_repo(session): return SqliteSaleRepository(session)
         def get_customer_repo(session): return SqliteCustomerRepository(session)
         def get_credit_payment_repo(session): return SqliteCreditPaymentRepository(session)
-        def get_supplier_repo(session): return SqliteSupplierRepository(session)
-        def get_po_repo(session): return SqlitePurchaseOrderRepository(session)
         def get_cash_drawer_repo(session): return SqliteCashDrawerRepository(session)
         def get_invoice_repo(session): return SqliteInvoiceRepository(session)
         def get_user_repo(session): return SqliteUserRepository(session)

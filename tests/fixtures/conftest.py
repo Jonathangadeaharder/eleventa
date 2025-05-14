@@ -14,8 +14,6 @@ from tests.fixtures.test_data import (
     test_sale,
     test_invoice,
     test_user,
-    test_supplier,
-    test_purchase_order
 )
 
 # Re-export fixtures from repository_mocks.py
@@ -27,8 +25,6 @@ from tests.fixtures.repository_mocks import (
     mock_inventory_repo,
     mock_invoice_repo,
     mock_user_repo,
-    mock_supplier_repo,
-    mock_purchase_order_repo
 )
 
 # Register fixtures for setup_helpers
@@ -46,7 +42,6 @@ def setup_test_data():
         setup_customer_data,
         setup_sale_data,
         setup_invoice_data,
-        setup_purchase_order_data,
         setup_complete_test_environment
     )
     
@@ -55,6 +50,5 @@ def setup_test_data():
         "setup_customer_data": setup_customer_data,
         "setup_sale_data": setup_sale_data,
         "setup_invoice_data": setup_invoice_data,
-        "setup_purchase_order_data": setup_purchase_order_data,
         "setup_complete_test_environment": setup_complete_test_environment
     } 

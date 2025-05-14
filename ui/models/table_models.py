@@ -20,8 +20,8 @@ from dataclasses import dataclass, field
 from core.models.product import Product
 from core.models.sale import SaleItem
 from core.models.customer import Customer
-from core.models.supplier import Supplier
-from core.models.purchase import PurchaseOrder, PurchaseOrderItem
+# from core.models.supplier import Supplier # Removed
+# from core.models.purchase import PurchaseOrder, PurchaseOrderItem # Removed
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
 
 # Mock Product class until TASK-004 is properly integrated
@@ -252,35 +252,23 @@ class CustomerTableModel(QAbstractTableModel):
             if column == 0:
                 return customer.name
             elif column == 1:
-                return customer.phone or "-"
+                return customer.phone
             elif column == 2:
-                return customer.email or "-"
+                return customer.email
             elif column == 3:
-                return customer.address or "-"
+                return customer.address
             elif column == 4:
                 # Format as currency
-                balance = customer.credit_balance or 0.0
-                return f"{balance:.2f}"
+                return locale.currency(customer.credit_balance, grouping=True) if customer.credit_balance is not None else "N/A"
             elif column == 5:
-                # Format as currency
-                limit = customer.credit_limit or 0.0
-                return f"{limit:.2f}"
+                return locale.currency(customer.credit_limit, grouping=True) if customer.credit_limit is not None else "N/A"
 
         elif role == Qt.ItemDataRole.TextAlignmentRole:
-            if column in [4, 5]: # Numeric/Currency columns
+            if column in [4, 5]: # Numeric columns
                 return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
             return Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
 
-        elif role == Qt.ItemDataRole.ForegroundRole:
-            # Optional: Highlight customers with negative balance (debt)
-            if customer.credit_balance is not None and customer.credit_balance < 0:
-                 return QColor("orange") # Or another color
-            # Optional: Highlight customers exceeding credit limit
-            if customer.credit_limit is not None and customer.credit_balance is not None and \
-               customer.credit_balance > customer.credit_limit and customer.credit_limit > 0: # Check limit > 0 to avoid highlighting if limit is 0
-                 return QColor("red")
-
-        elif role == Qt.ItemDataRole.UserRole: # Custom role to get the full customer object
+        elif role == Qt.ItemDataRole.UserRole: # Custom role to get the full Customer object
             return customer
 
         return None
@@ -297,194 +285,174 @@ class CustomerTableModel(QAbstractTableModel):
     def update_data(self, customers: List[Customer]):
         """Updates the model's data and refreshes the view."""
         self.beginResetModel()
-        # Sort by name by default
-        self._customers = sorted(customers, key=lambda c: c.name or "")
+        self._customers = sorted(customers, key=lambda c: c.name) # Sort by name
         self.endResetModel()
 
     def get_customer_at_row(self, row: int) -> Optional[Customer]:
         """Gets the customer object at a specific model row."""
         if 0 <= row < len(self._customers):
             return self._customers[row]
-        return None 
+        return None
 
-class SupplierTableModel(QAbstractTableModel):
-    def __init__(self, data: List[Supplier] = [], parent=None):
-        super().__init__(parent)
-        self._data = data
-        self._headers = ["ID", "Nombre", "CUIT", "Contacto", "Teléfono", "Email", "Dirección"]
+# class SupplierTableModel(QAbstractTableModel):
+#     HEADERS = ["Nombre", "Teléfono", "Email", "CUIT", "Activo"]
+# 
+#     def __init__(self, data: List[Supplier] = [], parent=None):
+#         super().__init__(parent)
+#         self._suppliers: List[Supplier] = data
+# 
+#     def rowCount(self, parent=QModelIndex()) -> int:
+#         return len(self._suppliers)
+# 
+#     def columnCount(self, parent=QModelIndex()) -> int:
+#         return len(self.HEADERS)
+# 
+#     def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole) -> Any:
+#         if not index.isValid():
+#             return None
+# 
+#         supplier = self._suppliers[index.row()]
+#         column = index.column()
+# 
+#         if role == Qt.ItemDataRole.DisplayRole:
+#             if column == 0:
+#                 return supplier.name
+#             elif column == 1:
+#                 return supplier.phone
+#             elif column == 2:
+#                 return supplier.email
+#             elif column == 3:
+#                 return supplier.cuit
+#             elif column == 4:
+#                 return "Sí" if supplier.is_active else "No"
+# 
+#         elif role == Qt.ItemDataRole.TextAlignmentRole:
+#             if column == 4: # Activo
+#                 return Qt.AlignmentFlag.AlignCenter
+#             return Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+# 
+#         elif role == Qt.ItemDataRole.UserRole:
+#             return supplier
+#         return None
+# 
+#     def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.ItemDataRole.DisplayRole) -> Any:
+#         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
+#             return self.HEADERS[section]
+#         return None
+# 
+#     def update_data(self, data: List[Supplier]):
+#         self.beginResetModel()
+#         self._suppliers = sorted(data, key=lambda s: s.name)
+#         self.endResetModel()
+# 
+#     def get_supplier(self, row: int) -> Optional[Supplier]:
+#         if 0 <= row < len(self._suppliers):
+#             return self._suppliers[row]
+#         return None
+# 
+# class PurchaseOrderTableModel(QAbstractTableModel):
+#     HEADERS = ["ID", "Proveedor", "Fecha Pedido", "Fecha Entrega", "Estado", "Total"]
+# 
+#     def __init__(self, data: List[PurchaseOrder] = [], parent=None):
+#         super().__init__(parent)
+#         self._orders: List[PurchaseOrder] = data
+#         # You might want to fetch supplier names or have them denormalized in PurchaseOrder
+# 
+#     # Implement rowCount, columnCount, data, headerData as needed
+#     # Example data method (simplified):
+#     def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.ItemDataRole.DisplayRole) -> Any:
+#         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
+#             return self.HEADERS[section]
+#         return None
+#     def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole) -> Any:
+#         # Basic implementation, expand as needed
+#         if not index.isValid() or role != Qt.ItemDataRole.DisplayRole:
+#             return None
+#         order = self._orders[index.row()]
+#         column = index.column()
+#         if column == 0: return order.id
+#         if column == 1: return order.supplier_id # Or supplier name if available
+#         if column == 2: return order.order_date.strftime("%Y-%m-%d") if order.order_date else "N/A"
+#         # Add other columns
+#         return None
+# 
+# class PurchaseOrderItemTableModel(QAbstractTableModel):
+#     HEADERS = ["Producto", "Cantidad Pedida", "Costo Unit.", "Cantidad Recibida"]
+# 
+#     def __init__(self, data: List[PurchaseOrderItem] = [], parent=None):
+#         super().__init__(parent)
+#         self._items: List[PurchaseOrderItem] = data
+# 
+#     # Implement methods similarly to above
+#     def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.ItemDataRole.DisplayRole) -> Any:
+#         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
+#             return self.HEADERS[section]
+#         return None
+#     def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole) -> Any:
+#         if not index.isValid() or role != Qt.ItemDataRole.DisplayRole:
+#             return None
+#         item = self._items[index.row()]
+#         column = index.column()
+#         if column == 0: return item.product_description # Or product code
+#         # Add other columns
+#         return None
 
-    def rowCount(self, parent=QModelIndex()) -> int:
-        return len(self._data)
+class InvoiceTableModel(QAbstractTableModel):
+    """Model for displaying invoices in a QTableView."""
+    HEADERS = [
+        "Número", "Fecha", "Cliente", "Tipo", "Total", "CAE"
+    ]
 
-    def columnCount(self, parent=QModelIndex()) -> int:
-        return len(self._headers)
+    def __init__(self):
+        super().__init__()
+        self._invoices: List[Invoice] = [] # Initialize with Invoice type
 
-    def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole) -> Any:
+    def rowCount(self, parent=QModelIndex()):
+        return len(self._invoices)
+
+    def columnCount(self, parent=QModelIndex()):
+        return len(self.HEADERS)
+
+    def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
             return None
 
-        row = index.row()
+        invoice = self._invoices[index.row()]
         col = index.column()
-        supplier = self._data[row]
 
-        if role == Qt.ItemDataRole.DisplayRole:
-            if col == 0:
-                return str(supplier.id)
-            elif col == 1:
-                return supplier.name
-            elif col == 2:
-                return supplier.cuit or ""
-            elif col == 3:
-                return supplier.contact_person or "" # Changed from contact_name
-            elif col == 4:
-                return supplier.phone or ""
-            elif col == 5:
-                return supplier.email or ""
-            elif col == 6:
-                return supplier.address or ""
-            return None
-        elif role == Qt.ItemDataRole.TextAlignmentRole:
-             if col == 0:
-                return Qt.AlignmentFlag.AlignCenter
-             return Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-        # Add more roles if needed (e.g., background color)
-        return None
-
-    def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.ItemDataRole.DisplayRole) -> Any:
-        if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
-            return self._headers[section]
-        return None
-
-    def update_data(self, data: List[Supplier]):
-        self.beginResetModel()
-        self._data = data
-        self.endResetModel()
-
-    def get_supplier(self, row: int) -> Optional[Supplier]:
-        if 0 <= row < len(self._data):
-            return self._data[row]
-        return None 
-
-class PurchaseOrderTableModel(QAbstractTableModel):
-    def __init__(self, data: List[PurchaseOrder] = [], parent=None):
-        super().__init__(parent)
-        self._data = data
-        self._headers = ["ID", "Proveedor", "Fecha Orden", "Fecha Est.", "Estado", "Total"]
-
-    def rowCount(self, parent=QModelIndex()) -> int: return len(self._data)
-    def columnCount(self, parent=QModelIndex()) -> int: return len(self._headers)
-    def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.ItemDataRole.DisplayRole) -> Any:
-        if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal: return self._headers[section]
-        return None
-    def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole) -> Any:
-        if not index.isValid() or role != Qt.ItemDataRole.DisplayRole: return None
-        po = self._data[index.row()]
-        col = index.column()
-        if col == 0: return str(po.id)
-        if col == 1: return po.supplier.name if po.supplier else str(po.supplier_id)
-        if col == 2: return po.order_date.strftime("%Y-%m-%d")
-        if col == 3: return po.expected_delivery_date.strftime("%Y-%m-%d") if po.expected_delivery_date else ""
-        if col == 4: return po.status
-        if col == 5: return f"{po.total_amount:.2f}"
-        return None
-    def update_data(self, data: List[PurchaseOrder]): self.beginResetModel(); self._data = data; self.endResetModel()
-    def get_purchase_order(self, row: int) -> PurchaseOrder | None: return self._data[row] if 0 <= row < len(self._data) else None
-
-class PurchaseOrderItemTableModel(QAbstractTableModel):
-    def __init__(self, data: List[PurchaseOrderItem] = [], parent=None):
-        super().__init__(parent)
-        self._data = data
-        self._headers = ["ID", "Código", "Descripción", "Cantidad", "Costo Unit.", "Subtotal"]
-    def rowCount(self, parent=QModelIndex()) -> int: return len(self._data)
-    def columnCount(self, parent=QModelIndex()) -> int: return len(self._headers)
-    def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.ItemDataRole.DisplayRole) -> Any:
-        if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal: return self._headers[section]
-        return None
-    def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole) -> Any:
-        if not index.isValid() or role != Qt.ItemDataRole.DisplayRole: return None
-        item = self._data[index.row()]
-        col = index.column()
-        if col == 0: return str(item.id)
-        if col == 1: return item.product_code
-        if col == 2: return item.product_description
-        if col == 3: return f"{item.quantity_ordered:.2f}" # Changed from quantity
-        if col == 4: return f"{item.cost_price:.2f}"
-        if col == 5: return f"{item.subtotal:.2f}"
-        return None
-    def update_data(self, data: List[PurchaseOrderItem]): self.beginResetModel(); self._data = data; self.endResetModel()
-    def get_item(self, row: int) -> PurchaseOrderItem | None: return self._data[row] if 0 <= row < len(self._data) else None
-
-class InvoiceTableModel(QAbstractTableModel):
-    """Model for displaying invoices in a table view."""
-    
-    def __init__(self):
-        super().__init__()
-        self.invoices = []
-        self.headers = ["Nro.", "Fecha", "Cliente", "Tipo", "Total", "Estado"]
-    
-    def rowCount(self, parent=QModelIndex()):
-        """Return number of rows in the model."""
-        return len(self.invoices)
-    
-    def columnCount(self, parent=QModelIndex()):
-        """Return number of columns in the model."""
-        return len(self.headers)
-    
-    def data(self, index, role=Qt.DisplayRole):
-        """Return data for the given role at the specified index."""
-        if not index.isValid() or not (0 <= index.row() < len(self.invoices)):
-            return None
-            
-        invoice = self.invoices[index.row()]
-        col = index.column()
-        
         if role == Qt.DisplayRole:
-            if col == 0:  # Invoice Number
+            if col == 0:
                 return invoice.invoice_number
-            elif col == 1:  # Date
-                return invoice.invoice_date.strftime('%d/%m/%Y')
-            elif col == 2:  # Customer
-                customer_name = ""
-                if invoice.customer_details and 'name' in invoice.customer_details:
-                    customer_name = invoice.customer_details['name']
-                return customer_name
-            elif col == 3:  # Type
-                return f"Factura {invoice.invoice_type}"
-            elif col == 4:  # Total
-                return f"${invoice.total:.2f}"
-            elif col == 5:  # Status
-                return "Activa" if invoice.is_active else "Anulada"
+            elif col == 1:
+                return invoice.invoice_date.strftime("%d/%m/%Y") if invoice.invoice_date else ""
+            elif col == 2:
+                # Assuming customer_details is a dict with a 'name' key
+                return invoice.customer_details.get("name", "N/A") if invoice.customer_details else "N/A"
+            elif col == 3:
+                return invoice.invoice_type
+            elif col == 4:
+                return f"{invoice.total:.2f}" # Format as currency
+            elif col == 5:
+                return invoice.cae if invoice.cae else "N/A"
         
         elif role == Qt.TextAlignmentRole:
-            if col in [0, 1, 3, 5]:  # Number, Date, Type, Status
-                return int(Qt.AlignCenter)
-            elif col == 4:  # Total
-                return int(Qt.AlignRight | Qt.AlignVCenter)
-            else:
-                return int(Qt.AlignLeft | Qt.AlignVCenter)
-        
-        elif role == Qt.ForegroundRole:
-            if not invoice.is_active:
-                return QBrush(QColor(150, 150, 150))  # Gray text for inactive invoices
-        
-        elif role == Qt.BackgroundRole:
-            if invoice.invoice_type == 'A':
-                return QBrush(QColor(240, 255, 240))  # Light green for Type A
-            elif invoice.invoice_type == 'B':
-                return QBrush(QColor(240, 240, 255))  # Light blue for Type B
-        
+            if col == 4: # Total
+                return Qt.AlignRight | Qt.AlignVCenter
+            return Qt.AlignLeft | Qt.AlignVCenter
+            
+        elif role == Qt.UserRole: # To get the full Invoice object
+            return invoice
+            
         return None
-    
+
     def headerData(self, section, orientation, role=Qt.DisplayRole):
-        """Return header data for the given role."""
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:
-            return self.headers[section]
+            return self.HEADERS[section]
         return None
-    
+
     def update_data(self, invoices):
-        """Update model with new invoice data."""
         self.beginResetModel()
-        self.invoices = invoices
+        self._invoices = sorted(invoices, key=lambda inv: inv.invoice_date, reverse=True)
         self.endResetModel()
 
 class CashDrawerTableModel(QAbstractTableModel):

@@ -176,9 +176,9 @@ class CustomerService(ServiceBase):
 
     # --- Methods related to Credit (Implementation for TASK-027) ---
 
-    def apply_payment(self, customer_id: int, amount: Decimal, notes: str | None = None, user_id: Optional[int] = None) -> CreditPayment:
+    def apply_payment(self, customer_id: uuid.UUID, amount: Decimal, notes: str | None = None, user_id: Optional[int] = None) -> CreditPayment:
         """Apply a payment to a customer's account."""
-        def _apply_payment(session, customer_id, amount, notes, user_id):
+        def _apply_payment(session, customer_id: uuid.UUID, amount, notes, user_id):
             if amount <= 0:
                 raise ValueError("Payment amount must be positive.")
 
@@ -201,13 +201,13 @@ class CustomerService(ServiceBase):
             
             # Create the payment log with the customer's actual UUID
             payment_log = CreditPayment(
-                customer_id=uuid.UUID(f'00000000-0000-0000-0000-{customer_id:012d}'),  # Convert to UUID format
+                customer_id=customer_id,  # Use the customer_id UUID directly
                 amount=amount,
                 notes=notes,
                 user_id=user_id
             )
             created_payment = pay_repo.add(payment_log)
-            self.logger.info(f"Applied payment {created_payment.id} of {amount} to customer {customer_id}. New balance: {new_balance:.2f}")
+            self.logger.info(f"Applied payment {created_payment.id} of {amount} to customer {customer_id}. New balance: {new_balance:.2f}. User ID for CreditPayment: {user_id} (type: {type(user_id)})")
             return created_payment
             
         return self._with_session(_apply_payment, customer_id, amount, notes, user_id)
@@ -304,7 +304,7 @@ class CustomerService(ServiceBase):
     #
     #     return updated_customer_obj 
 
-    def adjust_balance(self, customer_id: int, amount: Decimal, is_increase: bool, notes: str, user_id: Optional[int] = None) -> CreditPayment:
+    def adjust_balance(self, customer_id: uuid.UUID, amount: Decimal, is_increase: bool, notes: str, user_id: Optional[int] = None) -> CreditPayment:
         """
         Directly adjust a customer's balance.
         
@@ -318,7 +318,7 @@ class CustomerService(ServiceBase):
         Returns:
             The created CreditPayment entry logging this adjustment
         """
-        def _adjust_balance(session, customer_id, amount, is_increase, notes, user_id):
+        def _adjust_balance(session, customer_id: uuid.UUID, amount, is_increase, notes, user_id):
             if amount <= 0:
                 raise ValueError("Adjustment amount must be positive.")
                 
@@ -359,8 +359,9 @@ class CustomerService(ServiceBase):
             log_amount = amount if is_increase else -amount
             
             # Create the payment/adjustment log with the customer's actual UUID
+            self.logger.debug(f"_adjust_balance: Attempting to create CreditPayment with user_id: {user_id} (type: {type(user_id)})")
             payment_log = CreditPayment(
-                customer_id=uuid.UUID(f'00000000-0000-0000-0000-{customer_id:012d}'),  # Convert to UUID format
+                customer_id=customer_id,  # Use the customer_id UUID directly
                 amount=log_amount,
                 notes=f"[BALANCE ADJUSTMENT - {adjustment_type.upper()}] {notes}",
                 user_id=user_id
@@ -368,8 +369,9 @@ class CustomerService(ServiceBase):
             created_record = pay_repo.add(payment_log)
             self.logger.info(
                 f"Balance adjustment ({adjustment_type}) of {amount} applied to customer {customer_id}. "
-                f"Old balance: {current_balance:.2f}, New balance: {new_balance:.2f}"
+                f"Old balance: {current_balance:.2f}, New balance: {new_balance:.2f}. "
+                f"User ID for CreditPayment: {user_id} (type: {type(user_id)})"
             )
             return created_record
             
-        return self._with_session(_adjust_balance, customer_id, amount, is_increase, notes, user_id) 
+        return self._with_session(_adjust_balance, customer_id, amount, is_increase, notes, user_id)

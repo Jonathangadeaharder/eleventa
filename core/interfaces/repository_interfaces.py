@@ -12,8 +12,6 @@ try:
     from ..models.sale import Sale, SaleItem
     from ..models.customer import Customer
     from ..models.credit_payment import CreditPayment
-    from ..models.supplier import Supplier
-    from ..models.purchase import PurchaseOrder, PurchaseOrderItem
     from ..models.invoice import Invoice # Add Invoice model import
     from ..models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
 except ImportError:
@@ -23,8 +21,6 @@ except ImportError:
     from core.models.sale import Sale, SaleItem
     from core.models.customer import Customer
     from core.models.credit_payment import CreditPayment
-    from core.models.supplier import Supplier
-    from core.models.purchase import PurchaseOrder, PurchaseOrderItem
     from core.models.invoice import Invoice # Add Invoice model import
     from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
     # Removed User import from here
@@ -328,77 +324,41 @@ class ICreditPaymentRepository(ABC):
     def get_for_customer(self, customer_id: int) -> List[CreditPayment]:
         """Gets all credit payments for a specific customer."""
         pass  # pragma: no cover
-        
+
     @abstractmethod
     def delete(self, payment_id: int) -> bool:
-        """Deletes a credit payment by ID."""
+        """Deletes a credit payment by its ID."""
         pass  # pragma: no cover
 
-# Potentially add other repositories here (User, Invoice, etc.) 
-
-class ISupplierRepository(ABC):
-    @abstractmethod
-    def add(self, supplier: Supplier) -> Supplier:
-        pass  # pragma: no cover
-
-    @abstractmethod
-    def get_by_id(self, supplier_id: int) -> Optional[Supplier]:
-        pass  # pragma: no cover
-
-    @abstractmethod
-    def get_by_name(self, name: str) -> Optional[Supplier]:
-        pass  # pragma: no cover
-
-    @abstractmethod
-    def get_by_cuit(self, cuit: str) -> Optional[Supplier]:
-        pass  # pragma: no cover
-
-    @abstractmethod
-    def get_all(self) -> List[Supplier]:
-        pass  # pragma: no cover
-
-    @abstractmethod
-    def update(self, supplier: Supplier) -> Optional[Supplier]:
-        pass  # pragma: no cover
-
-    @abstractmethod
-    def delete(self, supplier_id: int) -> bool:
-        pass  # pragma: no cover
-
-    @abstractmethod
-    def search(self, query: str) -> List[Supplier]:
-        pass  # pragma: no cover
-
-
-class IPurchaseOrderRepository(ABC):
-    @abstractmethod
-    def add(self, purchase_order: PurchaseOrder) -> PurchaseOrder:
-        pass  # pragma: no cover
-
-    @abstractmethod
-    def get_by_id(self, po_id: int) -> Optional[PurchaseOrder]:
-        pass  # pragma: no cover
-
-    @abstractmethod
-    def get_all(self, status: str | None = None, supplier_id: int | None = None) -> List[PurchaseOrder]:
-        pass  # pragma: no cover
-
-    @abstractmethod
-    def update_status(self, po_id: int, status: str) -> bool:
-        pass  # pragma: no cover
-
-    @abstractmethod
-    def get_items(self, po_id: int) -> List[PurchaseOrderItem]:
-        pass  # pragma: no cover
-
-    @abstractmethod
-    def update_item_received_quantity(self, item_id: int, quantity_received_increment: float) -> bool:
-        """Updates the quantity_received for a specific PO item by adding the increment.
-           Returns True if successful, False otherwise.
-        """
-        pass  # pragma: no cover
-
-    # Potentially add methods to update items, delete POs etc. later
+# class IPurchaseOrderRepository(ABC):
+#     @abstractmethod
+#     def add(self, purchase_order: PurchaseOrder) -> PurchaseOrder:
+#         pass  # pragma: no cover
+# 
+#     @abstractmethod
+#     def get_by_id(self, po_id: int) -> Optional[PurchaseOrder]:
+#         pass  # pragma: no cover
+# 
+#     @abstractmethod
+#     def get_all(self, status: str | None = None, supplier_id: int | None = None) -> List[PurchaseOrder]:
+#         pass  # pragma: no cover
+# 
+#     @abstractmethod
+#     def update_status(self, po_id: int, status: str) -> bool:
+#         pass  # pragma: no cover
+# 
+#     @abstractmethod
+#     def get_items(self, po_id: int) -> List[PurchaseOrderItem]:
+#         pass  # pragma: no cover
+# 
+#     @abstractmethod
+#     def update_item_received_quantity(self, item_id: int, quantity_received_increment: float) -> bool:
+#         """Updates the quantity_received for a specific PO item by adding the increment.
+#            Returns True if successful, False otherwise.
+#         """
+#         pass  # pragma: no cover
+# 
+#     # Potentially add methods to update items, delete POs etc. later
 
 
 # --- User Repository ---
@@ -488,3 +448,40 @@ class ICashDrawerRepository(ABC):
     def get_entry_by_id(self, entry_id: int) -> Optional[CashDrawerEntry]:
         """Gets a cash drawer entry by its ID."""
         pass  # pragma: no cover
+
+# Potentially add other repositories here (User, Invoice, etc.) 
+
+# class ISupplierRepository(ABC):
+#     @abstractmethod
+#     def add(self, supplier: Supplier) -> Supplier:
+#         """Adds a new supplier."""
+#         pass # pragma: no cover
+# 
+#     @abstractmethod
+#     def get_by_id(self, supplier_id: int) -> Optional[Supplier]:
+#         """Gets a supplier by its ID."""
+#         pass # pragma: no cover
+# 
+#     @abstractmethod
+#     def get_by_name(self, name: str) -> Optional[Supplier]:
+#         pass  # pragma: no cover
+# 
+#     @abstractmethod
+#     def get_by_cuit(self, cuit: str) -> Optional[Supplier]:
+#         pass  # pragma: no cover
+# 
+#     @abstractmethod
+#     def get_all(self) -> List[Supplier]:
+#         pass  # pragma: no cover
+# 
+#     @abstractmethod
+#     def update(self, supplier: Supplier) -> Optional[Supplier]:
+#         pass  # pragma: no cover
+# 
+#     @abstractmethod
+#     def delete(self, supplier_id: int) -> bool:
+#         pass  # pragma: no cover
+# 
+#     @abstractmethod
+#     def search(self, query: str) -> List[Supplier]:
+#         pass  # pragma: no cover

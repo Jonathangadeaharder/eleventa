@@ -23,8 +23,8 @@ from core.models.invoice import Invoice as CoreInvoice
 from core.models.cash_drawer import CashDrawerEntryType
 
 # Import core models for reference if needed, but avoid direct coupling in ORM definitions
-# from core.models.supplier import Supplier as CoreSupplier
-# from core.models.purchase import PurchaseOrder as CorePurchaseOrder, PurchaseOrderItem as CorePurchaseOrderItem
+#  as CoreSupplier
+# Order as CorePurchaseOrder, PurchaseOrderItem as CorePurchaseOrderItem
 
 # Base.metadata is used implicitly by declarative classes inheriting from Base
 mapper_registry = registry(metadata=Base.metadata)
@@ -214,69 +214,6 @@ class CreditPaymentOrm(Base):
     def __repr__(self):
         return f"<CreditPaymentOrm(id={self.id}, customer_id={self.customer_id}, amount={self.amount})>"
 
-class SupplierOrm(Base):
-    __tablename__ = "suppliers"
-    __table_args__ = {'extend_existing': True}
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False, unique=True, index=True)
-    contact_person = Column(String, nullable=True) # Renamed from contact_name
-    phone = Column(String, nullable=True)
-    email = Column(String, nullable=True)
-    address = Column(Text, nullable=True)
-    cuit = Column(String, nullable=True, unique=True, index=True)
-    notes = Column(Text, nullable=True) # Added notes field
-    is_active = Column(Boolean, default=True, nullable=False) # Added is_active field
-
-    # Relationship: One-to-Many (One Supplier has Many Purchase Orders)
-    purchase_orders = relationship("PurchaseOrderOrm", back_populates="supplier")
-
-    def __repr__(self):
-        return f"<SupplierOrm(id={self.id}, name='{self.name}')>"
-
-class PurchaseOrderOrm(Base):
-    __tablename__ = "purchase_orders"
-    __table_args__ = {'extend_existing': True}
-
-    id = Column(Integer, primary_key=True, index=True)
-    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=False, index=True)
-    supplier_name = Column(String, nullable=True) # Added denormalized supplier name
-    order_date = Column(DateTime, nullable=False, default=datetime.datetime.now)
-    expected_delivery_date = Column(DateTime, nullable=True)
-    status = Column(String, nullable=False, default="PENDING", index=True) # Match core model default
-    notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.datetime.now) # Added created_at
-    updated_at = Column(DateTime, nullable=False, default=datetime.datetime.now, onupdate=datetime.datetime.now) # Added updated_at
-
-    # Relationship: Many-to-One (Many POs belong to One Supplier)
-    supplier = relationship("SupplierOrm", back_populates="purchase_orders")
-    # Relationship: One-to-Many (One PO has Many Items)
-    items = relationship("PurchaseOrderItemOrm", back_populates="purchase_order", cascade="all, delete-orphan", lazy="selectin")
-
-    def __repr__(self):
-        return f"<PurchaseOrderOrm(id={self.id}, supplier_id={self.supplier_id}, status='{self.status}')>"
-
-class PurchaseOrderItemOrm(Base):
-    __tablename__ = "purchase_order_items"
-    __table_args__ = {'extend_existing': True}
-
-    id = Column(Integer, primary_key=True, index=True)
-    purchase_order_id = Column(Integer, ForeignKey("purchase_orders.id"), nullable=False, index=True)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
-    product_code = Column(String, nullable=True) # Denormalized, allow null initially
-    product_description = Column(String, nullable=True) # Denormalized, allow null initially
-    quantity_ordered = Column(Numeric(10, 3), nullable=False) # Renamed from quantity, changed type, 3 decimal places
-    cost_price = Column(Numeric(10, 2), nullable=False) # Changed type
-    quantity_received = Column(Numeric(10, 3), nullable=False, default=0.0) # Added quantity_received, 3 decimal places
-
-    # Relationship: Many-to-One (Many Items belong to One PO)
-    purchase_order = relationship("PurchaseOrderOrm", back_populates="items")
-    # Relationship: Many-to-One (Many Items relate to One Product)
-    product = relationship("ProductOrm") # No back_populates needed if ProductOrm doesn't track PO items
-
-    def __repr__(self):
-        return f"<PurchaseOrderItemOrm(id={self.id}, purchase_order_id={self.purchase_order_id}, product_id={self.product_id}, qty={self.quantity_ordered})>"
-
 class InvoiceOrm(Base):
     __tablename__ = "invoices"
     __table_args__ = {'extend_existing': True}
@@ -342,7 +279,6 @@ def ensure_all_models_mapped():
     model_classes = [
         UserOrm, DepartmentOrm, ProductOrm, InventoryMovementOrm,
         SaleOrm, SaleItemOrm, CustomerOrm, CreditPaymentOrm,
-        SupplierOrm, PurchaseOrderOrm, PurchaseOrderItemOrm,
         InvoiceOrm, CashDrawerEntryOrm
     ]
 
@@ -423,8 +359,8 @@ def map_models():
     # Get a list of all ORM classes that inherit from Base
     orm_classes = [
         UserOrm, DepartmentOrm, ProductOrm, InventoryMovementOrm, SaleOrm, 
-        SaleItemOrm, CustomerOrm, CreditPaymentOrm, SupplierOrm,
-        PurchaseOrderOrm, PurchaseOrderItemOrm, InvoiceOrm, 
+        SaleItemOrm, CustomerOrm, CreditPaymentOrm,
+        InvoiceOrm, 
         CashDrawerEntryOrm # Ensure CashDrawerEntryOrm is included here
     ]
     

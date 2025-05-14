@@ -14,15 +14,16 @@ from ..dialogs.register_payment_dialog import RegisterPaymentDialog # Added paym
 from ..dialogs.adjust_balance_dialog import AdjustBalanceDialog
 from core.services.customer_service import CustomerService
 # Import utility functions
-from ..utils import show_error_message, ask_confirmation, show_info_message # Added show_info_message
+from ..utils import show_error_message, show_info_message # Corrected import, removed show_warning_message and format_currency
 from core.models.credit_payment import CreditPayment
 
 class CustomersView(QWidget):
     """View for managing customers."""
 
-    def __init__(self, customer_service: CustomerService, parent=None):
+    def __init__(self, customer_service: CustomerService, user_id: int, parent=None):
         super().__init__(parent)
         self._customer_service = customer_service
+        self.user_id = user_id # Store user_id
 
         self.setWindowTitle("Clientes")
 
@@ -182,15 +183,14 @@ class CustomersView(QWidget):
             # Dialog was accepted, get amount and notes
             amount = dialog.payment_amount
             notes = dialog.payment_notes
-            # user_id = ... # Get current user ID if implementing users
 
             try:
                 # Call the customer service to apply the payment
                 payment_log = self._customer_service.apply_payment(
                     customer_id=selected_customer.id,
                     amount=amount,
-                    notes=notes
-                    # user_id=user_id
+                    notes=notes,
+                    user_id=self.user_id # Pass the stored user_id
                 )
                 show_info_message(self, "Pago Registrado", f"Pago de $ {amount:.2f} registrado para {selected_customer.name}.")
                 self.refresh_customers() # Refresh the view to show updated balance
@@ -209,6 +209,12 @@ class CustomersView(QWidget):
             show_error_message(self, "Selección Requerida", "Por favor, seleccione un cliente para ajustar su saldo.")
             return
 
+        if self.user_id is None:
+            self.logger.warning("adjust_balance called but self.user_id is None.")
+            show_error_message(self, "Error de Usuario", 
+                               "No se ha podido identificar al usuario actual. No se puede ajustar el saldo.")
+            return
+
         # Open the balance adjustment dialog
         dialog = AdjustBalanceDialog(selected_customer, parent=self)
         if dialog.exec():
@@ -223,12 +229,12 @@ class CustomersView(QWidget):
                     customer_id=selected_customer.id,
                     amount=amount,
                     is_increase=is_increase,
-                    notes=notes
-                    # user_id=user_id if implementing users
+                    notes=notes,
+                    user_id=self.user_id # Pass the logged-in user's ID
                 )
                 
                 # Determine the message based on adjustment type
-                action_type = "aumentado" if is_increase else "reducido" 
+                action_type = "incrementó" if is_increase else "decrementó" 
                 show_info_message(
                     self, 
                     "Saldo Ajustado", 
@@ -296,6 +302,6 @@ if __name__ == '__main__':
 
     app = QApplication(sys.argv)
     service = MockCustomerService()
-    view = CustomersView(service)
+    view = CustomersView(service, user_id=1) # Example user_id for testing
     view.show()
-    app.exec() # Start the event loop directly 
+    sys.exit(app.exec())
