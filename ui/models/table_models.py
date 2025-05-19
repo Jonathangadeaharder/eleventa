@@ -252,21 +252,33 @@ class CustomerTableModel(QAbstractTableModel):
             if column == 0:
                 return customer.name
             elif column == 1:
-                return customer.phone
+                return customer.phone if customer.phone is not None else "-"
             elif column == 2:
-                return customer.email
+                return customer.email if customer.email is not None else "-"
             elif column == 3:
-                return customer.address
-            elif column == 4:
-                # Format as currency
-                return locale.currency(customer.credit_balance, grouping=True) if customer.credit_balance is not None else "N/A"
-            elif column == 5:
-                return locale.currency(customer.credit_limit, grouping=True) if customer.credit_limit is not None else "N/A"
+                return customer.address if customer.address is not None else "-"
+            elif column == 4: # Saldo (Balance)
+                balance = Decimal(str(customer.credit_balance))
+                return f"{balance:.2f}" # Ensure no currency symbol for DisplayRole
+            elif column == 5: # Límite Crédito (Credit Limit)
+                limit = Decimal(str(customer.credit_limit))
+                return f"{limit:.2f}" # Ensure no currency symbol for DisplayRole
 
         elif role == Qt.ItemDataRole.TextAlignmentRole:
             if column in [4, 5]: # Numeric columns
                 return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
             return Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+
+        elif role == Qt.ItemDataRole.ForegroundRole:
+            # Highlight if credit balance exceeds credit limit (and limit is positive)
+            if column == 4: # Only for Saldo (Balance) column
+                balance = Decimal(str(customer.credit_balance))
+                limit = Decimal(str(customer.credit_limit))
+                if limit > 0 and balance > limit:
+                    return QColor("red")
+                elif balance < 0: # Highlight negative balance in orange
+                    return QColor("orange")
+            return None # Default foreground color
 
         elif role == Qt.ItemDataRole.UserRole: # Custom role to get the full Customer object
             return customer

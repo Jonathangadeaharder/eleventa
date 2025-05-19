@@ -145,10 +145,14 @@ class InvoicingService(ServiceBase):
                     "already has an invoice" in error_msg_lower or
                     "already exists" in error_msg_lower or
                     "duplicate" in error_msg_lower or
-                    # SQLite specific message for unique constraint
+                    # SQLite specific message for unique constraint on sale_id
                     ("unique constraint failed" in error_msg_lower and "invoices.sale_id" in error_msg_lower) or
-                    # PostgreSQL specific message for unique constraint
-                    ("duplicate key value violates unique constraint" in error_msg_lower and "invoices_sale_id_key" in error_msg_lower)
+                    # SQLite specific message for unique constraint on invoice_number
+                    ("unique constraint failed" in error_msg_lower and "invoices.invoice_number" in error_msg_lower) or
+                    # PostgreSQL specific message for unique constraint on sale_id
+                    ("duplicate key value violates unique constraint" in error_msg_lower and "invoices_sale_id_key" in error_msg_lower) or
+                    # PostgreSQL specific message for unique constraint on invoice_number
+                    ("duplicate key value violates unique constraint" in error_msg_lower and ("invoices_invoice_number_key" in error_msg_lower or "invoices_invoice_number_idx" in error_msg_lower)) # Common naming for invoice_number unique constraint
                 )
 
                 if is_potential_duplicate:

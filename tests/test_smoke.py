@@ -60,7 +60,6 @@ def test_main_window_starts_and_shows(safe_qtbot):
             inventory_service=MockInventoryService(),
             sale_service=MockSaleService(),
             customer_service=MockCustomerService(),
-            purchase_service=MockPurchaseService(),
             invoicing_service=MockInvoicingService(),
             corte_service=MockCorteService(),
             reporting_service=MockReportingService(),

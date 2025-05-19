@@ -1,0 +1,341 @@
+Okay, here's a refined list of recommendations presented as concrete, actionable subtasks with checkboxes. This document is designed to be used as a checklist for improving the Eleventa POS backend.
+
+Eleventa POS Backend - Refinement Subtasks
+I. Critical: UI Test Stability & Reliability
+
+Goal: Achieve a stable and reliable UI testing suite.
+
+Reference: qt_test_instability_analysis.md, tests/conftest.py, tests/ui/conftest.py
+
+[~] Task 1.1: Environment Deep Dive & Simplification
+
+Investigate correlations between crashes and specific graphics drivers or Windows updates.
+
+Check for conflicts with other Python packages or system libraries.
+
+Simplify Qt environment setup in conftest.py (root and tests/ui/conftest.py), removing any non-essential environment variable manipulations. (Partially addressed: Commented out QT_QPA_PLATFORM_PLUGIN_PATH in root conftest.py; removed redundant Qt env var settings from tests/ui/qt_support.py)
+
+Attempt to run UI tests on a different OS (e.g., Linux with Xvfb) or a clean Windows VM to isolate environment-specific issues.
+
+[ ] Task 1.2: Library Versioning Experimentation
+
+Systematically test with different minor versions of PySide6 (e.g., 6.8.x, 6.7.x, 6.6.x).
+
+Systematically test with different minor versions of pytest-qt.
+
+Document which combinations are stable or exhibit issues.
+
+[x] Task 1.3: pytest-qt Best Practices Adherence
+
+Review all UI tests to ensure exclusive use of qapp fixture for QApplication lifecycle. (Done)
+
+Replace manual QApplication.processEvents() calls with qtbot alternatives (e.g., qtbot.waitSignal, qtbot.waitUntil) where appropriate. (No widespread manual calls found in test bodies; usage in qt_cleanup is acceptable. Calls via base class helpers exist but are lower priority.)
+
+Ensure all widgets are managed via qtbot.addWidget() or a custom robust cleanup fixture (like the existing qt_cleanup and safe_qtbot, but verify their effectiveness). (Done by refactoring UI test base classes to use safe_qtbot system.)
+
+[ ] Task 1.4: Isolate and Report Crashes
+
+Dedicate time to creating minimal, reproducible examples of the "access violation" crashes outside the main project.
+
+Report confirmed bugs to PySide6 or pytest-qt issue trackers with detailed environment information and minimal examples.
+
+[~] Task 1.5: Resource Management Review
+
+Consolidate or remove redundant resource patching logic (e.g., patch_resources.py vs tests/ui/patch_resources.py). (Done: Root patch_resources.py removed. tests/ui/patch_resources.py contains an inactive QIcon patch.)
+
+Investigate if the need for QIcon patching points to deeper issues in resource compilation or loading in the test environment. (The QIcon patch in tests/ui/patch_resources.py is currently inactive; if icon-related flakiness occurs, activating this patch and observing its logs would be the first step for this investigation.)
+
+[ ] Task 1.6: Review set_qt_plugin_path in tests/conftest.py
+
+Prioritize using QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath) for determining Qt plugin paths.
+
+Investigate why fallbacks to constructed paths are necessary and if they can be made more robust or eliminated.
+
+II. Core Domain & Data Integrity
+
+Goal: Improve data integrity, reduce boilerplate, and enhance model clarity.
+
+[x] Task 2.1: Refactor Product Model __getattribute__ for Decimals
+
+File: core/models/product.py
+
+Remove the __getattribute__ method that automatically converts Decimal fields to float.
+
+Update any tests that relied on this implicit conversion to explicitly convert Decimal to float for comparison if necessary, or use pytest.approx with Decimal values.
+
+[x] Task 2.2: Refactor User Model Password Hashing
+
+File: core/models/user.py
+
+Remove the password field from the User model (it should be transient).
+
+Move password hashing logic from the hash_password_if_needed validator to UserService.add_user and any future password change methods. The User model should only store password_hash.
+
+Update UserOrm and its mapping if the password field was ever persisted.
+
+[x] Task 2.3: Standardize Exception Usage in Services
+
+Files: All files in core/services/
+
+Review all service methods that raise ValueError for input validation.
+
+Replace generic ValueError with specific custom exceptions from core/exceptions.py (e.g., ValidationError, BusinessRuleError) where appropriate.
+
+Ensure database-specific exceptions (like IntegrityError) caught in repository or service layers are re-raised as appropriate domain exceptions (e.g., DatabaseError, or ValidationError for unique constraints).
+
+III. ORM & Persistence Layer
+
+Goal: Streamline data mapping, improve repository robustness, and ensure database schema integrity.
+
+[x] Task 3.0: Standardize exception handling in all repository classes (Covers all repositories in infrastructure/persistence/sqlite/repositories.py and infrastructure/persistence/sqlite/cash_drawer_repository.py)
+
+[x] Task 3.1: Automate/Centralize ORM/Domain Model Mapping
+
+Files: infrastructure/persistence/sqlite/repositories.py and relevant models.
+
+Evaluate pydantic-sqlalchemy or SQLAlchemy-Pydantic for automatic conversion between SQLAlchemy ORM models and Pydantic domain models.
+
+If a library is not chosen, create dedicated mapper classes (e.g., ProductMapper) to centralize mapping logic currently in _map_*_orm_to_model functions.
+
+[x] Task 3.2: Clarify and Fix SqliteProductRepository.update_stock
+
+File: infrastructure/persistence/sqlite/repositories.py
+
+Determine if quantity_change parameter should be a delta or the new total stock. (Confirmed: It is a delta and correctly implemented as such.)
+
+Modify the implementation to be consistent: (No change needed to logic, already correct.)
+
+If delta: product_orm.quantity_in_stock += quantity_change
+
+If new total: Ensure service layer calculates and passes the new total.
+
+Update docstrings and calling code in InventoryService (add_inventory, adjust_inventory, decrease_stock_for_sale) to match the chosen logic. (Done: Docstrings in SqliteProductRepository.update_stock and InventoryService.adjust_inventory updated for clarity. Calling code in InventoryService is consistent.)
+
+[x] Task 3.3: Optimize SqliteSaleRepository.calculate_profit_for_period
+
+File: infrastructure/persistence/sqlite/repositories.py, core/services/sale_service.py, core/models/sale.py, infrastructure/persistence/sqlite/models_mapping.py
+
+Refactor the N+1 query problem when fetching product costs. (Addressed by storing cost_price on SaleItemOrm).
+
+Option A: Fetch all necessary product costs in a single query before the loop. (Not chosen)
+
+Option B: Consider adding cost_price_at_sale to SaleItemOrm and SaleItem domain model for historical accuracy and simpler profit calculation (this is a larger change involving migrations). (Implemented: Added cost_price to SaleItemOrm and SaleItem domain model. Updated SaleService to populate it. This allows the existing profit calculation query to use historical costs efficiently.)
+
+An Alembic migration script has been created as alembic/versions/placeholder_add_cost_price_to_sale_items.py. The user needs to integrate this with their Alembic workflow (generate a new revision, copy content, update IDs, and then run the upgrade).
+
+[x] Task 3.4: Review ProductOrm.last_updated onupdate Behavior
+
+File: infrastructure/persistence/sqlite/models_mapping.py
+
+Verify if onupdate=datetime.datetime.now correctly updates the timestamp when an ORM object is flushed. (Verified: This is the standard SQLAlchemy client-side mechanism and should work as expected for ORM updates. The timestamp is generated by the Python application upon flushing changes to a ProductOrm instance.)
+
+If not, implement manual timestamp updates in repository update methods or consider server_onupdate=sa.func.now() if database-level updates are preferred and supported by SQLite for this. (No change deemed necessary for now. If database-native timestamping for non-ORM updates is required, server_onupdate with triggers would be the path, involving a more complex migration.)
+
+[x] Task 3.5: JSON Storage for InvoiceOrm.customer_details
+
+Files: alembic/versions/*_create_initial_tables.py, infrastructure/persistence/sqlite/models_mapping.py, core/models/invoice.py, infrastructure/persistence/sqlite/repositories.py
+
+Evaluate using sqlalchemy.types.JSON for InvoiceOrm.customer_details if the SQLite version supports it (3.38.0+). (Implemented: Changed column type to JSON in InvoiceOrm. This simplifies serialization/deserialization, now handled by SQLAlchemy.)
+
+If sticking with Text, ensure json.dumps/loads is robustly handled with error checking in the mappers/repository. (Addressed: Invoice domain model updated to Pydantic BaseModel with a robust validator for parsing JSON string from ORM if Text type were used. Mapper _map_invoice_model_to_orm updated to remove manual json.dumps as JSON type handles it.)
+
+Alembic migration placeholder created (placeholder_change_customer_details_to_json.py) for changing Text to JSON type. User to integrate.
+
+[x] Task 3.6: Review SQLiteUUID Custom Type
+
+File: infrastructure/persistence/sqlite/types.py
+
+Thoroughly test the process_bind_param logic, especially for integer-like inputs, to ensure valid UUIDs are always generated or correctly processed. (Reviewed. Original logic for integers was flawed: it either padded integers to form a hex UUID string in a non-standard way or generated random UUIDs, risking data integrity. This has been changed.)
+
+Consider if generating a new random UUID is the correct fallback for invalid integer-to-UUID conversions, or if an error should be raised. (Decision: Generating random UUIDs for invalid inputs is incorrect. The process_bind_param method in SQLiteUUID has been refactored to be strict. It now accepts only None, uuid.UUID objects, or valid UUID strings. It raises ValueError for invalid UUID strings and TypeError for other incompatible types (e.g., integers), thus preventing silent data corruption or unexpected UUID generation.)
+
+[x] Task 3.7: Review ensure_all_models_mapped() and map_models()
+
+File: infrastructure/persistence/sqlite/models_mapping.py
+
+Issue: Both functions used hardcoded lists of ORM models, making them error-prone to maintain. `ensure_all_models_mapped` also had a dual role of verification and attempting a fix.
+
+Solution: 
+- Introduced a helper `get_defined_orm_models()` to dynamically discover ORM classes (subclasses of `Base` with a `__tablename__`) within `models_mapping.py` using `inspect`.
+- Refactored `ensure_all_models_mapped()`: Now uses dynamic discovery. It acts as a strict verifier, checking if all discovered models are in `Base.metadata.tables` and raises an error if not. The problematic "forced registration" (accessing `__table__`) has been removed from this function.
+- Refactored `map_models()`: Now uses dynamic discovery. It continues to attempt registration by accessing `__table__` for each discovered model and crucially, now also calls `configure_mappers()` to ensure relationships are correctly resolved. This makes it more robust for test setups or explicit initializations.
+- Benefit: Maintenance is simplified (no more hardcoded lists), and the roles of the functions are clearer. `ensure_all_models_mapped` is for verification, `map_models` is for explicit registration and mapper configuration.
+
+[~] Task 3.8: Python version and library updates (Planning Phase)
+
+File: (Project-wide: requirements.txt, pyproject.toml, relevant .py files for deprecations)
+
+Goal: Keep the project current, leverage new features, and maintain security by updating Python and key libraries.
+
+Sub-Task 3.8.1: Plan Python Version Upgrade
+    - Current Target: Python 3.10 or 3.11.
+    - Considerations for 3.10: Structural Pattern Matching, more precise typing, parenthesized context managers.
+    - Considerations for 3.11: Significant performance improvements (10-60% faster), Exception Groups and `except*`, `tomllib` for TOML parsing, `TaskGroups` in `asyncio`.
+    - Action: Evaluate benefits vs. potential breaking changes for each. 3.11 is generally preferred if compatibility with all libraries is confirmed.
+
+Sub-Task 3.8.2: Plan Key Library Updates
+    - SQLAlchemy:
+        - Current version (assume 1.x or early 2.x based on context). Target latest 2.x.
+        - Key Changes (if moving from 1.x to 2.0): Fully unified Core and ORM querying (future=True style becomes default), Python 3 only, improved type hinting with Mypy plugin.
+        - Action: Review current usage, especially query construction, session management. Consult SQLAlchemy's migration guides. Update `requirements.txt`.
+    - Pydantic:
+        - Current version (assume V1 based on `Config.from_attributes`). Target latest V2.x.
+        - Key Changes (V1 to V2): V2 is a rewrite in Rust for performance. Significant API changes (` BaseModel.parse_obj` -> `BaseModel.model_validate`, `Config` class to `model_config` dict). Might require careful refactoring of model definitions and usage.
+        - Action: Major undertaking. Consult Pydantic V2 migration guide. Update `core/models/*` and any other Pydantic model usage. Update `requirements.txt`.
+    - FastAPI:
+        - Target latest version.
+        - Considerations: Usually good backward compatibility. Check for Pydantic V2 compatibility if updating Pydantic. Review dependency on Starlette features.
+        - Action: Update `requirements.txt`, test API endpoints.
+    - Typer:
+        - Target latest version.
+        - Considerations: Generally stable. Check for changes in CLI argument/option handling or type annotation behavior.
+        - Action: Update `requirements.txt`, test CLI commands.
+    - PySide6 (Qt for Python):
+        - Target latest stable version (e.g., 6.5.x, 6.6.x or newer).
+        - Considerations: Check release notes for API changes, bug fixes relevant to UI stability, new Qt features. Ensure compatibility with `pytest-qt`.
+        - Action: Update `requirements.txt`. Test UI thoroughly. This is critical given existing UI test flakiness.
+    - ReportLab:
+        - Target latest version.
+        - Considerations: Check for API changes in PDF generation components.
+        - Action: Update `requirements.txt`. Test PDF generation features.
+
+Sub-Task 3.8.3: Address Compatibility and Deprecations
+    - Action: After each library update (or Python version change), run linters, type checkers (Mypy), and the full test suite.
+    - Proactively look for `DeprecationWarning`s during tests and address them.
+    - Consult library changelogs and migration guides for detailed instructions on handling breaking changes.
+
+Overall Plan:
+1. Start with Python version update (e.g., to 3.11) in a separate branch. Test thoroughly.
+2. Update libraries one by one, or in small related groups (e.g., Pydantic and FastAPI often updated together).
+3. Prioritize Pydantic V2 migration due to its significant impact if that's a planned step.
+4. PySide6 update should be handled carefully due to its criticality for the UI.
+
+[x] Task 3.9: Implement selected schema attribute naming strategy (camelCase for API)
+
+File: core/models/product.py, core/models/sale.py
+
+Strategy: Use `camelCase` for JSON fields in API requests/responses, while Python attributes remain `snake_case`.
+
+Implementation:
+- Target Models: `Product` (in `core/models/product.py`), `SaleItem` and `Sale` (in `core/models/sale.py`). (Note: Original task mentioned `core/schemas/*_schemas.py` but these files were not found; domain models appear to be used directly or as base for schemas).
+- Changes to `Product` model (`core/models/product.py`):
+    - Added `alias="camelCaseName"` to each `Field(...)` definition (e.g., `cost_price` -> `Field(..., alias="costPrice")`).
+    - Ensured `Config` class has `populate_by_name = True` (allows parsing by field name or alias) and `from_attributes = True` (for ORM mapping).
+- Changes to `SaleItem` and `Sale` models (`core/models/sale.py`):
+    - Refactored from `@dataclass` to inherit from `pydantic.BaseModel`.
+    - Added `alias="camelCaseName"` to each `Field(...)` definition.
+    - Added `Config` class with `populate_by_name = True` and `from_attributes = True`.
+    - Replaced `SaleItem.__post_init__` with a Pydantic `field_validator` for robust Decimal conversion of relevant fields (`quantity`, `unit_price`, `cost_price`).
+- Benefit: API layer can now serialize to and deserialize from `camelCase` JSON, aligning with common web API conventions, while internal Python code continues to use `snake_case`.
+
+IV. Service Layer Enhancements
+
+Goal: Improve service logic, robustness, and separation of concerns.
+
+[x] Task 4.1: Improve InvoicingService._generate_next_invoice_number
+
+File: core/services/invoicing_service.py
+
+For the desktop app context, consider storing the last used invoice number per POS in app_config.json or a dedicated small table.
+
+Update the logic to read the last number, increment, and save it back. This avoids querying all invoices.
+
+[x] Task 4.2: Refactor PDF Generation out of Services
+
+Files: core/services/invoicing_service.py, core/services/sale_service.py, infrastructure/reporting/document_generator.py
+
+Create a new utility/service in infrastructure/reporting/ (e.g., PdfGenerator or DocumentPdfGenerator) or enhance ReportBuilder.
+
+Modify InvoicingService.generate_invoice_pdf and SaleService.generate_receipt_pdf (and _generate_presupuesto_pdf) to prepare data and call the new PDF utility.
+
+The PDF utility should handle file paths, Config.PDF_OUTPUT_DIR, etc. (Implemented: New DocumentPdfGenerator created, services refactored, old builders removed.)
+
+[x] Task 4.3: Review CustomerService.update_customer Balance Handling
+
+File: core/services/customer_service.py, infrastructure/persistence/sqlite/repositories.py
+
+Ensure that the credit_balance is never unintentionally modified by the generic update_customer method.
+
+Consider making the repository's update method more granular (e.g., update_details_only) or ensure the ORM update logic only applies fields present in the input data. (Reviewed: Repository's generic update already excludes credit_balance. Service layer updated for clarity.)
+
+[x] Task 4.4: Configuration for allow_negative_stock_sales
+
+File: core/services/inventory_service.py, config.py
+
+Move the allow_negative_stock_sales = False flag to config.py or app_config.json to make it a configurable application setting. (Implemented: Added ALLOW_NEGATIVE_STOCK to config.py and updated InventoryService.)
+
+V. Configuration & Application Setup
+
+Goal: Make configuration more robust and explicit.
+
+[x] Task 5.1: Make Config.save() More Explicit
+
+File: config.py
+
+Define a _CONFIG_KEYS list or similar mechanism in the Config class.
+
+Modify Config.save() to iterate over _CONFIG_KEYS to build config_data, instead of cls.__dict__.items() and isupper().
+
+[x] Task 5.2: Review Error Handling in Config.load()/save()
+
+File: config.py
+
+Decide if printing errors and continuing is sufficient, or if specific exceptions should be raised on failure to load/save critical configuration.
+
+VI. Code Quality & Maintenance
+
+Goal: Improve overall code health, readability, and reduce technical debt.
+
+[x] Task 6.1: Complete Removal of Purchase Functionality
+
+Files: core/models/__init__.py, core/interfaces/repository_interfaces.py, any related model files (e.g., purchase.py, supplier.py if they were solely for purchases), ORM mappings, repository implementations, service methods, and tests.
+
+Delete all commented-out code related to purchases.
+
+Delete any associated files if they are no longer needed.
+
+Verify Alembic migrations: if purchase-related tables were ever created, ensure a downgrade migration exists or that they are correctly removed if this is a new schema.
+
+[x] Task 6.2: Standardize Logging
+
+Replace all print() statements used for debugging or informational output with calls to the logging module (e.g., self.logger.info(), self.logger.debug(), self.logger.error()).
+
+Ensure repositories and UI components also have access to or instantiate loggers if complex logging is needed there.
+
+[~] Task 6.3: Improve Docstrings and Comments
+
+Review UI components and repository methods for clarity and completeness of docstrings.
+
+Add comments to explain complex logic or non-obvious decisions.
+
+[x] Task 6.4: Review Test File Naming and Structure
+
+Files: tests/core/services/test_invoicing_service_extra.py, tests/core/services/test_sale_repository_fixed.py
+
+Consolidate tests for a single unit into its primary test file.
+
+If files are split due to size, ensure names reflect the specific aspect being tested.
+
+[~] Task 6.5: Review alembic.ini ruff.executable Path
+
+File: alembic.ini
+
+Test if ruff.executable = ruff works when the virtual environment is activated. If so, prefer it for portability. Otherwise, document why the specific path is needed.
+
+[x] Task 6.6: Refine PDF Output Paths in UI Views
+
+File: ui/views/sales_view.py (and potentially others)
+
+Replace hardcoded or relative path constructions (e.g., for "receipts", "Presupuestos") with paths derived from config.py (e.g., Config.PDF_OUTPUT_DIR, Config.RECEIPT_DIR) or QStandardPaths.
+
+[x] Task 6.7: Implement Centralized Desktop Error Handling
+
+Files: main.py, ui/dialogs/error_dialog.py
+
+Goal: Improve application stability and user experience by handling unexpected errors gracefully.
+
+Implemented:
+    - A global exception hook (`sys.excepthook`) is set in `main.py` (`handle_global_exception`).
+    - This hook logs the exception details (type, message, traceback) to `app_errors.log`.
+    - A reusable `ErrorDialog` (in `ui/dialogs/error_dialog.py`) has been created. It displays a user-friendly message, an optional collapsible section for detailed error information (including traceback), a button to copy details, and placeholder advice.
+    - The `handle_global_exception` function now uses `ErrorDialog`

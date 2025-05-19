@@ -5,7 +5,6 @@ import sys
 import pytest
 import shutil
 
-@pytest.mark.alembic
 def test_alembic_upgrade_head_on_fresh_db():
     """
     This test creates a fresh SQLite database and runs 'alembic upgrade head'
@@ -72,7 +71,6 @@ def test_alembic_upgrade_head_on_fresh_db():
 
 import sqlite3
 
-@pytest.mark.alembic
 def test_product_and_department_tables_schema():
     """
     After running all migrations, verify that the 'products' and 'departments' tables
@@ -166,7 +164,6 @@ def test_product_and_department_tables_schema():
             except Exception as e:
                 print(f"Warning: Error removing {db_path}: {e}")
 
-@pytest.mark.alembic
 def test_invoice_table_schema():
     """
     After running all migrations, verify that the 'invoices' table

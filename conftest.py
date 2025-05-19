@@ -58,7 +58,6 @@ def initialize_sqlalchemy_session():
         from infrastructure.persistence.sqlite.models_mapping import (
             UserOrm, DepartmentOrm, ProductOrm, InventoryMovementOrm, 
             SaleOrm, SaleItemOrm, CustomerOrm, CreditPaymentOrm,
-            SupplierOrm, PurchaseOrderOrm, PurchaseOrderItemOrm,
             InvoiceOrm, CashDrawerEntryOrm, ensure_all_models_mapped
         )
         # Make sure all models are properly mapped

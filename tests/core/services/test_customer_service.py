@@ -271,24 +271,25 @@ def test_delete_customer_with_balance(mock_session_scope, customer_service, mock
 def test_apply_payment_success(mock_session_scope, customer_service, mock_customer_repo, mock_credit_payment_repo, customer_1):
     """Test applying a payment successfully."""
     # Arrange
-    customer_id = customer_1.id
+    customer_id_as_int = customer_1.id # This is an int from the current fixture (e.g., 1)
+    customer_id_for_service_call = uuid.UUID(f'00000000-0000-0000-0000-{customer_id_as_int:012d}')
+
     payment_amount = Decimal("100.00")
     notes = "Test payment"
     user_id = 5
-    original_balance = customer_1.credit_balance # Should be 0 initially
+    
+    # Ensure customer_1.credit_balance is Decimal for calculation
+    original_balance = Decimal(str(customer_1.credit_balance))
     expected_new_balance = original_balance + payment_amount
 
     # Mock repo calls
-    mock_customer_repo.get_by_id.return_value = customer_1
+    # The repo's get_by_id and update_balance can take Any, so UUID is fine.
+    mock_customer_repo.get_by_id.return_value = customer_1 
     mock_customer_repo.update_balance.return_value = True
     
-    # Expected UUID for customer_id
-    expected_uuid = uuid.UUID(f'00000000-0000-0000-0000-{customer_id:012d}')
-    
-    # Mock payment creation with UUID for customer_id
     expected_payment_log = CreditPayment(
-        id=10,
-        customer_id=expected_uuid,  # Use the same UUID format as in the service
+        id=10, # Mocked return ID from repo.add
+        customer_id=customer_id_for_service_call, # This must be the UUID
         amount=payment_amount,
         notes=notes,
         user_id=user_id
@@ -297,45 +298,45 @@ def test_apply_payment_success(mock_session_scope, customer_service, mock_custom
 
     # Act
     result = customer_service.apply_payment(
-        customer_id=customer_id,
+        customer_id=customer_id_for_service_call, # Pass the UUID
         amount=payment_amount,
         notes=notes,
         user_id=user_id
     )
 
     # Assert
-    mock_customer_repo.get_by_id.assert_called_once_with(customer_id)
-    mock_customer_repo.update_balance.assert_called_once_with(customer_id, expected_new_balance) # Pass Decimal
+    mock_customer_repo.get_by_id.assert_called_once_with(customer_id_for_service_call)
+    mock_customer_repo.update_balance.assert_called_once_with(customer_id_for_service_call, expected_new_balance)
+    
     mock_credit_payment_repo.add.assert_called_once()
-    
-    # Check payment was created with correct values
     call_args, _ = mock_credit_payment_repo.add.call_args
-    payment_obj = call_args[0]
-    assert isinstance(payment_obj, CreditPayment)
-    assert payment_obj.customer_id == expected_uuid
-    assert payment_obj.amount == payment_amount
-    assert payment_obj.user_id == user_id
+    payment_obj_passed_to_repo = call_args[0]
     
-    # Check result matches expected
+    assert isinstance(payment_obj_passed_to_repo, CreditPayment)
+    assert payment_obj_passed_to_repo.customer_id == customer_id_for_service_call
+    assert payment_obj_passed_to_repo.amount == payment_amount
+    assert payment_obj_passed_to_repo.user_id == user_id
+    assert payment_obj_passed_to_repo.notes == notes
+    
     assert result == expected_payment_log
 
 @patch('core.services.customer_service.session_scope')
 def test_apply_payment_customer_not_found(mock_session_scope, customer_service, mock_customer_repo):
     """Test applying payment fails if customer not found."""
-    customer_id = 99
+    customer_id_uuid = uuid.uuid4() # Use a UUID for the call
     mock_customer_repo.get_by_id.return_value = None
-    with pytest.raises(ValueError, match=f"Customer with ID {customer_id} not found."):
-        customer_service.apply_payment(customer_id, Decimal("50.00"))
+    with pytest.raises(ValueError, match=f"Customer with ID {str(customer_id_uuid)} not found."): # Match the UUID string
+        customer_service.apply_payment(customer_id_uuid, Decimal("50.00"), user_id=1)
     # mock_session_scope.assert_called_once()
 
 @patch('core.services.customer_service.session_scope')
 def test_apply_payment_non_positive_amount(mock_session_scope, customer_service):
     """Test applying zero or negative payment fails."""
-    customer_id = 1
+    customer_id_uuid = uuid.UUID('00000000-0000-0000-0000-000000000001') # Use a consistent UUID
     with pytest.raises(ValueError, match="Payment amount must be positive."):
-        customer_service.apply_payment(customer_id, Decimal("0.00"))
+        customer_service.apply_payment(customer_id_uuid, Decimal("0.00"), user_id=1)
     with pytest.raises(ValueError, match="Payment amount must be positive."):
-        customer_service.apply_payment(customer_id, Decimal("-10.00"))
+        customer_service.apply_payment(customer_id_uuid, Decimal("-10.00"), user_id=1)
     mock_session_scope.assert_not_called()
 
 # --- Tests for increase_customer_debt ---
