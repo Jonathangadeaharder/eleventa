@@ -3,8 +3,79 @@ description:
 globs:
 alwaysApply: true
 ---
+# 03 - UI Components
 
-# Your rule content
+This rule outlines the structure and conventions for UI components in the Eleventa POS project.
 
-- You can @ files here
-- You can use markdown but dont have to
+## Overview:
+- **UI Framework/Library:** PySide6 (Qt for Python)
+- **Styling Solution:** QSS (Qt Style Sheets), e.g., `ui/style.qss` [@ui/style.qss](mdc:ui/style.qss). Potentially within `ui/styles/`.
+- **Component Directory:** `ui/` is the root for UI code.
+    - `ui/widgets/`: Reusable custom widgets. Example: `filter_dropdowns.py` [@ui/widgets/filter_dropdowns.py](mdc:ui/widgets/filter_dropdowns.py)
+    - `ui/dialogs/`: Application dialogs. Example: `login_dialog.py` [@ui/dialogs/login_dialog.py](mdc:ui/dialogs/login_dialog.py), `product_dialog.py` [@ui/dialogs/product_dialog.py](mdc:ui/dialogs/product_dialog.py)
+    - `ui/views/`: Larger composite views or pages. Example: `sales_view.py` [@ui/views/sales_view.py](mdc:ui/views/sales_view.py), `products_view.py` [@ui/views/products_view.py](mdc:ui/views/products_view.py)
+    - `ui/main_window.py`: The main application window. [@ui/main_window.py](mdc:ui/main_window.py)
+
+## Component Structure (Conceptual for PySide6):
+```python
+# Example: ui/widgets/custom_button.py (Illustrative, actual widgets in ui/widgets/)
+from PySide6.QtWidgets import QPushButton
+
+class CustomButton(QPushButton):
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+        # Custom initialization, styling, signal connections
+        # self.setStyleSheet("color: blue;") # Example
+```
+- Components are typically Python classes inheriting from PySide6 widgets (e.g., `QWidget`, `QPushButton`, `QDialog`).
+- UI layout can be defined programmatically or using Qt Designer (`.ui` files - check if used, often compiled to Python). Base classes like `ui/views/view_base.py` [@ui/views/view_base.py](mdc:ui/views/view_base.py) and `ui/dialogs/dialog_base.py` [@ui/dialogs/dialog_base.py](mdc:ui/dialogs/dialog_base.py) are used.
+
+## Key UI Areas/Modules:
+
+### 1. Main Application Window
+- **Description:** The primary window frame for the application.
+- **Location:** `ui/main_window.py` [@ui/main_window.py](mdc:ui/main_window.py)
+
+### 2. Views (`ui/views/`)
+- **Description:** Major sections or screens of the POS system.
+- **Key Components:**
+    - `sales_view.py` [@ui/views/sales_view.py](mdc:ui/views/sales_view.py)
+    - `products_view.py` [@ui/views/products_view.py](mdc:ui/views/products_view.py)
+    - `inventory_view.py` [@ui/views/inventory_view.py](mdc:ui/views/inventory_view.py)
+    - `customers_view.py` [@ui/views/customers_view.py](mdc:ui/views/customers_view.py)
+    - `cash_drawer_view.py` [@ui/views/cash_drawer_view.py](mdc:ui/views/cash_drawer_view.py)
+    - `corte_view.py` [@ui/views/corte_view.py](mdc:ui/views/corte_view.py)
+    - `reports_view.py` [@ui/views/reports_view.py](mdc:ui/views/reports_view.py)
+    - `invoices_view.py` [@ui/views/invoices_view.py](mdc:ui/views/invoices_view.py)
+    - `configuration_view.py` [@ui/views/configuration_view.py](mdc:ui/views/configuration_view.py)
+    - Base class: `view_base.py` [@ui/views/view_base.py](mdc:ui/views/view_base.py)
+
+### 3. Dialogs (`ui/dialogs/`)
+- **Description:** Modal or non-modal dialogs for specific tasks.
+- **Key Components:**
+    - `login_dialog.py` [@ui/dialogs/login_dialog.py](mdc:ui/dialogs/login_dialog.py)
+    - `product_dialog.py` [@ui/dialogs/product_dialog.py](mdc:ui/dialogs/product_dialog.py)
+    - `customer_dialog.py` [@ui/dialogs/customer_dialog.py](mdc:ui/dialogs/customer_dialog.py)
+    - `add_inventory_dialog.py` [@ui/dialogs/add_inventory_dialog.py](mdc:ui/dialogs/add_inventory_dialog.py)
+    - `cash_drawer_dialogs.py` [@ui/dialogs/cash_drawer_dialogs.py](mdc:ui/dialogs/cash_drawer_dialogs.py) (likely contains multiple dialogs)
+    - `department_dialog.py` [@ui/dialogs/department_dialog.py](mdc:ui/dialogs/department_dialog.py)
+    - `register_payment_dialog.py` [@ui/dialogs/register_payment_dialog.py](mdc:ui/dialogs/register_payment_dialog.py)
+    - Base class: `dialog_base.py` [@ui/dialogs/dialog_base.py](mdc:ui/dialogs/dialog_base.py)
+
+### 4. Reusable Widgets (`ui/widgets/`)
+- **Description:** Custom, reusable UI elements. Standard Qt widgets are also heavily used.
+- **Key Components:**
+    - `filter_dropdowns.py` [@ui/widgets/filter_dropdowns.py](mdc:ui/widgets/filter_dropdowns.py)
+
+## State Management:
+- **UI-specific Models:** `ui/models/` may contain view models or classes to hold and manage data for the UI.
+- **Interaction with Core Services:** UI components will call methods on the core services (from `core/services/`) to fetch data and perform business operations. Data is then adapted for display.
+
+## Theming/Styling:
+- **QSS:** Qt Style Sheets are used for styling. A global stylesheet might be `ui/style.qss` [@ui/style.qss](mdc:ui/style.qss) or organized in `ui/styles/`.
+- **Resources:** `ui/resources/` likely holds icons, images, and other assets, possibly compiled into Qt Resource files (`.qrc`).
+
+## Accessibility (a11y):
+- Qt has built-in accessibility features. Ensure proper use of widget properties (e.g., `accessibleName`, `accessibleDescription`) for custom widgets.
+
+Use this file to detail the specific UI component strategy for 'eleventa'. @-mention key component files or directories.

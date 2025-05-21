@@ -48,6 +48,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+.coverage_data/
 
 # Translations
 *.mo
@@ -145,4 +146,7 @@ receipts/
 *.sqlite3
 
 # IDE specific
-.idea/ 
+.idea/
+
+# Specific generated files
+collected_files_output.txt 

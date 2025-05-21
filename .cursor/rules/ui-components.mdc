@@ -3,8 +3,31 @@ description:
 globs:
 alwaysApply: true
 ---
+# UI Components General Guide
 
-# Your rule content
+This rule provides a general overview of User Interface (UI) components within the 'eleventa' project. For more detailed conventions and structure, please refer to [.cursor/rules/03-ui-components.mdc](mdc:.cursor/rules/03-ui-components.mdc).
 
-- You can @ files here
-- You can use markdown but dont have to
+## Core Philosophy:
+- **Reusability:** Components should be designed to be reusable across different parts of the application (e.g., custom widgets in `ui/widgets/`).
+- **Composability:** Build complex UIs (views in `ui/views/`, dialogs in `ui/dialogs/`) by composing simpler, focused components and standard Qt widgets.
+- **Maintainability:** Clear separation of concerns (structure in Python files, styling in QSS `ui/style.qss`, logic interacting with core services).
+- **Accessibility:** UI components should be developed with Qt's accessibility (a11y) best practices in mind.
+
+## Key Directories:
+- `ui/`: Primary location for all PySide6 UI code.
+    - `ui/main_window.py`: Main application window. [@ui/main_window.py](mdc:ui/main_window.py)
+    - `ui/views/`: Major application views/screens. [@ui/views/](mdc:ui/views)
+    - `ui/dialogs/`: Various dialogs used in the application. [@ui/dialogs/](mdc:ui/dialogs)
+    - `ui/widgets/`: Reusable custom widgets. [@ui/widgets/](mdc:ui/widgets)
+- `ui/resources/`: For static assets like icons, images (often compiled `.qrc` files). [@ui/resources/](mdc:ui/resources)
+- `ui/styles/` & `ui/style.qss`: For QSS stylesheets. [@ui/styles/](mdc:ui/styles), [@ui/style.qss](mdc:ui/style.qss)
+
+## Technology Stack:
+- **Frontend Framework/Library:** PySide6 (Qt for Python)
+- **Styling Approach:** QSS (Qt Style Sheets)
+
+## Getting Help:
+- If you are looking for a specific component, try searching in the relevant subdirectories of `ui/` (e.g., `ui/widgets/`, `ui/views/`, `ui/dialogs/`).
+- For detailed guidelines on creating or modifying components, see [.cursor/rules/03-ui-components.mdc](mdc:.cursor/rules/03-ui-components.mdc).
+
+Remember to fill in the specific technologies used in the 'eleventa' project.

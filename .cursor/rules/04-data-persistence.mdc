@@ -3,8 +3,48 @@ description:
 globs:
 alwaysApply: true
 ---
+# 04 - Data Persistence
 
-# Your rule content
+This rule covers how data is stored, accessed, and managed in the 'eleventa' project.
 
-- You can @ files here
-- You can use markdown but dont have to
+## Primary Data Store:
+- **Database Type:** SQLite (as indicated by `eleventa_clone.db` and `infrastructure/persistence/sqlite/`)
+- **ORM/Query Builder:** SQLAlchemy (from `requirements.txt` and usage in `infrastructure/persistence/sqlite/`)
+- **Connection Details:** Managed in `infrastructure/persistence/sqlite/database.py` [@infrastructure/persistence/sqlite/database.py](mdc:infrastructure/persistence/sqlite/database.py). Likely uses a database URL from `config.py` [@config.py](mdc:config.py) or environment variables (via `python-dotenv`).
+
+## Data Models / Schemas:
+- **Domain Models (Pydantic):** Defined in `core/models/` (e.g., `user.py` [@core/models/user.py](mdc:core/models/user.py), `product.py` [@core/models/product.py](mdc:core/models/product.py)). These define the shape of data in the application domain.
+- **Persistence Models (SQLAlchemy ORM):** Defined in `infrastructure/persistence/sqlite/models_mapping.py` [@infrastructure/persistence/sqlite/models_mapping.py](mdc:infrastructure/persistence/sqlite/models_mapping.py). These map domain objects to database tables.
+- **Naming Conventions:** (Review `models_mapping.py` for conventions on table names, column names, relationships).
+
+## Migrations:
+- **Tool Used:** Alembic
+- **Migration Directory:** `alembic/` [@alembic/](mdc:alembic)
+- **Configuration:** `alembic.ini` [@alembic.ini](mdc:alembic.ini)
+- **Process for creating/running migrations (from README.md):
+    - Generate: `alembic revision --autogenerate -m "Description of changes"`
+    - Apply: `alembic upgrade head`
+- **Alembic Environment:** `alembic/env.py` [@alembic/env.py](mdc:alembic/env.py) configures how migrations connect to the database and find SQLAlchemy models (likely points to `models_mapping.py`).
+
+## Data Access Layer (DAL) / Repositories:
+- **Pattern Used:** Repository Pattern.
+- **Interfaces:** Defined in `core/interfaces/repository_interfaces.py` [@core/interfaces/repository_interfaces.py](mdc:core/interfaces/repository_interfaces.py).
+- **Location:** Implementations are in `infrastructure/persistence/sqlite/repositories.py` [@infrastructure/persistence/sqlite/repositories.py](mdc:infrastructure/persistence/sqlite/repositories.py) and potentially other specific repository files like `cash_drawer_repository.py` [@infrastructure/persistence/sqlite/cash_drawer_repository.py](mdc:infrastructure/persistence/sqlite/cash_drawer_repository.py).
+- **Base Repository:** `infrastructure/persistence/sqlite/base_repository.py` [@infrastructure/persistence/sqlite/base_repository.py](mdc:infrastructure/persistence/sqlite/base_repository.py)
+- **Purpose:** To abstract SQLAlchemy database interactions (queries, CRUD operations) from the core services. Services use these interfaces.
+
+## Caching Strategy:
+- **Caching Layer:** (Not explicitly identified yet. Check `requirements.txt` for caching libraries like `redis` or `memcached`, or look for in-memory caching patterns if any).
+- **What is cached?:** (To be determined if caching is used).
+- **Cache Invalidation:** (To be determined if caching is used).
+
+## Backups & Recovery:
+- For SQLite, backups are typically managed by copying the database file (`eleventa_clone.db`). No specific in-app strategy identified yet.
+
+## Important Files:
+- SQLAlchemy Models: `infrastructure/persistence/sqlite/models_mapping.py` [@infrastructure/persistence/sqlite/models_mapping.py](mdc:infrastructure/persistence/sqlite/models_mapping.py)
+- Database Setup: `infrastructure/persistence/sqlite/database.py` [@infrastructure/persistence/sqlite/database.py](mdc:infrastructure/persistence/sqlite/database.py)
+- Alembic Config: `alembic.ini` [@alembic.ini](mdc:alembic.ini), `alembic/env.py` [@alembic/env.py](mdc:alembic/env.py)
+- Repository Implementations: `infrastructure/persistence/sqlite/repositories.py` [@infrastructure/persistence/sqlite/repositories.py](mdc:infrastructure/persistence/sqlite/repositories.py)
+
+Please update this rule with the specifics of 'eleventa' project's data persistence strategy. Use @-mentions for relevant files/directories.

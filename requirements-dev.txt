@@ -1,8 +1,10 @@
 pytest-qt
-pytest-mock
+pytest-mock==3.14.0
 importlib-metadata
 sqlalchemy
 pytest-cov
 bcrypt
 black
 ruff
+pytest-timeout
+# Add other dev dependencies here

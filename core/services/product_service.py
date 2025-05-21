@@ -269,3 +269,52 @@ class ProductService(ServiceBase):
             return updated_department
             
         return self._with_session(_update_department, department_data)
+
+    def update_prices_by_percentage(self, percentage: Decimal, department_id: Optional[int] = None) -> int:
+        """
+        Updates product prices by a given percentage.
+        If department_id is provided, only updates products in that department.
+        Returns the number of products updated.
+        """
+        if not isinstance(percentage, Decimal) or percentage <= Decimal("-100") :
+            raise ValueError("Porcentaje debe ser un número mayor que -100.")
+
+        def _update_prices(session: Session, percentage: Decimal, department_id: Optional[int]) -> int:
+            prod_repo = self._get_repository(self.product_repo_factory, session)
+            
+            products_to_update: List[Product]
+            if department_id is not None:
+                self.logger.info(f"Fetching products for department ID: {department_id} to update prices by {percentage}%.")
+                products_to_update = prod_repo.get_by_department_id(department_id)
+            else:
+                self.logger.info(f"Fetching all products to update prices by {percentage}%.")
+                products_to_update = prod_repo.get_all()
+
+            if not products_to_update:
+                self.logger.info("No products found to update.")
+                return 0
+
+            updated_count = 0
+            for product in products_to_update:
+                if product.sell_price is not None:
+                    original_price = product.sell_price
+                    increase_amount = original_price * (percentage / Decimal("100"))
+                    new_price = original_price + increase_amount
+                    # Ensure price is not negative, though percentage validation should prevent this for positive prices
+                    product.sell_price = max(Decimal("0.00"), new_price.quantize(Decimal("0.01"))) 
+                    
+                    # Update cost price proportionally if it exists
+                    if product.cost_price is not None:
+                        original_cost_price = product.cost_price
+                        cost_increase_amount = original_cost_price * (percentage / Decimal("100"))
+                        new_cost_price = original_cost_price + cost_increase_amount
+                        product.cost_price = max(Decimal("0.00"), new_cost_price.quantize(Decimal("0.01")))
+
+                    prod_repo.update(product) # Assuming update handles individual product persistence
+                    self.logger.debug(f"Updated product ID {product.id} ('{product.code}'): sell_price from {original_price} to {product.sell_price}, cost_price updated proportionally.")
+                    updated_count += 1
+            
+            self.logger.info(f"Successfully updated prices for {updated_count} products by {percentage}%.")
+            return updated_count
+
+        return self._with_session(_update_prices, percentage, department_id)

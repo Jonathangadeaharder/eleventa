@@ -3,8 +3,65 @@ description:
 globs:
 alwaysApply: true
 ---
+# 06 - Testing
 
-# Your rule content
+This rule outlines the testing strategy and conventions for the Eleventa POS project.
 
-- You can @ files here
-- You can use markdown but dont have to
+## Overview:
+- **Testing Framework:** Pytest (configured via `pytest.ini` [@pytest.ini](mdc:pytest.ini) and `pyproject.toml` [@pyproject.toml](mdc:pyproject.toml)).
+- **Main Test Directory:** `tests/` [@tests/](mdc:tests). The structure within `tests/` mirrors the application's main directories (`core`, `infrastructure`, `ui`).
+- **Global Fixtures:** Root `conftest.py` [@conftest.py](mdc:conftest.py) and `tests/conftest.py` [@tests/conftest.py](mdc:tests/conftest.py) provide shared fixtures, especially for database setup and UI testing.
+- **Coverage:** Code coverage is measured using `coverage.py` (configured in `.coveragerc` [@.coveragerc](mdc:.coveragerc)) and reports are often generated in `htmlcov/`.
+- **Test Database:** A dedicated test database (e.g., `tests/test_db.sqlite` [@tests/test_db.sqlite](mdc:tests/test_db.sqlite)) is used, managed by fixtures to ensure isolation.
+
+## Types of Tests:
+
+### 1. Unit Tests
+- **Purpose:** Test individual components (functions, classes, methods) in isolation.
+- **Location:** Primarily within `tests/core/`, `tests/infrastructure/`, and `tests/ui/` subdirectories, targeting specific modules.
+    - `tests/core/services/`: For testing core business logic in services.
+    - `tests/core/models/`: For testing Pydantic model validation and behavior (if any complex logic exists).
+    - `tests/infrastructure/persistence/`: For testing repository logic (often with mocked database interactions or a real test DB via fixtures).
+    - `tests/ui/widgets/`, `tests/ui/dialogs/`, `tests/ui/views/`: For testing individual UI components, their state, and basic interactions (often mocking service calls).
+
+### 2. Integration Tests
+- **Purpose:** Test the interaction between multiple components or layers.
+- **Location:** `tests/integration/` [@tests/integration/](mdc:tests/integration)
+    - Examples:
+        - Testing the flow from a service call through the repository to the (test) database.
+        - Testing interaction between different services.
+        - Testing UI components interacting with live (or mocked but stateful) services.
+
+### 3. UI Tests (Potentially with QtTest)
+- **Purpose:** Test the user interface functionality, event handling, and visual states.
+- **Location:** `tests/ui/` [@tests/ui/](mdc:tests/ui)
+- **Tools:** PySide6's `QtTest` module is likely used for simulating user interactions (clicks, input) and asserting UI states.
+- Files like `tests/ui/test_login_dialog.py` suggest this type of testing.
+
+### 4. Smoke Tests
+- **Purpose:** Basic tests to ensure the application starts and key functionalities are broadly working.
+- **Location:** e.g., `tests/test_smoke.py` [@tests/test_smoke.py](mdc:tests/test_smoke.py)
+
+## Running Tests:
+- **Command (from README.md):** `python -m pytest`
+- This command will auto-discover and run tests from the `tests/` directory based on `pytest.ini` configuration.
+
+## Fixtures (`tests/fixtures/`, `conftest.py`):
+- **Database Fixtures:** Automatically set up and tear down the test database, providing clean state for tests (e.g., in-memory SQLite or a test file DB).
+- **Service Fixtures:** May provide mocked or real instances of services for tests.
+- **UI Fixtures:** May set up Qt application instances, parent windows, or specific UI components for testing.
+- Custom fixtures are defined in `conftest.py` files and the `tests/fixtures/` directory.
+
+## Test Utilities:
+- Helper functions and utilities for testing might be found in `tests/utils/` [@tests/utils/](mdc:tests/utils).
+
+## Key Files & Directories:
+- `pytest.ini` [@pytest.ini](mdc:pytest.ini): Pytest configuration.
+- `conftest.py` [@conftest.py](mdc:conftest.py) (root) and `tests/conftest.py` [@tests/conftest.py](mdc:tests/conftest.py): Shared fixtures.
+- `tests/core/` [@tests/core/](mdc:tests/core): Unit tests for core logic.
+- `tests/infrastructure/` [@tests/infrastructure/](mdc:tests/infrastructure): Unit/integration tests for persistence and other infra.
+- `tests/ui/` [@tests/ui/](mdc:tests/ui): UI component and interaction tests.
+- `tests/integration/` [@tests/integration/](mdc:tests/integration): Integration tests across layers.
+- `.coveragerc` [@.coveragerc](mdc:.coveragerc): Coverage configuration.
+
+This rule should be kept up-to-date with any significant changes to the testing strategy or structure.

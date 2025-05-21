@@ -1,10 +1,35 @@
 ---
-description:
-globs:
+description: 
+globs: 
 alwaysApply: true
 ---
+# 01 - Project Overview
 
-# Your rule content
+This rule provides a high-level understanding of the project.
 
-- You can @ files here
-- You can use markdown but dont have to
+## Key Information:
+- **Project Name:** Eleventa POS - Backend
+- **Main Goal:** A Python backend for a Point of Sale (POS) system.
+- **Target Users:** (Likely businesses/individuals needing a POS system, e.g., retail stores, small shops)
+- **Core Technologies:** Python, PySide6/Qt (for UI), Alembic (for DB migrations), SQLite (primary database inferred).
+- **Key Architectural Patterns:** (Likely a layered architecture: UI, Core/Domain, Infrastructure)
+
+## Getting Started:
+- **Repository Structure:**
+    - `main.py`: Main application entry point. [@main.py](mdc:main.py)
+    - `core/`: Core domain logic. Contains domain models in `core/models/` and services in `core/services/`.
+    - `infrastructure/`: Implementation details for persistence (e.g., `infrastructure/persistence/sqlite/` for SQLite ORM models and repositories) and other external integrations.
+    - `ui/`: User interface components, views, and dialogs (using PySide6/Qt).
+    - `tests/`: Contains all tests (unit, integration, UI). Test structure mirrors the application structure.
+    - `scripts/`: Utility and helper scripts.
+    - `alembic/`: Database migration scripts managed by Alembic.
+    - `docs/`: Project documentation.
+    - `README.md`: Essential setup and project information. [@README.md](mdc:README.md)
+- **Setup Instructions:** Refer to [@README.md](mdc:README.md) for detailed setup. `pip install -r requirements.txt` is key.
+- **Main Entry Point:** `main.py` [@main.py](mdc:main.py)
+
+## Important Files:
+- Configuration: `config.py` [@config.py](mdc:config.py), `app_config.json` [@app_config.json](mdc:app_config.json), `alembic.ini` [@alembic.ini](mdc:alembic.ini)
+- Dependencies: `requirements.txt` [@requirements.txt](mdc:requirements.txt), `requirements-dev.txt` [@requirements-dev.txt](mdc:requirements-dev.txt)
+
+Remember to replace placeholders like "(Likely businesses...)" with actual project details if known more specifically!

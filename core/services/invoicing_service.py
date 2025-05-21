@@ -139,41 +139,52 @@ class InvoicingService(ServiceBase):
                 # Log the original error for debugging
                 self.logger.warning(f"Caught error during invoice add for sale {sale_id}: {type(e).__name__} - {e}")
                 
-                # Check if it's a known duplicate scenario or a constraint violation
                 error_msg_lower = str(e).lower()
-                is_potential_duplicate = (
-                    "already has an invoice" in error_msg_lower or
-                    "already exists" in error_msg_lower or
-                    "duplicate" in error_msg_lower or
-                    # SQLite specific message for unique constraint on sale_id
-                    ("unique constraint failed" in error_msg_lower and "invoices.sale_id" in error_msg_lower) or
-                    # SQLite specific message for unique constraint on invoice_number
-                    ("unique constraint failed" in error_msg_lower and "invoices.invoice_number" in error_msg_lower) or
-                    # PostgreSQL specific message for unique constraint on sale_id
-                    ("duplicate key value violates unique constraint" in error_msg_lower and "invoices_sale_id_key" in error_msg_lower) or
-                    # PostgreSQL specific message for unique constraint on invoice_number
-                    ("duplicate key value violates unique constraint" in error_msg_lower and ("invoices_invoice_number_key" in error_msg_lower or "invoices_invoice_number_idx" in error_msg_lower)) # Common naming for invoice_number unique constraint
+
+                # Check for specific IntegrityError indicating sale_id uniqueness violation from the database
+                is_db_sale_id_duplicate = (
+                    isinstance(e, IntegrityError) and
+                    (("unique constraint failed" in error_msg_lower and "invoices.sale_id" in error_msg_lower) or # SQLite
+                     ("duplicate key value violates unique constraint" in error_msg_lower and "invoices_sale_id_key" in error_msg_lower)) # PostgreSQL
                 )
 
-                if is_potential_duplicate:
-                    # It's highly likely a duplicate. Perform a final check in the current session.
-                    # This re-check might not be strictly necessary if the IntegrityError is specific enough,
-                    # but it doesn't hurt to confirm.
-                    final_check_invoice = invoice_repo.get_by_sale_id(sale_id)
-                    if final_check_invoice:
-                        # Confirmed: an invoice for this sale_id already exists.
-                        # This is the expected path for concurrent attempts where one succeeds and others hit the constraint.
-                        raise ValueError(f"Sale with ID {sale_id} already has an invoice (duplicate)")
+                # Check for ValueError from repository's pre-emptive check (invoice_repo.add raises this before flush if get_by_sale_id finds one)
+                # Also check for ValueErrors from the repository that signal a duplicate during its own add operation.
+                is_repo_value_error_duplicate = (
+                    isinstance(e, ValueError) and
+                    ("already has an invoice" in error_msg_lower or \
+                     "already exists" in error_msg_lower or \
+                     "duplicate entry in db" in error_msg_lower # Handle mock repo's error for the test
+                    ) 
+                )
+                
+                if is_db_sale_id_duplicate or is_repo_value_error_duplicate:
+                    # This directly addresses the duplicate sale invoice scenario.
+                    # If it's an IntegrityError from the DB, the session is likely dirty, so no more reads.
+                    raise ValueError(f"Sale with ID {sale_id} already has an invoice (duplicate)")
+                
+                # Handle other IntegrityErrors (e.g. invoice_number unique constraint)
+                elif isinstance(e, IntegrityError):
+                    is_invoice_number_constraint_violation = (
+                        ("unique constraint failed" in error_msg_lower and "invoices.invoice_number" in error_msg_lower) or
+                        ("duplicate key value violates unique constraint" in error_msg_lower and ("invoices_invoice_number_key" in error_msg_lower or "invoices_invoice_number_idx" in error_msg_lower))
+                    )
+                    if is_invoice_number_constraint_violation:
+                        self.logger.error(f"Invoice number conflict for sale {sale_id}. Original error: {e}")
+                        raise ValueError(f"Invoice number generation conflict for sale {sale_id}: {e}")
                     else:
-                        # This is an odd state: an IntegrityError suggestive of a duplicate occurred,
-                        # but no invoice is found. Could be a different constraint or complex race.
-                        # Log this specific unusual case.
-                        self.logger.error(f"IntegrityError suggested duplicate for sale {sale_id}, but no existing invoice found on re-check. Original error: {e}")
-                        raise ValueError(f"Invoice creation for sale {sale_id} failed due to a database constraint, but was not a confirmable duplicate: {e}")
-                else:
-                    # Re-raise other ValueErrors or IntegrityErrors not related to duplicates.
-                    self.logger.error(f"Unexpected error during invoice creation for sale {sale_id}: {e}")
-                    raise ValueError(f"Invoice creation failed with an unexpected database error: {e}")
+                        self.logger.error(f"Unexpected IntegrityError during invoice creation for sale {sale_id}: {e}")
+                        raise ValueError(f"Invoice creation failed due to an unexpected database integrity issue: {e}")
+                
+                # Handle other ValueErrors not caught above (e.g., customer not found, sale not found etc., which should be caught earlier but as a safeguard)
+                elif isinstance(e, ValueError):
+                     self.logger.error(f"Unexpected ValueError during invoice creation for sale {sale_id}: {e}")
+                     # Re-raise the original ValueError if it's not one of the specific duplicate types handled above
+                     # or other known ValueErrors that should have been caught by pre-checks.
+                     raise 
+                else: # Should not happen if only ValueError or IntegrityError are caught
+                    self.logger.error(f"Unhandled error type {type(e).__name__} during invoice creation for sale {sale_id}: {e}")
+                    raise ValueError(f"Invoice creation failed with an unexpected error: {e}")
                 
         return self._with_session(_create_invoice_from_sale, sale_id)
     

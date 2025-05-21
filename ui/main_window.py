@@ -1,7 +1,7 @@
 import sys
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QStatusBar, QStackedWidget, QToolBar, QWidget, QLabel,
-    QVBoxLayout
+    QVBoxLayout, QMessageBox
 )
 from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtCore import Qt, Slot, QSize
@@ -28,6 +28,8 @@ from core.services.corte_service import CorteService
 from core.services.reporting_service import ReportingService
 from core.services.cash_drawer_service import CashDrawerService
 from core.models.user import User
+
+from ui.dialogs.update_prices_dialog import UpdatePricesDialog
 
 # Placeholder for future views (keep for other views)
 class PlaceholderWidget(QWidget):
@@ -140,6 +142,7 @@ class MainWindow(QMainWindow):
 
         self._create_toolbar()
         self._create_status_bar()
+        self._create_menu_bar()
 
         # Start at the Sales view by default
         self.switch_view(self.view_indices["Sales"])
@@ -242,6 +245,32 @@ class MainWindow(QMainWindow):
                 font-weight: bold;
             """)
             self.status_bar.addPermanentWidget(self.user_label)
+
+    def _create_menu_bar(self):
+        menu_bar = self.menuBar()
+
+        # Tools Menu
+        tools_menu = menu_bar.addMenu("&Herramientas")
+
+        update_prices_action = QAction("Actualizar Precios por Porcentaje...", self)
+        update_prices_action.setStatusTip("Actualizar precios de productos por porcentaje para todos o un departamento")
+        update_prices_action.triggered.connect(self.open_update_prices_dialog)
+        tools_menu.addAction(update_prices_action)
+
+        # Add other tools actions here if needed
+
+    @Slot()
+    def open_update_prices_dialog(self):
+        # Ensure product_service is available
+        if hasattr(self, 'product_service') and self.product_service:
+            UpdatePricesDialog.run_update_prices_dialog(self.product_service, self)
+            # Optionally, refresh product view if it's active and showing products
+            if self.stacked_widget.currentWidget() == self.views.get("Products"):
+                products_view = self.views.get("Products")
+                if hasattr(products_view, 'load_products'): # Check if view has refresh method
+                    products_view.load_products() 
+        else:
+            QMessageBox.critical(self, "Error", "Servicio de productos no disponible.")
 
     @Slot(int)
     def switch_view(self, index: int):

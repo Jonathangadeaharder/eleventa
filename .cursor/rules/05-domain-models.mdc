@@ -3,8 +3,71 @@ description:
 globs:
 alwaysApply: true
 ---
+# 05 - Domain Models
 
-# Your rule content
+This rule describes the core domain models of the Eleventa POS application. These models represent the fundamental business entities and data structures used throughout the core logic.
 
-- You can @ files here
-- You can use markdown but dont have to
+## Overview:
+- **Location:** `core/models/` [@core/models/](mdc:core/models)
+- **Technology:** Pydantic models are used for defining domain entities. This provides data validation, serialization, and clear schema definitions.
+- **Purpose:** These models are used by core services (`core/services/`) and are mapped to persistence models (SQLAlchemy) by the infrastructure layer (`infrastructure/persistence/sqlite/models_mapping.py`). They ensure data consistency and integrity within the application's business logic.
+
+## Key Domain Models (from `core/models/`):
+
+- **User (`user.py`)**
+    - Represents a user of the POS system (e.g., cashier, admin).
+    - Likely includes fields for username, hashed password, roles/permissions.
+    - File: `core/models/user.py` [@core/models/user.py](mdc:core/models/user.py)
+
+- **Product (`product.py`)**
+    - Represents a product or item sold through the POS.
+    - Fields might include name, description, price, SKU, category/department, tax information.
+    - File: `core/models/product.py` [@core/models/product.py](mdc:core/models/product.py)
+
+- **Department (`department.py`)**
+    - Represents a product category or department for organizing products.
+    - Fields: name, description.
+    - File: `core/models/department.py` [@core/models/department.py](mdc:core/models/department.py)
+
+- **Sale (`sale.py`)**
+    - Represents a sales transaction.
+    - Likely includes a list of sale items (products sold, quantity, price), total amount, payment details, customer ID, timestamp.
+    - File: `core/models/sale.py` [@core/models/sale.py](mdc:core/models/sale.py)
+
+- **Customer (`customer.py`)**
+    - Represents a customer.
+    - Fields: name, contact information, purchase history references.
+    - File: `core/models/customer.py` [@core/models/customer.py](mdc:core/models/customer.py)
+
+- **Inventory (`inventory.py`)**
+    - Represents stock levels for products.
+    - Likely links to a Product and includes quantity on hand, last updated timestamp.
+    - File: `core/models/inventory.py` [@core/models/inventory.py](mdc:core/models/inventory.py)
+
+- **Invoice (`invoice.py`)**
+    - Represents an invoice generated for a sale.
+    - Fields: invoice number, sale reference, customer details, itemized list, totals, payment status.
+    - File: `core/models/invoice.py` [@core/models/invoice.py](mdc:core/models/invoice.py)
+
+- **CashDrawer (`cash_drawer.py`)**
+    - Represents the state of a cash drawer, including transactions like opening balance, cash in/out, and closing balance.
+    - File: `core/models/cash_drawer.py` [@core/models/cash_drawer.py](mdc:core/models/cash_drawer.py)
+
+- **CreditPayment (`credit_payment.py`)**
+    - Represents a payment made towards a credit sale or customer account.
+    - File: `core/models/credit_payment.py` [@core/models/credit_payment.py](mdc:core/models/credit_payment.py)
+
+- **Error Models (`error_models.py`)**
+    - Defines Pydantic models for structured error responses, used for consistent error handling and communication (e.g., to the UI or in logs).
+    - File: `core/models/error_models.py` [@core/models/error_models.py](mdc:core/models/error_models.py)
+
+## Relationships:
+- Domain models often have relationships with each other (e.g., a Sale has multiple Products, a Product belongs to a Department).
+- These relationships are typically represented by holding IDs of related entities or lists of nested Pydantic models.
+
+## Usage:
+- Instantiated and manipulated by `core/services/`.
+- Passed to the `infrastructure/persistence/` layer (repositories) for storage and retrieval, where they are mapped to/from SQLAlchemy models.
+- Used by the `ui/` layer (often via services) to display data.
+
+This rule should be updated if new domain models are added or existing ones are significantly changed.

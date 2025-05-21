@@ -3,8 +3,86 @@ description:
 globs:
 alwaysApply: true
 ---
+# 02 - Core Services
 
-# Your rule content
+This rule describes the main services or backend components of the application, primarily located in `core/services/`.
 
-- You can @ files here
-- You can use markdown but dont have to
+## Overview:
+- Core services encapsulate the primary business logic of the Eleventa POS system.
+- They are typically used by the UI layer (`ui/`) and interact with the data persistence layer (`infrastructure/persistence/`).
+- Data models used by services are often defined in `core/models/` and validated using Pydantic.
+
+## Key Services:
+
+### 1. User Service (`user_service.py`)
+- **Purpose:** Manages user authentication (likely login, registration, password management using bcrypt), sessions, and access control.
+- **Key Files/Modules:**
+    - `core/services/user_service.py` [@core/services/user_service.py](mdc:core/services/user_service.py)
+    - `core/models/user.py` [@core/models/user.py](mdc:core/models/user.py)
+- **Dependencies:** Database (via repository), `bcrypt`.
+
+### 2. Product Service (`product_service.py`)
+- **Purpose:** Manages product information, categories (possibly via `department.py`), pricing, and potentially stock levels (though `inventory_service.py` might be more specific).
+- **Key Files/Modules:**
+    - `core/services/product_service.py` [@core/services/product_service.py](mdc:core/services/product_service.py)
+    - `core/models/product.py` [@core/models/product.py](mdc:core/models/product.py)
+    - `core/models/department.py` [@core/models/department.py](mdc:core/models/department.py)
+- **Dependencies:** Database (via repository).
+
+### 3. Sale Service (`sale_service.py`)
+- **Purpose:** Handles the creation of sales transactions, calculation of totals, and application of discounts.
+- **Key Files/Modules:**
+    - `core/services/sale_service.py` [@core/services/sale_service.py](mdc:core/services/sale_service.py)
+    - `core/models/sale.py` [@core/models/sale.py](mdc:core/models/sale.py)
+    - (Potentially `core/models/invoice.py` [@core/models/invoice.py](mdc:core/models/invoice.py) is related if sales lead to invoices)
+- **Dependencies:** Database, Product Service, Inventory Service, Customer Service.
+
+### 4. Inventory Service (`inventory_service.py`)
+- **Purpose:** Manages stock levels, inventory adjustments, and potentially stock reordering.
+- **Key Files/Modules:**
+    - `core/services/inventory_service.py` [@core/services/inventory_service.py](mdc:core/services/inventory_service.py)
+    - `core/models/inventory.py` [@core/models/inventory.py](mdc:core/models/inventory.py)
+- **Dependencies:** Database, Product Service.
+
+### 5. Customer Service (`customer_service.py`)
+- **Purpose:** Manages customer information, purchase history, and loyalty programs.
+- **Key Files/Modules:**
+    - `core/services/customer_service.py` [@core/services/customer_service.py](mdc:core/services/customer_service.py)
+    - `core/models/customer.py` [@core/models/customer.py](mdc:core/models/customer.py)
+- **Dependencies:** Database.
+
+### 6. Invoicing Service (`invoicing_service.py`)
+- **Purpose:** Generates invoices or receipts for sales. Likely uses `reportlab` for PDF generation.
+- **Key Files/Modules:**
+    - `core/services/invoicing_service.py` [@core/services/invoicing_service.py](mdc:core/services/invoicing_service.py)
+    - `core/models/invoice.py` [@core/models/invoice.py](mdc:core/models/invoice.py)
+- **Dependencies:** Sale Service, `reportlab`, potentially Customer Service.
+
+### 7. Cash Drawer Service (`cash_drawer_service.py`)
+- **Purpose:** Manages cash drawer operations, including opening balance, cash in/out, and closing balance.
+- **Key Files/Modules:**
+    - `core/services/cash_drawer_service.py` [@core/services/cash_drawer_service.py](mdc:core/services/cash_drawer_service.py)
+    - `core/models/cash_drawer.py` [@core/models/cash_drawer.py](mdc:core/models/cash_drawer.py)
+- **Dependencies:** Database.
+
+### 8. Reporting Service (`reporting_service.py`)
+- **Purpose:** Generates various reports (sales, inventory, financial summaries).
+- **Key Files/Modules:**
+    - `core/services/reporting_service.py` [@core/services/reporting_service.py](mdc:core/services/reporting_service.py)
+- **Dependencies:** Database, various other services (Sale, Product, Inventory).
+
+### 9. Corte Service (`corte_service.py`)
+- **Purpose:** Handles end-of-day processes, cash reconciliation (corte de caja).
+- **Key Files/Modules:**
+    - `core/services/corte_service.py` [@core/services/corte_service.py](mdc:core/services/corte_service.py)
+- **Dependencies:** Cash Drawer Service, Sale Service, Database.
+
+## Interactions:
+- Services interact with each other by direct method calls.
+- They use repositories (defined in `infrastructure/persistence/`) to abstract database operations.
+- Exceptions are likely defined in `core/exceptions.py` [@core/exceptions.py](mdc:core/exceptions.py).
+
+## Important Considerations:
+- **Error Handling:** Custom exceptions are defined in `core/exceptions.py`. Services should handle these or let them propagate to the UI layer for user feedback.
+- **Logging:** (Specify logging conventions - check `config.py` [@config.py](mdc:config.py) or `main.py` [@main.py](mdc:main.py) for logging setup).
+- **Configuration:** Service-specific configurations might be managed via `config.py` [@config.py](mdc:config.py) or environment variables (`python-dotenv`).
