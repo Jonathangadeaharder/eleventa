@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 # Adjust imports based on actual project structure
 from core.services.inventory_service import InventoryService
 from core.services.product_service import ProductService
+from core.models.user import User
 from ui.models.table_models import ProductTableModel # Assuming reuse initially
 from ui.utils import show_error_message, ask_confirmation # Assuming utility functions
 from ui.dialogs.add_inventory_dialog import AddInventoryDialog # Import the dialog
@@ -21,10 +22,11 @@ from ui.widgets.filter_dropdowns import FilterBoxWidget, FilterDropdown, PeriodF
 class InventoryView(QWidget):
     """View for managing inventory reports and actions."""
 
-    def __init__(self, inventory_service: InventoryService, product_service: ProductService, parent=None):
+    def __init__(self, inventory_service: InventoryService, product_service: ProductService, current_user: Optional[User] = None, parent=None):
         super().__init__(parent)
         self.inventory_service = inventory_service
         self.product_service = product_service
+        self.current_user = current_user
 
         # Models for the tables
         self.inventory_report_model = ProductTableModel(self)
@@ -271,7 +273,7 @@ class InventoryView(QWidget):
         if not selected_product:
             return
 
-        dialog = AddInventoryDialog(self.inventory_service, selected_product, self)
+        dialog = AddInventoryDialog(self.inventory_service, selected_product, self.current_user, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             # Refresh the current view after adding stock
             current_index = self.tab_widget.currentIndex()
@@ -288,7 +290,7 @@ class InventoryView(QWidget):
         if not selected_product:
             return
 
-        dialog = AdjustInventoryDialog(self.inventory_service, selected_product, self)
+        dialog = AdjustInventoryDialog(self.inventory_service, selected_product, self.current_user, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             # Refresh the current view after adjusting stock
             current_index = self.tab_widget.currentIndex()
@@ -344,4 +346,4 @@ if __name__ == '__main__':
     window.setWindowTitle("Inventory View Test")
     window.setGeometry(100, 100, 800, 600)
     window.show()
-    sys.exit(app.exec()) 
+    sys.exit(app.exec())

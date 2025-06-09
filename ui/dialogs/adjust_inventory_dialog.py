@@ -9,16 +9,18 @@ from decimal import Decimal
 
 # Adjust imports
 from core.models.product import Product
+from core.models.user import User
 from core.services.inventory_service import InventoryService
 from ui.utils import show_error_message
 
 class AdjustInventoryDialog(QDialog):
     """Dialog for adjusting stock quantity of a product (increase or decrease)."""
 
-    def __init__(self, inventory_service: InventoryService, product: Product, parent: Optional[QWidget] = None):
+    def __init__(self, inventory_service: InventoryService, product: Product, current_user: Optional[User] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.inventory_service = inventory_service
         self.product = product
+        self.current_user = current_user
 
         self.setWindowTitle(f"Ajustar Stock - {product.description}")
         self.setMinimumWidth(450)
@@ -137,8 +139,8 @@ class AdjustInventoryDialog(QDialog):
             return
             
         try:
-            # TODO: Get user_id if available
-            user_id = None 
+            # Use current user ID if available
+            user_id = self.current_user.id if self.current_user else None
             updated_product = self.inventory_service.adjust_inventory(
                 product_id=self.product.id,
                 quantity=quantity,
@@ -156,4 +158,4 @@ class AdjustInventoryDialog(QDialog):
 
     def reject(self):
         """Reject the dialog."""
-        super().reject() 
+        super().reject()

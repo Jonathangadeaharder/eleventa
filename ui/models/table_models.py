@@ -220,6 +220,47 @@ class SaleItemTableModel(QAbstractTableModel):
          self._items = []
          self.endResetModel()
 
+    def flags(self, index: QModelIndex) -> Qt.ItemFlag:
+        """Returns the item flags for the given index."""
+        if not index.isValid():
+            return Qt.ItemFlag.NoItemFlags
+        
+        # Make quantity column (column 2) editable
+        if index.column() == 2:
+            return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable
+        
+        return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+
+    def setData(self, index: QModelIndex, value: Any, role: int = Qt.ItemDataRole.EditRole) -> bool:
+        """Sets the data for the given index and role."""
+        if not index.isValid() or role != Qt.ItemDataRole.EditRole:
+            return False
+        
+        item = self._items[index.row()]
+        column = index.column()
+        
+        # Only allow editing quantity (column 2)
+        if column == 2:
+            try:
+                new_quantity = Decimal(str(value))
+                if new_quantity <= 0:
+                    return False
+                
+                # Update the quantity and recalculate subtotal
+                item.quantity = new_quantity
+                item.subtotal = item.quantity * item.unit_price
+                
+                # Emit dataChanged for the entire row to update subtotal display
+                self.dataChanged.emit(
+                    self.index(index.row(), 0),
+                    self.index(index.row(), self.columnCount() - 1)
+                )
+                return True
+            except (ValueError, TypeError):
+                return False
+        
+        return False
+
 # --- Add Customer Table Model ---
 
 class CustomerTableModel(QAbstractTableModel):

@@ -82,7 +82,7 @@ class MainWindow(QMainWindow):
             current_user=self.current_user
         )
         products_view = ProductsView(self.product_service)
-        inventory_view = InventoryView(self.inventory_service, self.product_service)
+        inventory_view = InventoryView(self.inventory_service, self.product_service, self.current_user)
         customers_view = CustomersView(self.customer_service, user_id=self.current_user.id)
         invoices_view = InvoicesView(self.invoicing_service)
         corte_view = CorteView(

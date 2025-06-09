@@ -800,13 +800,23 @@ class SalesView(QWidget):
         
     def _edit_selected_item_quantity(self, index):
         """Edit the quantity of the selected sale item."""
-        # This is a placeholder method that could be implemented in the future
-        # For now, we'll just print a message to show it was called
-        row = index.row()
-        if row >= 0:
-            item = self.sale_item_model.get_item_at_row(row)
-            if item:
-                print(f"Edit quantity for item {item.description} would be handled here")
+        # Check if the double-clicked column is the quantity column (column 2)
+        if index.column() == 2:
+            # Enable editing for the quantity column
+            self.table_view.edit(index)
+        else:
+            # For other columns, show info about the item
+            row = index.row()
+            if row >= 0:
+                item = self.sale_item_model.get_item_at_row(row)
+                if item:
+                    show_info_message(self, "Información del Artículo", 
+                                    f"Código: {item.product_code}\n"
+                                    f"Descripción: {item.product_description}\n"
+                                    f"Cantidad: {item.quantity}\n"
+                                    f"Precio Unitario: ${item.unit_price:.2f}\n"
+                                    f"Subtotal: ${item.subtotal:.2f}\n\n"
+                                    f"Tip: Haga doble clic en la columna 'Cantidad' para editarla.")
 
     @Slot()
     def _generate_presupuesto_pdf(self):
