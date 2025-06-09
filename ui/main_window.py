@@ -29,8 +29,6 @@ from core.services.reporting_service import ReportingService
 from core.services.cash_drawer_service import CashDrawerService
 from core.models.user import User
 
-from ui.dialogs.update_prices_dialog import UpdatePricesDialog
-
 # Placeholder for future views (keep for other views)
 class PlaceholderWidget(QWidget):
     def __init__(self, name: str, parent=None):
@@ -242,35 +240,11 @@ class MainWindow(QMainWindow):
                 padding: 3px 10px;
                 border-radius: 3px;
                 margin: 2px;
-                font-weight: bold;
-            """)
+                font-weight: bold;            """)
             self.status_bar.addPermanentWidget(self.user_label)
 
     def _create_menu_bar(self):
         menu_bar = self.menuBar()
-
-        # Tools Menu
-        tools_menu = menu_bar.addMenu("&Herramientas")
-
-        update_prices_action = QAction("Actualizar Precios por Porcentaje...", self)
-        update_prices_action.setStatusTip("Actualizar precios de productos por porcentaje para todos o un departamento")
-        update_prices_action.triggered.connect(self.open_update_prices_dialog)
-        tools_menu.addAction(update_prices_action)
-
-        # Add other tools actions here if needed
-
-    @Slot()
-    def open_update_prices_dialog(self):
-        # Ensure product_service is available
-        if hasattr(self, 'product_service') and self.product_service:
-            UpdatePricesDialog.run_update_prices_dialog(self.product_service, self)
-            # Optionally, refresh product view if it's active and showing products
-            if self.stacked_widget.currentWidget() == self.views.get("Products"):
-                products_view = self.views.get("Products")
-                if hasattr(products_view, 'load_products'): # Check if view has refresh method
-                    products_view.load_products() 
-        else:
-            QMessageBox.critical(self, "Error", "Servicio de productos no disponible.")
 
     @Slot(int)
     def switch_view(self, index: int):
@@ -326,6 +300,7 @@ if __name__ == '__main__':
         def get_all_products(self, department_id=None):
             return []
         def get_product_by_code(self, code): return None
+        
         def find_product(self, search_term=None):
             return self.get_all_products()
 
@@ -336,7 +311,7 @@ if __name__ == '__main__':
     class MockCustomerService:
         def get_all_customers(self): return []
         def find_customer(self, term): return []
-
+    
     class MockSaleService:
         def get_all_sales(self): return []
         
@@ -352,16 +327,17 @@ if __name__ == '__main__':
     class MockCashDrawerService:
         def get_cash_drawer_data(self, user_id): return {}
 
+    class MockPurchaseService:
+        def get_purchase_data(self): return {}
+
     mock_user = User(id=0, username="testuser", password_hash="")
 
     app = QApplication(sys.argv)
-    main_win = MainWindow(
-        logged_in_user=mock_user,
+    main_win = MainWindow(        logged_in_user=mock_user,
         product_service=MockProductService(),
         inventory_service=MockInventoryService(),
         sale_service=MockSaleService(),
         customer_service=MockCustomerService(),
-        purchase_service=MockPurchaseService(),
         invoicing_service=MockInvoicingService(),
         corte_service=MockCorteService(),
         reporting_service=MockReportingService(),

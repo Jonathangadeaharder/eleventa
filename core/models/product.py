@@ -11,7 +11,7 @@ class Product(BaseModel):
     code: str = Field(default="", max_length=50)  # Empty string default to match test expectations
     description: str = Field(default="", max_length=255)  # Empty string default to match test expectations
     cost_price: Decimal = Field(default=Decimal('0.0'), max_digits=15, decimal_places=2)  # Increased max_digits for tests
-    sell_price: Decimal = Field(default=Decimal('0.0'), max_digits=15, decimal_places=2)  # Increased max_digits for tests
+    sell_price: Optional[Decimal] = Field(default=Decimal('0.0'), max_digits=15, decimal_places=2)  # Increased max_digits for tests
     wholesale_price: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=2) # Price 2
     special_price: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=2) # Price 3
     department_id: Optional[int] = None 
@@ -45,11 +45,9 @@ class Product(BaseModel):
             return super().__eq__(other)
         return NotImplemented
 
-    # Handle float comparisons for tests
+    # Keep Decimal types for proper arithmetic operations
     def __getattribute__(self, name: str) -> Any:
         attr = super().__getattribute__(name)
-        if name in ('cost_price', 'sell_price', 'wholesale_price', 'special_price', 'quantity_in_stock', 'min_stock', 'max_stock') and isinstance(attr, Decimal):
-            return float(attr)
         return attr
 
     class Config:

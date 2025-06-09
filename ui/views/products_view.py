@@ -14,6 +14,7 @@ from ui.resources import resources  # Import the compiled resources
 from ui.models.table_models import ProductTableModel, Product # Assuming Product mock is there too
 from ui.dialogs.department_dialog import DepartmentDialog, MockProductService_Departments # Import the dialog
 from ui.dialogs.product_dialog import ProductDialog # Import the Product dialog
+from ui.dialogs.update_prices_dialog import UpdatePricesDialog # Import the Update Prices dialog
 
 # Placeholder for the actual service
 # from core.services.product_service import ProductService
@@ -156,8 +157,7 @@ class ProductsView(QWidget):
 
         # --- Toolbar ---
         toolbar_layout = QHBoxLayout()
-        
-        # Create buttons with icons
+          # Create buttons with icons
         self.new_button = QPushButton("Nuevo")
         self.new_button.setIcon(QIcon(":/icons/icons/new.png"))
         
@@ -170,10 +170,14 @@ class ProductsView(QWidget):
         self.departments_button = QPushButton("Departamentos")
         self.departments_button.setIcon(QIcon(":/icons/icons/departments.png"))
         
+        self.update_prices_button = QPushButton("Actualizar Precios")
+        self.update_prices_button.setIcon(QIcon(":/icons/icons/money.png"))
+        
         toolbar_layout.addWidget(self.new_button)
         toolbar_layout.addWidget(self.modify_button)
         toolbar_layout.addWidget(self.delete_button)
         toolbar_layout.addWidget(self.departments_button)
+        toolbar_layout.addWidget(self.update_prices_button)
 
         spacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         toolbar_layout.addSpacerItem(spacer)
@@ -243,6 +247,7 @@ class ProductsView(QWidget):
         self.modify_button.clicked.connect(self.modify_selected_product)
         self.delete_button.clicked.connect(self.delete_selected_product)
         self.departments_button.clicked.connect(self.manage_departments)
+        self.update_prices_button.clicked.connect(self.open_update_prices_dialog)
         self.search_input.textChanged.connect(self.filter_products)
         self.table_view.doubleClicked.connect(self.modify_selected_product) # Double-click to modify
 
@@ -348,6 +353,18 @@ class ProductsView(QWidget):
         print("[ProductsView] Department dialog closed. Refreshing product list.")
         self.refresh_products()
 
+    @Slot()
+    def open_update_prices_dialog(self):
+        """Handles the 'Actualizar Precios' button click."""
+        print("[ProductsView] 'Update Prices' clicked.")
+        try:
+            UpdatePricesDialog.run_update_prices_dialog(self.product_service, self)
+            # Refresh the product list after updating prices
+            print("[ProductsView] Update prices dialog closed. Refreshing product list.")
+            self.refresh_products()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error al abrir el diálogo de actualización de precios: {e}")
+            print(f"[ProductsView] Error opening update prices dialog: {e}")
 
     @Slot(str)
     def filter_products(self, text: str):
@@ -366,4 +383,4 @@ if __name__ == '__main__':
     products_view.setWindowTitle("Products View Test")
     products_view.setGeometry(150, 150, 800, 500)
     products_view.show()
-    sys.exit(app.exec()) 
+    sys.exit(app.exec())

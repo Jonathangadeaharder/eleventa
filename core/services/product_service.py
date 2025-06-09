@@ -104,8 +104,8 @@ class ProductService(ServiceBase):
             if product:
                 has_inventory = product.uses_inventory if hasattr(product, 'uses_inventory') else False
                 quantity_in_stock = 0
-                if hasattr(product, 'quantity_in_stock') and isinstance(product.quantity_in_stock, (int, float)):
-                    quantity_in_stock = product.quantity_in_stock
+                if hasattr(product, 'quantity_in_stock') and product.quantity_in_stock is not None:
+                    quantity_in_stock = float(product.quantity_in_stock)
                     
                 if has_inventory and quantity_in_stock > 0:
                     raise ValueError(f"Producto '{product.code}' no puede ser eliminado porque tiene stock ({quantity_in_stock})")

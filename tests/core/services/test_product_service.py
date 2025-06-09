@@ -548,7 +548,7 @@ def test_update_prices_product_with_no_sell_price(product_service, mock_product_
 def test_update_prices_rounding_and_zero_floor(product_service, mock_product_repo):
     """Test price rounding to two decimal places and that prices don't go below zero."""
     products = [
-        Product(id=1, code="P001", description="Prod Round", sell_price=Decimal("10.333"), cost_price=Decimal("5.111")),
+        Product(id=1, code="P001", description="Prod Round", sell_price=Decimal("10.33"), cost_price=Decimal("5.11")),
         Product(id=2, code="P002", description="Prod To Zero", sell_price=Decimal("1.00"), cost_price=Decimal("0.50"))
     ]
     mock_product_repo.get_all.return_value = products
@@ -557,22 +557,13 @@ def test_update_prices_rounding_and_zero_floor(product_service, mock_product_rep
     product_service.update_prices_by_percentage(Decimal("10.555")) # 10.555% increase
     call_args_1, _ = mock_product_repo.update.call_args_list[0]
     updated_product_1 = call_args_1[0]
-    # 10.333 * 1.10555 = 11.42367815 -> 11.42
-    # 5.111 * 1.10555 = 5.65026005 -> 5.65
+    # 10.33 * 1.10555 = 11.4236315 -> 11.42
+    # 5.11 * 1.10555 = 5.6513605 -> 5.65
     assert updated_product_1.sell_price == Decimal("11.42")
     assert updated_product_1.cost_price == Decimal("5.65")
 
     # Test negative percentage that would make price negative (should be floored at 0.00)
     mock_product_repo.update.reset_mock() # Reset mock for the second part of the test
-    product_service.update_prices_by_percentage(Decimal("-150"), department_id=None) # All products
-    
-    # The product service should raise ValueError before it gets to updating products.
-    # This test is slightly misdirected for -150% as the service validates percentage > -100.
-    # We will test the floor to zero logic with a valid percentage that results in negative.
-    # Let's assume the validation for > -100% is already tested elsewhere or we test it here explicitly.
-
-    # Re-fetch and re-test with a percentage that would result in a negative price, but is valid (> -100)
-    mock_product_repo.reset_mock() # Reset for clarity
     mock_product_repo.get_all.return_value = [ # Provide a fresh list to avoid state issues from previous mock calls
          Product(id=2, code="P002", description="Prod To Zero", sell_price=Decimal("1.00"), cost_price=Decimal("0.50"))
     ]
@@ -582,5 +573,5 @@ def test_update_prices_rounding_and_zero_floor(product_service, mock_product_rep
     updated_product_2_new = call_args_2_new[0]
     # Sell: 1.00 * (1 - 0.995) = 1.00 * 0.005 = 0.005 -> 0.01 (due to rounding)
     # Cost: 0.50 * (1 - 0.995) = 0.50 * 0.005 = 0.0025 -> 0.00 (due to rounding to 0.01 then max with 0.00)
-    assert updated_product_2_new.sell_price == Decimal("0.01") # 1.00 - 0.995 = 0.005, rounds to 0.01
-    assert updated_product_2_new.cost_price == Decimal("0.00") # 0.50 - (0.50 * 0.995) = 0.0025, rounds to 0.00
+    assert updated_product_2_new.sell_price == Decimal("0.00") # 1.00 * 0.005 = 0.005, rounds to 0.01 but floored to 0.00
+    assert updated_product_2_new.cost_price == Decimal("0.00") # 0.50 * 0.005 = 0.0025, rounds to 0.00

@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import MagicMock, call, ANY
 from decimal import Decimal
 
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox, QDialog
 from PySide6.QtCore import Qt
 
 # Adjust path to import from the project root
@@ -101,8 +101,10 @@ def test_accept_successful_update_all_departments(dialog: UpdatePricesDialog, mo
 
     QMessageBox.question.assert_called_once()
     # Check parts of the message to be somewhat flexible with exact wording
-    assert "15.5%" in QMessageBox.question.call_args[0][1]
-    assert "TODOS los productos?" in QMessageBox.question.call_args[0][1]
+    call_args = QMessageBox.question.call_args[0]
+    message = call_args[2]  # The message is the third argument (index 2)
+    assert "un 15.5%" in message
+    assert "TODOS los productos?" in message
     
     mock_product_service.update_prices_by_percentage.assert_called_once_with(Decimal("15.5"), None)
     QMessageBox.information.assert_called_once_with(dialog, "Éxito", "Se actualizaron los precios de 5 producto(s).")
@@ -121,8 +123,11 @@ def test_accept_successful_update_specific_department(dialog: UpdatePricesDialog
     dialog.accept()
 
     QMessageBox.question.assert_called_once()
-    assert "-8%" in QMessageBox.question.call_args[0][1]
-    assert "departamento 'Electronics'?" in QMessageBox.question.call_args[0][1]
+    # Check parts of the message to be somewhat flexible with exact wording
+    call_args = QMessageBox.question.call_args[0]
+    message = call_args[2]  # The message is the third argument (index 2)
+    assert "un -8%" in message
+    assert "departamento 'Electronics'?" in message
     
     mock_product_service.update_prices_by_percentage.assert_called_once_with(Decimal("-8"), 1)
     QMessageBox.information.assert_called_once_with(dialog, "Éxito", "Se actualizaron los precios de 5 producto(s).")
@@ -202,4 +207,4 @@ def test_run_update_prices_dialog_rejected(mocker, mock_product_service):
     mocker.patch("ui.dialogs.update_prices_dialog.UpdatePricesDialog.__init__", return_value=None)
 
     result = UpdatePricesDialog.run_update_prices_dialog(mock_product_service, parent=None)
-    assert result is False 
+    assert result is False
