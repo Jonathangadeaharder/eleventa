@@ -18,7 +18,7 @@ class TestPeriodFilterWidget:
     def test_widget_initialization(self):
         """Test that the widget initializes correctly."""
         assert self.widget.label.text() == "Test Period:"
-        assert self.widget.period_combo.count() == 8
+        assert self.widget.period_combo.count() == 9
         assert self.widget.period_combo.currentIndex() == 0  # Should default to "Hoy"
         
         # Custom date controls should be hidden initially
@@ -76,13 +76,14 @@ class TestPeriodFilterWidget:
         signal_args = spy.at(0)
         start_date, end_date = signal_args
         
-        # Start should be Monday of current week
+        # Start should be Monday of current week, end should be Sunday
         today = datetime.now().date()
         days_to_monday = today.weekday()
         monday = today - timedelta(days=days_to_monday)
+        sunday = monday + timedelta(days=6)
         
         assert start_date.date() == monday
-        assert end_date.date() == today
+        assert end_date.date() == sunday
     
     def test_custom_period_selection(self):
         """Test custom date controls exist and toggle method works."""
@@ -101,10 +102,10 @@ class TestPeriodFilterWidget:
         self.widget._toggle_custom_date_controls(False)
         
         # Test that period combo has the expected number of items
-        assert self.widget.period_combo.count() == 8
+        assert self.widget.period_combo.count() == 9
         
         # Test that the last item is the custom period option
-        last_item = self.widget.period_combo.itemText(7)
+        last_item = self.widget.period_combo.itemText(8)
         assert "personalizado" in last_item.lower()
     
     def test_custom_date_application(self):
@@ -112,7 +113,7 @@ class TestPeriodFilterWidget:
         spy = QSignalSpy(self.widget.periodChanged)
         
         # Select custom period
-        self.widget.period_combo.setCurrentIndex(7)
+        self.widget.period_combo.setCurrentIndex(8)
         
         # Set custom dates
         start_date = QDate.currentDate().addDays(-10)

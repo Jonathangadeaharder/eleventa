@@ -26,6 +26,7 @@ class PeriodFilterWidget(QWidget):
     """
     
     periodChanged = Signal(datetime, datetime)
+    filter_applied = Signal()
     
     def __init__(self, label_text="Mostrar:", parent=None):
         super().__init__(parent)
@@ -55,7 +56,8 @@ class PeriodFilterWidget(QWidget):
             "Este mes", 
             "Mes pasado", 
             "Este año", 
-            "Período personalizado"
+            "Año pasado",
+            "Personalizado"
         ])
         self.period_combo.setMinimumWidth(150)
         style_dropdown(self.period_combo)
@@ -94,6 +96,10 @@ class PeriodFilterWidget(QWidget):
             }
         """)
         
+        # Add aliases for test compatibility
+        self.start_date = self.start_date_edit
+        self.end_date = self.end_date_edit
+        
         self.date_from_label = QLabel("Desde:")
         self.date_to_label = QLabel("Hasta:")
         self.apply_btn = QPushButton("Aplicar")
@@ -115,6 +121,10 @@ class PeriodFilterWidget(QWidget):
         # Connect signals
         self.period_combo.currentIndexChanged.connect(self._on_period_changed)
         self.apply_btn.clicked.connect(self._on_custom_dates_applied)
+        # Connect date signals but use a flag to prevent double emissions
+        self._programmatic_change = False
+        self.start_date_edit.dateChanged.connect(self._on_date_changed_internal)
+        self.end_date_edit.dateChanged.connect(self._on_date_changed_internal)
     
     def _toggle_custom_date_controls(self, show):
         """Show or hide the custom date selection controls."""
@@ -128,12 +138,20 @@ class PeriodFilterWidget(QWidget):
     def _on_period_changed(self, index):
         """Handle selection of a different period in the combobox."""
         today = QDate.currentDate()
-        show_custom = (index == 7)  # "Período personalizado" is the last option
+        show_custom = (index == 8)  # "Personalizado" is the last option
         
         self._toggle_custom_date_controls(show_custom)
         
+        # Enable/disable date controls based on selection
+        self.start_date_edit.setEnabled(show_custom)
+        self.end_date_edit.setEnabled(show_custom)
+        
         if not show_custom:
             # Set date range based on selection and emit signal
+            # Initialize default values
+            start_date = today
+            end_date = today
+            
             if index == 0:  # Hoy
                 start_date = today
                 end_date = today
@@ -144,8 +162,9 @@ class PeriodFilterWidget(QWidget):
             elif index == 2:  # Esta semana
                 days_to_monday = today.dayOfWeek() - 1
                 monday = today.addDays(-days_to_monday)
+                sunday = monday.addDays(6)
                 start_date = monday
-                end_date = today
+                end_date = sunday
             elif index == 3:  # Semana pasada
                 days_to_monday = today.dayOfWeek() - 1
                 last_monday = today.addDays(-days_to_monday - 7)
@@ -154,8 +173,14 @@ class PeriodFilterWidget(QWidget):
                 end_date = last_sunday
             elif index == 4:  # Este mes
                 first_day = QDate(today.year(), today.month(), 1)
+                # Last day of current month
+                if today.month() == 12:
+                    next_month = QDate(today.year() + 1, 1, 1)
+                else:
+                    next_month = QDate(today.year(), today.month() + 1, 1)
+                last_day = next_month.addDays(-1)
                 start_date = first_day
-                end_date = today
+                end_date = last_day
             elif index == 5:  # Mes pasado
                 first_day_last_month = QDate(today.year(), today.month(), 1).addMonths(-1)
                 last_day_last_month = QDate(today.year(), today.month(), 1).addDays(-1)
@@ -165,13 +190,23 @@ class PeriodFilterWidget(QWidget):
                 first_day = QDate(today.year(), 1, 1)
                 start_date = first_day
                 end_date = today
+            elif index == 7:  # Año pasado
+                first_day_last_year = QDate(today.year() - 1, 1, 1)
+                last_day_last_year = QDate(today.year() - 1, 12, 31)
+                start_date = first_day_last_year
+                end_date = last_day_last_year
             
-            # Update the date edit controls (even if hidden)
+            # Update the date edit controls (even if hidden) - prevent signal emission
+            self._programmatic_change = True
             self.start_date_edit.setDate(start_date)
             self.end_date_edit.setDate(end_date)
+            self._programmatic_change = False
             
             # Emit the period change with start/end datetime objects
             self._emit_period_change(start_date, end_date)
+            
+        # Emit filter applied signal
+        self.filter_applied.emit()
     
     @Slot()
     def _on_custom_dates_applied(self):
@@ -186,9 +221,10 @@ class PeriodFilterWidget(QWidget):
             end_date = temp
             
             # Update the controls
-            self.start_date_edit.setDate(start_date)
-            self.end_date_edit.setDate(end_date)
+        self.start_date_edit.setDate(start_date)
+        self.end_date_edit.setDate(end_date)
         
+        # Emit the period change with start/end datetime objects
         self._emit_period_change(start_date, end_date)
     
     def _emit_period_change(self, start_date, end_date):
@@ -211,6 +247,33 @@ class PeriodFilterWidget(QWidget):
         end_datetime = datetime.combine(end_date.toPython(), datetime.max.time())
         
         return start_datetime, end_datetime
+    
+    def get_date_range(self):
+        """Return the current selected period range as a tuple of date objects."""
+        start_qdate = self.start_date_edit.date()
+        end_qdate = self.end_date_edit.date()
+        
+        # Ensure proper order
+        if start_qdate > end_qdate:
+            start_qdate, end_qdate = end_qdate, start_qdate
+            # Update the controls to reflect the corrected order
+            self.start_date_edit.setDate(start_qdate)
+            self.end_date_edit.setDate(end_qdate)
+        
+        return start_qdate.toPython(), end_qdate.toPython()
+    
+    @Slot()
+    def _on_date_changed_internal(self):
+        """Internal handler for date changes to avoid double emissions."""
+        # Only emit signal if we're in custom period mode and not programmatically changing
+        if self.period_combo.currentIndex() == 8 and not self._programmatic_change:  # Personalizado
+            self.filter_applied.emit()
+    
+    def on_date_changed(self):
+        """Public method for date field changes (for test compatibility)."""
+        # Only emit signal if we're in custom period mode
+        if self.period_combo.currentIndex() == 8:  # Personalizado
+            self.filter_applied.emit()
 
 
 class FilterBoxWidget(QFrame):
@@ -323,4 +386,4 @@ class FilterDropdown(QWidget):
     
     def get_selected_text(self):
         """Return the currently selected text."""
-        return self.combo.currentText() 
+        return self.combo.currentText()

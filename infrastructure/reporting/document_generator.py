@@ -36,13 +36,21 @@ class DocumentPdfGenerator:
         """
         self.logger = logging.getLogger(self.__class__.__name__) # Added logger
         if store_info is None:
+            # Get values from Config, but use defaults if Config values are None
+            store_name = getattr(Config, 'STORE_NAME', None)
+            store_address = getattr(Config, 'STORE_ADDRESS', None)
+            store_phone = getattr(Config, 'STORE_PHONE', None)
+            store_cuit = getattr(Config, 'STORE_CUIT', None)
+            store_iva_condition = getattr(Config, 'STORE_IVA_CONDITION', None)
+            store_logo_path = getattr(Config, 'STORE_LOGO_PATH', None)
+            
             self.store_info = {
-                "name": Config.STORE_NAME or "Eleventa Demo Store",
-                "address": Config.STORE_ADDRESS or "123 Main St, Buenos Aires, Argentina",
-                "phone": Config.STORE_PHONE or "555-1234",
-                "cuit": Config.STORE_CUIT or "30-12345678-9",
-                "iva_condition": Config.STORE_IVA_CONDITION or "Responsable Inscripto",
-                "logo_path": Config.STORE_LOGO_PATH or None
+                "name": store_name if store_name is not None else "Eleventa Demo Store",
+                "address": store_address if store_address is not None else "123 Main St, Buenos Aires, Argentina",
+                "phone": store_phone if store_phone is not None else "555-1234",
+                "cuit": store_cuit if store_cuit is not None else "30-12345678-9",
+                "iva_condition": store_iva_condition if store_iva_condition is not None else "Responsable Inscripto",
+                "logo_path": store_logo_path
             }
         else:
             self.store_info = store_info
@@ -84,9 +92,31 @@ class DocumentPdfGenerator:
 
     def _ensure_directory_exists(self, filename: str):
         """Ensure the directory for the given filename exists."""
-        abs_filename = os.path.abspath(filename)
-        output_dir = os.path.dirname(abs_filename)
-        os.makedirs(output_dir, exist_ok=True)
+        try:
+            abs_filename = os.path.abspath(filename)
+            output_dir = os.path.dirname(abs_filename)
+            
+            # Validate the path - check if it's a reasonable path
+            if not filename or len(filename.strip()) == 0:
+                raise OSError("Invalid filename: empty or whitespace only")
+            
+            # Check for invalid characters or patterns that would make directory creation fail
+            if os.name == 'nt':  # Windows
+                invalid_chars = '<>"|?*'
+                # For Windows, we need to be more careful about colons - they're valid in drive letters
+                # Check for invalid chars, but skip the drive letter colon
+                path_to_check = output_dir
+                if len(output_dir) > 1 and output_dir[1] == ':':
+                    # Skip the drive letter part (e.g., "C:")
+                    path_to_check = output_dir[2:]
+                
+                if any(char in path_to_check for char in invalid_chars):
+                    raise OSError(f"Invalid characters in path: {output_dir}")
+            
+            os.makedirs(output_dir, exist_ok=True)
+        except (OSError, PermissionError) as e:
+            self.logger.error(f"Cannot create directory for {filename}: {e}")
+            raise
 
     # --- Invoice Generation Methods (Adapted from InvoiceBuilder) ---
 
@@ -108,6 +138,23 @@ class DocumentPdfGenerator:
             bool: True if PDF generation was successful, False otherwise
         """
         try:
+            # Validate input data
+            if not invoice_data:
+                self.logger.error("Invoice data cannot be empty")
+                return False
+                
+            # Check for required fields
+            required_fields = ['invoice_number', 'total']
+            for field in required_fields:
+                if field not in invoice_data:
+                    self.logger.error(f"Missing required field: {field}")
+                    return False
+            
+            # Check for customer information (either 'customer' or 'customer_details')
+            if 'customer' not in invoice_data and 'customer_details' not in invoice_data:
+                self.logger.error("Missing required field: customer information")
+                return False
+            
             self._ensure_directory_exists(filename)
             
             doc = SimpleDocTemplate(
@@ -372,6 +419,11 @@ class DocumentPdfGenerator:
             str: Path to the generated PDF file, or None if failed.
         """
         try:
+            # Validate input data
+            if not sale_data:
+                self.logger.error("Sale data cannot be empty")
+                return False
+                
             self._ensure_directory_exists(filename)
             
             doc = SimpleDocTemplate(
@@ -502,6 +554,15 @@ class DocumentPdfGenerator:
             bool: True if successful, False otherwise.
         """
         try:
+            # Validate input data
+            if not items_data:
+                self.logger.error("Items data cannot be empty")
+                return False
+                
+            if total_amount is None:
+                self.logger.error("Total amount cannot be None")
+                return False
+                
             self._ensure_directory_exists(filename)
             doc = SimpleDocTemplate(filename, pagesize=letter,
                                     rightMargin=0.75*inch, leftMargin=0.75*inch,
@@ -641,4 +702,4 @@ if __name__ == '__main__':
     if generator.generate_receipt(sale_data=sample_sale_data_receipt, filename=receipt_filename):
         print(f"Sample receipt generated: {receipt_filename}")
     else:
-        print(f"Failed to generate sample receipt.") 
+        print(f"Failed to generate sample receipt.")

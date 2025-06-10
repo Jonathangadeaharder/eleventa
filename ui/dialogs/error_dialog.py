@@ -8,6 +8,7 @@ class ErrorDialog(QDialog):
 
         self.setWindowTitle(title)
         self.setMinimumWidth(500)
+        self.setModal(True)  # Make dialog modal
         # self.setMinimumHeight(300) # Auto-adjust height based on content
 
         layout = QVBoxLayout(self)
@@ -22,8 +23,6 @@ class ErrorDialog(QDialog):
         self.details_button.setCheckable(True)
         self.details_button.setChecked(False)
         self.details_button.clicked.connect(self.toggle_details_visibility)
-        layout.addWidget(self.details_button)
-
         self.details_text_edit = QTextEdit()
         self.details_text_edit.setPlainText(details)
         self.details_text_edit.setReadOnly(True)
@@ -31,7 +30,13 @@ class ErrorDialog(QDialog):
         self.details_text_edit.setFontFamily("monospace") # Good for tracebacks
         # Set a reasonable initial height for the details text edit, but allow expansion
         self.details_text_edit.setFixedHeight(150) 
-        layout.addWidget(self.details_text_edit)
+        
+        # Only show details button and add widgets if there are details to show
+        if details:
+            layout.addWidget(self.details_button)
+            layout.addWidget(self.details_text_edit)
+        else:
+            self.details_button.setVisible(False)
 
         # Advice/Next steps (placeholder)
         self.advice_label = QLabel("Se recomienda guardar su trabajo y reiniciar la aplicación. Si el problema persiste, contacte a soporte.")
@@ -60,9 +65,10 @@ class ErrorDialog(QDialog):
 
     def toggle_details_visibility(self):
         is_visible = self.details_text_edit.isVisible()
-        self.details_text_edit.setVisible(not is_visible)
-        self.copy_button.setVisible(not is_visible)
-        self.details_button.setText("Ocultar Detalles" if not is_visible else "Mostrar Detalles")
+        new_visibility = not is_visible
+        self.details_text_edit.setVisible(new_visibility)
+        self.copy_button.setVisible(new_visibility)
+        self.details_button.setText("Ocultar Detalles" if new_visibility else "Mostrar Detalles")
         self.adjustSize() # Re-adjust dialog size
         
     def copy_details_to_clipboard(self):
@@ -91,4 +97,4 @@ if __name__ == '__main__':
             details=details_text
         )
         dialog.exec()
-    sys.exit(app.exec()) 
+    sys.exit(app.exec())
