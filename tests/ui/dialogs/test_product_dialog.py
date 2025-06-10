@@ -5,7 +5,6 @@ from decimal import Decimal
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox
-from PySide6.QtTest import QTest as QtTest
 
 from ui.dialogs.product_dialog import ProductDialog
 from core.models.product import Product, Department
