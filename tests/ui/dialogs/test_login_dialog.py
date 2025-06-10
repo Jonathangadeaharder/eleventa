@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox
-from PySide6.QtTest import QTest
+from PySide6.QtTest import QTest as QtTest
 
 from ui.dialogs.login_dialog import LoginDialog
 from core.models.user import User

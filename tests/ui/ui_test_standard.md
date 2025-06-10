@@ -46,7 +46,7 @@ from unittest.mock import MagicMock, patch
 # Qt components
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 from PySide6.QtCore import Qt, QDate, QTimer
-from PySide6.QtTest import QTest
+from PySide6.QtTest import QTest as QtTest
 
 # Application components
 from ui.views.products_view import ProductsView
@@ -191,4 +191,4 @@ For each UI component, include tests for these categories where applicable:
 2. **Slow Tests**: Tests that take too long to execute
 3. **Over-mocking**: Mocking too much makes tests less valuable
 4. **Fragile Tests**: Tests that break when UI details change
-5. **Inadequate Assertions**: Only asserting that code runs without errors 
+5. **Inadequate Assertions**: Only asserting that code runs without errors
