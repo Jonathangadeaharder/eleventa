@@ -22,7 +22,6 @@ class CorteView(QWidget):
     """
     
     def __init__(self, corte_service: CorteService, user_id: int = None, print_manager=None):
-        print('[DEBUG] CorteView.__init__ start')
         super().__init__()
         self.corte_service = corte_service
         self.user_id = user_id
@@ -32,12 +31,9 @@ class CorteView(QWidget):
         # Create table models for cash entries
         self.cash_in_model = CashDrawerEntryTableModel()
         self.cash_out_model = CashDrawerEntryTableModel()
-        print('[DEBUG] CorteView.__init__ before _init_ui')
         self._init_ui()
-        print('[DEBUG] CorteView.__init__ end')
     
     def _init_ui(self):
-        print('[DEBUG] CorteView._init_ui start')
         """Initialize the UI components"""
         main_layout = QVBoxLayout(self)
         

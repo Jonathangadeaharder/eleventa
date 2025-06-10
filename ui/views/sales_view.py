@@ -285,13 +285,13 @@ class SalesView(QWidget):
         style_secondary_button(self.cancel_button)
 
         self.finalize_button = QPushButton("Cobrar (F10)")
-        self.finalize_button.setIcon(QIcon(":/icons/icons/money.png")) # Reverted to original
+        self.finalize_button.setIcon(QIcon(":/icons/icons/save.png"))
         style_primary_button(self.finalize_button)
         self.finalize_button.setFixedHeight(40) # Make finalize button taller
         self.finalize_button.setStyleSheet(self.finalize_button.styleSheet() + "font-size: 14px;")
 
         self.invoice_button = QPushButton("Facturar (F4)") # Added (F4) shortcut hint
-        self.invoice_button.setIcon(QIcon(":/icons/icons/invoice.png"))
+        self.invoice_button.setIcon(QIcon(":/icons/icons/invoices.png"))
         style_secondary_button(self.invoice_button)
         self.invoice_button.setEnabled(False) # Initially disabled until a sale is made
 

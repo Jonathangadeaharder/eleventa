@@ -109,10 +109,6 @@ class MainWindow(QMainWindow):
             "CashDrawer": cash_drawer_view,  # Enable the real CashDrawerView
         }
 
-        # No longer need the placeholder
-        # Create a placeholder for the CashDrawer view
-        # placeholder_cash_drawer = PlaceholderWidget("Cash Drawer")
-        
         self.view_indices = {}
         index = 0
         # Add the widgets one by one with explicit error handling
@@ -126,17 +122,6 @@ class MainWindow(QMainWindow):
                 index += 1
             except Exception as e:
                 print(f"Error adding {name} view to stacked widget: {e}")
-                # If there's an error with CashDrawer view, fall back to placeholder
-                if name == "CashDrawer":
-                    try:
-                        placeholder = PlaceholderWidget("Cash Drawer")
-                        placeholder.setParent(self.stacked_widget)
-                        self.stacked_widget.addWidget(placeholder)
-                        self.view_indices[name] = index
-                        index += 1
-                        print(f"Using placeholder for {name} view instead")
-                    except Exception as placeholder_error:
-                        print(f"Error adding placeholder for {name} view: {placeholder_error}")
 
         self._create_toolbar()
         self._create_status_bar()

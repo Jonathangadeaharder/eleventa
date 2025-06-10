@@ -1,6 +1,5 @@
 import os
 import sys
-# print("DEBUG: Script started") # DEBUG - Removed
 from PySide6.QtWidgets import QApplication, QDialog
 from PySide6.QtCore import Qt
 
@@ -40,10 +39,7 @@ from infrastructure.persistence.sqlite.repositories import (
 
 # --- Database Initialization (Step 2) ---
 from infrastructure.persistence.sqlite.database import init_db
-# print("DEBUG: Imports completed, before main function definition") # DEBUG - Removed
-
 def main(test_mode=False, test_user=None, mock_services=None):
-    # print("DEBUG: main() function started") # DEBUG - Removed
     """
     Initializes and runs the Eleventa application.
 
@@ -69,18 +65,14 @@ def main(test_mode=False, test_user=None, mock_services=None):
     app_args = sys.argv if sys.argv else []
     app = QApplication.instance()
     if app is None:
-        # print("DEBUG: Before QApplication(app_args)") # DEBUG - Removed
         app = QApplication(app_args)
-        # print("DEBUG: After QApplication(app_args)") # DEBUG - Removed
 
     # --- Platform Specific Fixes ---
     if sys.platform == 'win32':
         os.environ['QT_QPA_PLATFORM'] = 'windows:darkmode=0'
 
     # --- Database Initialization ---
-    # print("DEBUG: Before init_db()") # DEBUG - Removed
     init_db()
-    # print("DEBUG: After init_db()") # DEBUG - Removed
 
     # --- UI Imports (AFTER QApplication and init_db) ---
     import ui.resources.resources
@@ -225,6 +217,4 @@ def main(test_mode=False, test_user=None, mock_services=None):
         return app, main_window
 
 if __name__ == "__main__":
-    # print("DEBUG: __name__ == '__main__' reached") # DEBUG - Removed
     main()
-    # print("DEBUG: main() finished") # DEBUG - Removed

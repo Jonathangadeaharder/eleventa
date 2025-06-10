@@ -1051,9 +1051,6 @@ class SqliteCustomerRepository(ICustomerRepository):
     def add(self, customer: Customer) -> Customer:
         """Add a new customer to the repository."""
         try:
-            # LOGGING: Print type and value of customer.id and customer.cuit before adding
-            print(f"[DEBUG] Adding customer: customer.id={customer.id} (type={type(customer.id)}), customer.cuit={customer.cuit} (type={type(customer.cuit)})")
-            
             # Check for duplicate CUIT
             if customer.cuit:  # Only check if CUIT is provided
                 existing_cuit = self.session.execute(

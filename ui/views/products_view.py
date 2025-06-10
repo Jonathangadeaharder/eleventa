@@ -171,7 +171,7 @@ class ProductsView(QWidget):
         self.departments_button.setIcon(QIcon(":/icons/icons/departments.png"))
         
         self.update_prices_button = QPushButton("Actualizar Precios")
-        self.update_prices_button.setIcon(QIcon(":/icons/icons/money.png"))
+        self.update_prices_button.setIcon(QIcon(":/icons/icons/edit.png"))
         
         toolbar_layout.addWidget(self.new_button)
         toolbar_layout.addWidget(self.modify_button)

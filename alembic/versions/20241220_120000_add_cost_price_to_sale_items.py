@@ -1,15 +1,15 @@
-"""add_cost_price_to_sale_items
+"""Add cost_price to sale_items
 
-Revision ID: initial_revision_cost_price
+Revision ID: 20241220_120000
 Revises: 
-Create Date: YYYY-MM-DD HH:MM:SS.ffffff
+Create Date: 2024-12-20 12:00:00.000000
 
 """
 from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision = 'initial_revision_cost_price'
+revision = '20241220_120000'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -107,4 +107,4 @@ def downgrade() -> None:
     op.drop_table('sale_items')
     op.drop_table('sales')
     op.drop_table('products')
-    op.drop_table('departments') 
+    op.drop_table('departments')

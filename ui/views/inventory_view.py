@@ -41,12 +41,12 @@ class InventoryView(QWidget):
 
         # --- Toolbar --- (Using buttons as a simple toolbar)
         toolbar_layout = QHBoxLayout()
-        self.add_button = QPushButton(QIcon(":/icons/add.png"), " Agregar Cantidad") # Placeholder icon path
-        self.adjust_button = QPushButton(QIcon(":/icons/edit.png"), " Ajustar Stock") # Placeholder icon path
-        self.report_button = QPushButton(QIcon(":/icons/report.png"), " Reporte de Inventario") # Placeholder icon path
-        self.low_stock_button = QPushButton(QIcon(":/icons/warning.png"), " Productos Bajos") # Placeholder icon path
-        self.movements_button = QPushButton(QIcon(":/icons/list.png"), " Movimientos") # Placeholder icon path
-        self.kardex_button = QPushButton(QIcon(":/icons/card.png"), " Kardex") # Placeholder icon path
+        self.add_button = QPushButton(QIcon(":/icons/icons/new.png"), " Agregar Cantidad")
+        self.adjust_button = QPushButton(QIcon(":/icons/icons/edit.png"), " Ajustar Stock")
+        self.report_button = QPushButton(QIcon(":/icons/icons/reports.png"), " Reporte de Inventario")
+        self.low_stock_button = QPushButton(QIcon(":/icons/icons/inventory.png"), " Productos Bajos")
+        self.movements_button = QPushButton(QIcon(":/icons/icons/inventory.png"), " Movimientos")
+        self.kardex_button = QPushButton(QIcon(":/icons/icons/inventory.png"), " Kardex")
 
         # Disable unimplemented features
         self.movements_button.setEnabled(False)
