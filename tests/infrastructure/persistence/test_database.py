@@ -1,7 +1,7 @@
 import pytest
 import os
 from sqlalchemy import text, Column, Integer, String, inspect
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy.orm import Session, DeclarativeBase, sessionmaker
 from sqlalchemy.exc import OperationalError, ResourceClosedError, InvalidRequestError
 
 # Adjust path to import from the project root

@@ -1,7 +1,7 @@
 import os
 import sys
 from sqlalchemy import create_engine, MetaData
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
 import sqlalchemy.pool
 
 # Import SessionScopeProvider
@@ -22,7 +22,8 @@ except ImportError:
     from config import DATABASE_URL
 
 # Create a declarative base directly
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
 
 # Determine if we're using an in-memory database (typically for testing)
 is_memory_db = ':memory:' in DATABASE_URL or 'mode=memory' in DATABASE_URL
@@ -42,7 +43,7 @@ if 'sqlite' in DATABASE_URL:
 engine = create_engine(DATABASE_URL, **engine_args)
 
 # Each instance of SessionLocal will be a database session.
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(autoflush=False, bind=engine)
 
 # Register the SessionLocal with the session_scope_provider as the default factory
 session_scope_provider.set_default_session_factory(SessionLocal)

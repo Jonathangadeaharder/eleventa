@@ -375,7 +375,7 @@ def test_db_session_factory():
     Base.metadata.create_all(bind=engine) # Use Base.metadata if init_db isn't suitable
 
     # Create a session factory bound to this engine
-    TestSessionFactory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    TestSessionFactory = sessionmaker(autoflush=False, bind=engine)
 
     # Store the original factory (if any)
     original_factory = session_scope_provider.get_session_factory()

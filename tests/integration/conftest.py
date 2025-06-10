@@ -93,7 +93,7 @@ def clean_db():
         raise
 
     # Create a test-specific session factory bound to the test engine
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+    TestingSessionLocal = sessionmaker(autoflush=False, bind=test_engine)
     
     # Create a session
     session = TestingSessionLocal()

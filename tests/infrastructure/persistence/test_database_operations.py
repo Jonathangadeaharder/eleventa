@@ -206,7 +206,6 @@ def test_session_creation(mock_sessionmaker, mock_create_engine):
     
     # Verify sessionmaker configuration
     mock_sessionmaker.assert_called_with(
-        autocommit=False, 
         autoflush=False, 
         bind=mock_engine
     )
@@ -271,4 +270,4 @@ def test_ensure_all_models_mapped(mock_import_mappings):
     # Verify behavior
     mock_import_mappings.assert_called_once()
     mock_mappings.ensure_all_models_mapped.assert_called_once()
-    assert result is True 
+    assert result is True
