@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 class ProblemDetail(BaseModel):
     """
@@ -17,11 +17,7 @@ class ProblemDetail(BaseModel):
     # For explicit definition of common extensions:
     # errors: Optional[Dict[str, Any]] = Field(default=None, description="A dictionary of validation errors or other specific error details.")
 
-    class Config:
-        from_attributes = True
-        populate_by_name = True # Allow camelCase or snake_case input if aliases are used (though none here yet)
-        # If we want the output JSON to be camelCase for these standard RFC 7807 fields (which are already lowercase/kebab-case-like)
-        # we might not need aliases unless the API style guide mandates strict camelCase for all keys.
-        # RFC 7807 fields are typically lowercase. Let's stick to RFC 7807 naming for these standard fields.
-        # If extension members like 'validationErrors' are added, they would need aliases.
-        # For now, no aliases needed for standard RFC 7807 fields. 
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True  # Allow camelCase or snake_case input if aliases are used
+    )

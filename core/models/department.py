@@ -5,7 +5,7 @@ This module defines the Department class used for categorizing products.
 """
 
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 class Department(BaseModel):
     """
@@ -20,5 +20,4 @@ class Department(BaseModel):
     name: Optional[str] = Field(default="", max_length=100)
     description: Optional[str] = Field(default=None, max_length=255)
 
-    class Config:
-        from_attributes = True # Updated from orm_mode for Pydantic v2
+    model_config = ConfigDict(from_attributes=True)

@@ -89,6 +89,13 @@ class LoginDialog(QDialog):
         self.cancel_button.clicked.connect(self.reject)
         self.username_input.returnPressed.connect(self.password_input.setFocus)
         self.password_input.returnPressed.connect(self.handle_login)
+        
+        # Connect text change signals for validation
+        self.username_input.textChanged.connect(self._validate_inputs)
+        self.password_input.textChanged.connect(self._validate_inputs)
+        
+        # Initial validation
+        self._validate_inputs()
 
         # Set focus
         self.username_input.setFocus()
@@ -107,6 +114,14 @@ class LoginDialog(QDialog):
                 border: 1px solid #2c6ba5;
             }
         """)
+    
+    def _validate_inputs(self):
+        """Enable/disable login button based on input validation."""
+        username = self.username_input.text().strip()
+        password = self.password_input.text()
+        
+        # Enable login button only if both fields have content
+        self.login_button.setEnabled(bool(username and password))
 
     def handle_login(self):
         """
@@ -129,11 +144,18 @@ class LoginDialog(QDialog):
             else:
                 raise AttributeError("User service has no authenticate methods")
             if user:
+                # Check if user is active
+                if hasattr(user, 'is_active') and not user.is_active:
+                    QMessageBox.warning(self, "Error de Ingreso", "El usuario está inactivo.")
+                    self.password_input.clear()
+                    self.setProperty("error_shown", True)
+                    return
+                    
                 self.logged_in_user = user
                 self.setProperty("error_shown", False)
                 self.accept() # Close the dialog successfully
             else:
-                QMessageBox.warning(self, "Error de Ingreso", "Usuario o contraseña incorrectos.")
+                QMessageBox.warning(self, "Error de Ingreso", "Credenciales incorrectas.")
                 # Optionally clear password field
                 self.password_input.clear()
                 self.setProperty("error_shown", True)

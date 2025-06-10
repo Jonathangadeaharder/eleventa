@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel, Field, EmailStr, field_validator
+from pydantic import BaseModel, Field, EmailStr, field_validator, ConfigDict
 import bcrypt
 
 class User(BaseModel):
@@ -23,5 +23,4 @@ class User(BaseModel):
             return hashed.decode('utf-8')
         return password_hash
 
-    class Config:
-        from_attributes = True # Updated from orm_mode for Pydantic v2
+    model_config = ConfigDict(from_attributes=True)

@@ -54,7 +54,14 @@ class ProductDialog(QDialog):
             # Make sure checkbox state is properly set first
             initial_inventory_enabled = True
             self.inventory_checkbox.setChecked(initial_inventory_enabled)
-            self._toggle_inventory_fields(initial_inventory_enabled)
+            
+        # Set initial inventory fields visibility based on checkbox state
+        # This must be called after checkbox state is set
+        # Use the proper Qt state value (2 for checked, 0 for unchecked)
+        initial_state = 2 if self.inventory_checkbox.isChecked() else 0
+        self._toggle_inventory_fields(initial_state)
+        
+        if not self.is_edit_mode:
             self.adjustSize()  # Make sure dialog adjusts to content
 
     def _init_ui(self):
@@ -191,27 +198,18 @@ class ProductDialog(QDialog):
     def _toggle_inventory_fields(self, state):
         """Enable/disable inventory-related fields based on checkbox state."""
         # Convert to boolean - the checkbox can pass either a bool or Qt.CheckState
-        show = bool(state)
         if isinstance(state, int):
-            print(f"Toggle inventory fields - state type: {type(state)}, value: {state}")
             show = (state == 2)  # Qt.CheckState.Checked
-        
-        print(f"Visibility will be set to: {show}")
+        elif isinstance(state, bool):
+            show = state
+        else:
+            show = bool(state)
         
         # Set visibility on all related widgets
         self.stock_label.setVisible(show)
         self.stock_input.setVisible(show)
         self.min_stock_label.setVisible(show)
         self.min_stock_input.setVisible(show)
-        
-        # Ensure inventory_form's parent layout is notified of the visibility change
-        for item in [self.stock_label, self.stock_input, self.min_stock_label, self.min_stock_input]:
-            item.setVisible(show)
-            # Force an explicit size policy update
-            if show:
-                item.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-            else:
-                item.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         
         # Force parent layouts to update
         self.layout().activate()
@@ -310,10 +308,20 @@ class ProductDialog(QDialog):
              self.sale_price_input.setFocus()
              self.validation_failed.emit("El precio de venta no puede ser negativo.")
              return
+        if sell_price == 0:
+             QMessageBox.warning(self, "Entrada Inválida", "El precio de venta no puede ser cero.")
+             self.sale_price_input.setFocus()
+             self.validation_failed.emit("El precio de venta no puede ser cero.")
+             return
         if cost_price < 0:
              QMessageBox.warning(self, "Entrada Inválida", "El precio de costo no puede ser negativo.")
              self.cost_price_input.setFocus()
              self.validation_failed.emit("El precio de costo no puede ser negativo.")
+             return
+        if cost_price == 0:
+             QMessageBox.warning(self, "Entrada Inválida", "El precio de costo no puede ser cero.")
+             self.cost_price_input.setFocus()
+             self.validation_failed.emit("El precio de costo no puede ser cero.")
              return
         # Add more validation as needed (e.g., code format)
 
@@ -406,4 +414,4 @@ if __name__ == '__main__':
         print("Could not find product with ID 1 to test edit mode.")
 
 
-    sys.exit() # Exit after tests 
+    sys.exit() # Exit after tests

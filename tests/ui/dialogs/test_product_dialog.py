@@ -81,12 +81,12 @@ def test_dialog_initialization_add_mode(qtbot, dialog_add_mode):
     assert dialog.product_to_edit is None
     
     # Verify default values
-    assert dialog.code_edit.text() == ""
-    assert dialog.description_edit.text() == ""
-    assert dialog.cost_price_spinbox.value() == 0.0
-    assert dialog.sell_price_spinbox.value() == 0.0
-    assert dialog.min_stock_spinbox.value() == 0.0
-    assert dialog.uses_inventory_checkbox.isChecked() is True
+    assert dialog.code_input.text() == ""
+    assert dialog.description_input.text() == ""
+    assert dialog.cost_price_input.value() == 0.0
+    assert dialog.sale_price_input.value() == 0.0
+    assert dialog.min_stock_input.value() == 0.0
+    assert dialog.inventory_checkbox.isChecked() is True
 
 
 def test_dialog_initialization_edit_mode(qtbot, dialog_edit_mode, sample_product):
@@ -102,12 +102,12 @@ def test_dialog_initialization_edit_mode(qtbot, dialog_edit_mode, sample_product
     assert dialog.product_to_edit == sample_product
     
     # Verify fields are populated with product data
-    assert dialog.code_edit.text() == sample_product.code
-    assert dialog.description_edit.text() == sample_product.description
-    assert dialog.cost_price_spinbox.value() == float(sample_product.cost_price)
-    assert dialog.sell_price_spinbox.value() == float(sample_product.sell_price)
-    assert dialog.min_stock_spinbox.value() == float(sample_product.min_stock)
-    assert dialog.uses_inventory_checkbox.isChecked() == sample_product.uses_inventory
+    assert dialog.code_input.text() == sample_product.code
+    assert dialog.description_input.text() == sample_product.description
+    assert dialog.cost_price_input.value() == float(sample_product.cost_price)
+    assert dialog.sale_price_input.value() == float(sample_product.sell_price)
+    assert dialog.min_stock_input.value() == float(sample_product.min_stock)
+    assert dialog.inventory_checkbox.isChecked() == sample_product.uses_inventory
 
 
 def test_departments_loaded(qtbot, dialog_add_mode, mock_product_service):
@@ -119,11 +119,13 @@ def test_departments_loaded(qtbot, dialog_add_mode, mock_product_service):
     mock_product_service.get_all_departments.assert_called_once()
     
     # Verify combo box is populated
-    assert dialog.department_combo.count() == 2
-    assert dialog.department_combo.itemText(0) == "Electronics"
-    assert dialog.department_combo.itemData(0) == 1
-    assert dialog.department_combo.itemText(1) == "Books"
-    assert dialog.department_combo.itemData(1) == 2
+    assert dialog.department_combo.count() == 3  # "- Sin Departamento -" + 2 departments
+    assert dialog.department_combo.itemText(0) == "- Sin Departamento -"
+    assert dialog.department_combo.itemData(0) is None
+    assert dialog.department_combo.itemText(1) == "Electronics"
+    assert dialog.department_combo.itemData(1) == 1
+    assert dialog.department_combo.itemText(2) == "Books"
+    assert dialog.department_combo.itemData(2) == 2
 
 
 def test_validation_empty_code(qtbot, dialog_add_mode):
@@ -132,9 +134,9 @@ def test_validation_empty_code(qtbot, dialog_add_mode):
     qtbot.addWidget(dialog)
     
     # Leave code empty and try to accept
-    dialog.description_edit.setText("Test Product")
-    dialog.cost_price_spinbox.setValue(10.0)
-    dialog.sell_price_spinbox.setValue(15.0)
+    dialog.description_input.setText("Test Product")
+    dialog.cost_price_input.setValue(10.0)
+    dialog.sale_price_input.setValue(15.0)
     
     with patch.object(QMessageBox, 'warning') as mock_warning:
         dialog.accept()
@@ -148,9 +150,9 @@ def test_validation_empty_description(qtbot, dialog_add_mode):
     qtbot.addWidget(dialog)
     
     # Leave description empty and try to accept
-    dialog.code_edit.setText("TEST001")
-    dialog.cost_price_spinbox.setValue(10.0)
-    dialog.sell_price_spinbox.setValue(15.0)
+    dialog.code_input.setText("TEST001")
+    dialog.cost_price_input.setValue(10.0)
+    dialog.sale_price_input.setValue(15.0)
     
     with patch.object(QMessageBox, 'warning') as mock_warning:
         dialog.accept()
@@ -164,10 +166,10 @@ def test_validation_zero_cost_price(qtbot, dialog_add_mode):
     qtbot.addWidget(dialog)
     
     # Set cost price to zero and try to accept
-    dialog.code_edit.setText("TEST001")
-    dialog.description_edit.setText("Test Product")
-    dialog.cost_price_spinbox.setValue(0.0)
-    dialog.sell_price_spinbox.setValue(15.0)
+    dialog.code_input.setText("TEST001")
+    dialog.description_input.setText("Test Product")
+    dialog.cost_price_input.setValue(0.0)
+    dialog.sale_price_input.setValue(15.0)
     
     with patch.object(QMessageBox, 'warning') as mock_warning:
         dialog.accept()
@@ -181,10 +183,10 @@ def test_validation_zero_sell_price(qtbot, dialog_add_mode):
     qtbot.addWidget(dialog)
     
     # Set sell price to zero and try to accept
-    dialog.code_edit.setText("TEST001")
-    dialog.description_edit.setText("Test Product")
-    dialog.cost_price_spinbox.setValue(10.0)
-    dialog.sell_price_spinbox.setValue(0.0)
+    dialog.code_input.setText("TEST001")
+    dialog.description_input.setText("Test Product")
+    dialog.cost_price_input.setValue(10.0)
+    dialog.sale_price_input.setValue(0.0)
     
     with patch.object(QMessageBox, 'warning') as mock_warning:
         dialog.accept()
@@ -198,21 +200,41 @@ def test_successful_add_product(qtbot, dialog_add_mode, mock_product_service, mo
     qtbot.addWidget(dialog)
     
     # Fill in valid data
-    dialog.code_edit.setText("TEST001")
-    dialog.description_edit.setText("Test Product")
-    dialog.cost_price_spinbox.setValue(10.0)
-    dialog.sell_price_spinbox.setValue(15.0)
-    dialog.min_stock_spinbox.setValue(5.0)
-    dialog.department_combo.setCurrentIndex(0)  # Electronics
+    dialog.code_input.setText("TEST001")
+    dialog.description_input.setText("Test Product")
+    dialog.cost_price_input.setValue(10.0)
+    dialog.sale_price_input.setValue(15.0)
+    dialog.min_stock_input.setValue(5.0)
+    dialog.department_combo.setCurrentIndex(1)  # Electronics
     
-    # Mock successful service call
-    mock_product_service.add_product.return_value = True
+    # Mock successful service call - should return a Product object
+    from core.models.product import Product
+    from decimal import Decimal
+    mock_product = Product(
+        id=1,
+        code="TEST001",
+        description="Test Product",
+        cost_price=Decimal("10.0"),
+        sell_price=Decimal("15.0"),
+        quantity_in_stock=Decimal("0.0"),
+        uses_inventory=False,
+        min_stock=Decimal("5.0"),
+        unit="U",
+        department_id=1
+    )
+    mock_product_service.add_product.return_value = mock_product
     
     # Patch QDialog.accept to prevent actual dialog closing
     monkeypatch.setattr('PySide6.QtWidgets.QDialog.accept', lambda self: None)
     
-    # Accept the dialog
-    dialog.accept()
+    with patch.object(QMessageBox, 'information') as mock_info, \
+         patch.object(QMessageBox, 'critical') as mock_critical:
+        # Accept the dialog
+        dialog.accept()
+        # Verify success message was shown
+        mock_info.assert_called_once()
+        # Verify no critical error was shown
+        mock_critical.assert_not_called()
     
     # Verify service was called with correct data
     mock_product_service.add_product.assert_called_once()
@@ -231,17 +253,23 @@ def test_successful_edit_product(qtbot, dialog_edit_mode, mock_product_service, 
     qtbot.addWidget(dialog)
     
     # Modify some data
-    dialog.description_edit.setText("Modified Test Product")
-    dialog.sell_price_spinbox.setValue(20.0)
+    dialog.description_input.setText("Modified Test Product")
+    dialog.sale_price_input.setValue(20.0)
     
-    # Mock successful service call
-    mock_product_service.update_product.return_value = True
+    # Mock successful service call - update_product doesn't return anything
+    mock_product_service.update_product.return_value = None
     
     # Patch QDialog.accept to prevent actual dialog closing
     monkeypatch.setattr('PySide6.QtWidgets.QDialog.accept', lambda self: None)
     
-    # Accept the dialog
-    dialog.accept()
+    with patch.object(QMessageBox, 'information') as mock_info, \
+         patch.object(QMessageBox, 'critical') as mock_critical:
+        # Accept the dialog
+        dialog.accept()
+        # Verify success message was shown
+        mock_info.assert_called_once()
+        # Verify no critical error was shown
+        mock_critical.assert_not_called()
     
     # Verify service was called with correct data
     mock_product_service.update_product.assert_called_once()
@@ -257,10 +285,10 @@ def test_service_error_handling_add(qtbot, dialog_add_mode, mock_product_service
     qtbot.addWidget(dialog)
     
     # Fill in valid data
-    dialog.code_edit.setText("TEST001")
-    dialog.description_edit.setText("Test Product")
-    dialog.cost_price_spinbox.setValue(10.0)
-    dialog.sell_price_spinbox.setValue(15.0)
+    dialog.code_input.setText("TEST001")
+    dialog.description_input.setText("Test Product")
+    dialog.cost_price_input.setValue(10.0)
+    dialog.sale_price_input.setValue(15.0)
     
     # Mock service error
     mock_product_service.add_product.side_effect = Exception("Database error")
@@ -291,33 +319,59 @@ def test_cancel_dialog(qtbot, dialog_add_mode):
     qtbot.addWidget(dialog)
     
     # Fill in some data
-    dialog.code_edit.setText("TEST001")
-    dialog.description_edit.setText("Test Product")
+    dialog.code_input.setText("TEST001")
+    dialog.description_input.setText("Test Product")
     
     # Cancel the dialog
     dialog.reject()
     
     # Verify dialog result
-    assert dialog.result() == dialog.Rejected
+    from PySide6.QtWidgets import QDialog
+    assert dialog.result() == QDialog.Rejected
 
 
 def test_uses_inventory_checkbox_behavior(qtbot, dialog_add_mode):
-    """Test that uses_inventory checkbox affects min_stock field."""
+    """Test that uses_inventory checkbox affects min_stock field visibility."""
     dialog = dialog_add_mode
     qtbot.addWidget(dialog)
     
-    # Initially uses_inventory should be checked and min_stock enabled
-    assert dialog.uses_inventory_checkbox.isChecked() is True
-    assert dialog.min_stock_spinbox.isEnabled() is True
+    # Show the dialog and wait for it to be exposed
+    with qtbot.waitExposed(dialog):
+        dialog.show()
     
-    # Uncheck uses_inventory
-    dialog.uses_inventory_checkbox.setChecked(False)
+    # Process events to ensure UI is fully initialized
+    qtbot.wait(50)
     
-    # min_stock should be disabled
-    assert dialog.min_stock_spinbox.isEnabled() is False
+    # Initially uses_inventory should be checked
+    assert dialog.inventory_checkbox.isChecked() is True
     
-    # Check uses_inventory again
-    dialog.uses_inventory_checkbox.setChecked(True)
+    # Trigger the checkbox to ensure signal is processed
+    dialog.inventory_checkbox.setChecked(True)  # Re-set to trigger signal
+    qtbot.wait(10)
     
-    # min_stock should be enabled again
-    assert dialog.min_stock_spinbox.isEnabled() is True
+    # The min_stock field should be visible since checkbox is checked
+    assert dialog.min_stock_input.isVisible() is True
+    
+    # Test hiding the fields by unchecking
+    dialog.inventory_checkbox.setChecked(False)
+    qtbot.wait(10)  # Wait for signal processing
+    assert dialog.min_stock_input.isVisible() is False
+    
+    # Test showing them again by checking
+    dialog.inventory_checkbox.setChecked(True)
+    qtbot.wait(10)  # Wait for signal processing
+    assert dialog.min_stock_input.isVisible() is True
+    
+    # Test unchecking again
+    dialog.inventory_checkbox.setChecked(False)
+    qtbot.wait(10)  # Wait for signal processing
+    
+    # min_stock should be hidden
+    assert dialog.min_stock_input.isVisible() is False
+    
+    # Check uses_inventory one more time
+    dialog.inventory_checkbox.setChecked(True)
+    qtbot.wait(10)  # Wait for signal processing
+    
+    # min_stock should be visible again
+    assert dialog.min_stock_input.isVisible() is True

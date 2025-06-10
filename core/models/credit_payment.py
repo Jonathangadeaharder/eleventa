@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional, Union
 import uuid
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 class CreditPayment(BaseModel):
     id: Optional[int] = None
@@ -12,5 +12,4 @@ class CreditPayment(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow) # Changed from payment_date to match ORM
     notes: Optional[str] = Field(default=None, max_length=255) # Changed from description to match ORM
     
-    class Config:
-        from_attributes = True # Updated from orm_mode to from_attributes for Pydantic v2
+    model_config = ConfigDict(from_attributes=True)

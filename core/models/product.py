@@ -1,5 +1,5 @@
 from typing import Optional, Any
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 import datetime
 from decimal import Decimal
 
@@ -50,5 +50,4 @@ class Product(BaseModel):
         attr = super().__getattribute__(name)
         return attr
 
-    class Config:
-        from_attributes = True  # Updated from orm_mode for Pydantic v2
+    model_config = ConfigDict(from_attributes=True)

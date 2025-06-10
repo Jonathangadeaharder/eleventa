@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal # For precise quantity representation
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 # Could define an Enum for movement_type if specific types are known
 # class InventoryMovementType(str, Enum):
@@ -20,5 +20,4 @@ class InventoryMovement(BaseModel):
     user_id: Optional[int] = None # User performing the movement
     related_id: Optional[int] = None # e.g., Sale ID, Purchase ID
 
-    class Config:
-        from_attributes = True # Updated from orm_mode for Pydantic v2
+    model_config = ConfigDict(from_attributes=True)

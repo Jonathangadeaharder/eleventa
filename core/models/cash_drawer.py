@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class CashDrawerEntryType(Enum):
@@ -25,7 +25,4 @@ class CashDrawerEntry(BaseModel):
     user_id: int # Assuming user_id is always present for a domain entry
     drawer_id: Optional[int] = None
     
-    class Config:
-        from_attributes = True # Updated from orm_mode for Pydantic v2
-        # Allow enum to be used
-        # use_enum_values = True
+    model_config = ConfigDict(from_attributes=True)

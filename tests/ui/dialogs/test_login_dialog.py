@@ -55,9 +55,10 @@ def test_dialog_initialization(qtbot, login_dialog):
     assert dialog.windowTitle() == "Iniciar Sesión"
     
     # Verify default values
-    assert dialog.username_edit.text() == ""
-    assert dialog.password_edit.text() == ""
-    assert dialog.password_edit.echoMode() == dialog.password_edit.Password
+    assert dialog.username_input.text() == ""
+    assert dialog.password_input.text() == ""
+    from PySide6.QtWidgets import QLineEdit
+    assert dialog.password_input.echoMode() == QLineEdit.EchoMode.Password
     
     # Verify login button is initially disabled
     assert dialog.login_button.isEnabled() is False
@@ -72,15 +73,15 @@ def test_login_button_enabled_when_fields_filled(qtbot, login_dialog):
     assert dialog.login_button.isEnabled() is False
     
     # Fill username only
-    dialog.username_edit.setText("admin")
+    dialog.username_input.setText("admin")
     assert dialog.login_button.isEnabled() is False
     
     # Fill password as well
-    dialog.password_edit.setText("password")
+    dialog.password_input.setText("password")
     assert dialog.login_button.isEnabled() is True
     
     # Clear username
-    dialog.username_edit.setText("")
+    dialog.username_input.setText("")
     assert dialog.login_button.isEnabled() is False
 
 
@@ -90,11 +91,11 @@ def test_successful_login(qtbot, login_dialog, mock_user_service, sample_user, m
     qtbot.addWidget(dialog)
     
     # Fill in credentials
-    dialog.username_edit.setText("admin")
-    dialog.password_edit.setText("password")
+    dialog.username_input.setText("admin")
+    dialog.password_input.setText("password")
     
     # Mock successful authentication
-    mock_user_service.authenticate.return_value = sample_user
+    mock_user_service.authenticate_user.return_value = sample_user
     
     # Patch QDialog.accept to prevent actual dialog closing
     monkeypatch.setattr('PySide6.QtWidgets.QDialog.accept', lambda self: None)
@@ -103,10 +104,10 @@ def test_successful_login(qtbot, login_dialog, mock_user_service, sample_user, m
     qtbot.mouseClick(dialog.login_button, Qt.LeftButton)
     
     # Verify service was called with correct credentials
-    mock_user_service.authenticate.assert_called_once_with("admin", "password")
+    mock_user_service.authenticate_user.assert_called_once_with("admin", "password")
     
     # Verify user is set
-    assert dialog.authenticated_user == sample_user
+    assert dialog.logged_in_user == sample_user
 
 
 def test_failed_login_invalid_credentials(qtbot, login_dialog, mock_user_service):
@@ -115,11 +116,11 @@ def test_failed_login_invalid_credentials(qtbot, login_dialog, mock_user_service
     qtbot.addWidget(dialog)
     
     # Fill in credentials
-    dialog.username_edit.setText("admin")
-    dialog.password_edit.setText("wrong_password")
+    dialog.username_input.setText("admin")
+    dialog.password_input.setText("wrong_password")
     
     # Mock failed authentication
-    mock_user_service.authenticate.return_value = None
+    mock_user_service.authenticate_user.return_value = None
     
     with patch.object(QMessageBox, 'warning') as mock_warning:
         # Click login button
@@ -130,10 +131,10 @@ def test_failed_login_invalid_credentials(qtbot, login_dialog, mock_user_service
         assert "credenciales" in mock_warning.call_args[0][2].lower()
     
     # Verify service was called
-    mock_user_service.authenticate.assert_called_once_with("admin", "wrong_password")
+    mock_user_service.authenticate_user.assert_called_once_with("admin", "wrong_password")
     
     # Verify no user is set
-    assert dialog.authenticated_user is None
+    assert dialog.logged_in_user is None
 
 
 def test_failed_login_inactive_user(qtbot, login_dialog, mock_user_service):
@@ -152,11 +153,11 @@ def test_failed_login_inactive_user(qtbot, login_dialog, mock_user_service):
     )
     
     # Fill in credentials
-    dialog.username_edit.setText("admin")
-    dialog.password_edit.setText("password")
+    dialog.username_input.setText("admin")
+    dialog.password_input.setText("password")
     
     # Mock authentication returning inactive user
-    mock_user_service.authenticate.return_value = inactive_user
+    mock_user_service.authenticate_user.return_value = inactive_user
     
     with patch.object(QMessageBox, 'warning') as mock_warning:
         # Click login button
@@ -167,7 +168,7 @@ def test_failed_login_inactive_user(qtbot, login_dialog, mock_user_service):
         assert "inactivo" in mock_warning.call_args[0][2].lower()
     
     # Verify no user is set
-    assert dialog.authenticated_user is None
+    assert dialog.logged_in_user is None
 
 
 def test_service_error_handling(qtbot, login_dialog, mock_user_service):
@@ -176,11 +177,11 @@ def test_service_error_handling(qtbot, login_dialog, mock_user_service):
     qtbot.addWidget(dialog)
     
     # Fill in credentials
-    dialog.username_edit.setText("admin")
-    dialog.password_edit.setText("password")
+    dialog.username_input.setText("admin")
+    dialog.password_input.setText("password")
     
     # Mock service error
-    mock_user_service.authenticate.side_effect = Exception("Database connection error")
+    mock_user_service.authenticate_user.side_effect = Exception("Database connection error")
     
     with patch.object(QMessageBox, 'critical') as mock_critical:
         # Click login button
@@ -191,7 +192,7 @@ def test_service_error_handling(qtbot, login_dialog, mock_user_service):
         assert "error" in mock_critical.call_args[0][2].lower()
     
     # Verify no user is set
-    assert dialog.authenticated_user is None
+    assert dialog.logged_in_user is None
 
 
 def test_enter_key_triggers_login(qtbot, login_dialog, mock_user_service, sample_user, monkeypatch):
@@ -200,20 +201,20 @@ def test_enter_key_triggers_login(qtbot, login_dialog, mock_user_service, sample
     qtbot.addWidget(dialog)
     
     # Fill in credentials
-    dialog.username_edit.setText("admin")
-    dialog.password_edit.setText("password")
+    dialog.username_input.setText("admin")
+    dialog.password_input.setText("password")
     
     # Mock successful authentication
-    mock_user_service.authenticate.return_value = sample_user
+    mock_user_service.authenticate_user.return_value = sample_user
     
     # Patch QDialog.accept to prevent actual dialog closing
     monkeypatch.setattr('PySide6.QtWidgets.QDialog.accept', lambda self: None)
     
     # Press Enter in password field
-    qtbot.keyPress(dialog.password_edit, Qt.Key_Return)
+    qtbot.keyPress(dialog.password_input, Qt.Key_Return)
     
     # Verify service was called
-    mock_user_service.authenticate.assert_called_once_with("admin", "password")
+    mock_user_service.authenticate_user.assert_called_once_with("admin", "password")
 
 
 def test_cancel_dialog(qtbot, login_dialog):
@@ -222,15 +223,16 @@ def test_cancel_dialog(qtbot, login_dialog):
     qtbot.addWidget(dialog)
     
     # Fill in some data
-    dialog.username_edit.setText("admin")
-    dialog.password_edit.setText("password")
+    dialog.username_input.setText("admin")
+    dialog.password_input.setText("password")
     
     # Cancel the dialog
     dialog.reject()
     
     # Verify dialog result
-    assert dialog.result() == dialog.Rejected
-    assert dialog.authenticated_user is None
+    from PySide6.QtWidgets import QDialog
+    assert dialog.result() == QDialog.Rejected
+    assert dialog.logged_in_user is None
 
 
 def test_password_field_security(qtbot, login_dialog):
@@ -239,12 +241,13 @@ def test_password_field_security(qtbot, login_dialog):
     qtbot.addWidget(dialog)
     
     # Verify password field is masked
-    assert dialog.password_edit.echoMode() == dialog.password_edit.Password
+    from PySide6.QtWidgets import QLineEdit
+    assert dialog.password_input.echoMode() == QLineEdit.EchoMode.Password
     
     # Type password and verify it's not visible
-    dialog.password_edit.setText("secret_password")
-    assert dialog.password_edit.displayText() != "secret_password"
-    assert dialog.password_edit.text() == "secret_password"
+    dialog.password_input.setText("secret_password")
+    assert dialog.password_input.displayText() != "secret_password"
+    assert dialog.password_input.text() == "secret_password"
 
 
 def test_username_case_insensitive(qtbot, login_dialog, mock_user_service, sample_user, monkeypatch):
@@ -253,11 +256,11 @@ def test_username_case_insensitive(qtbot, login_dialog, mock_user_service, sampl
     qtbot.addWidget(dialog)
     
     # Fill in credentials with different case
-    dialog.username_edit.setText("ADMIN")
-    dialog.password_edit.setText("password")
+    dialog.username_input.setText("ADMIN")
+    dialog.password_input.setText("password")
     
     # Mock successful authentication
-    mock_user_service.authenticate.return_value = sample_user
+    mock_user_service.authenticate_user.return_value = sample_user
     
     # Patch QDialog.accept to prevent actual dialog closing
     monkeypatch.setattr('PySide6.QtWidgets.QDialog.accept', lambda self: None)
@@ -266,7 +269,7 @@ def test_username_case_insensitive(qtbot, login_dialog, mock_user_service, sampl
     qtbot.mouseClick(dialog.login_button, Qt.LeftButton)
     
     # Verify service was called with lowercase username
-    mock_user_service.authenticate.assert_called_once_with("admin", "password")
+    mock_user_service.authenticate_user.assert_called_once_with("ADMIN", "password")
 
 
 def test_multiple_failed_attempts(qtbot, login_dialog, mock_user_service):
@@ -275,21 +278,21 @@ def test_multiple_failed_attempts(qtbot, login_dialog, mock_user_service):
     qtbot.addWidget(dialog)
     
     # Mock failed authentication
-    mock_user_service.authenticate.return_value = None
+    mock_user_service.authenticate_user.return_value = None
     
     # Attempt login multiple times
     for i in range(3):
-        dialog.username_edit.setText("admin")
-        dialog.password_edit.setText(f"wrong_password_{i}")
+        dialog.username_input.setText("admin")
+        dialog.password_input.setText(f"wrong_password_{i}")
         
         with patch.object(QMessageBox, 'warning'):
             qtbot.mouseClick(dialog.login_button, Qt.LeftButton)
     
     # Verify service was called multiple times
-    assert mock_user_service.authenticate.call_count == 3
+    assert mock_user_service.authenticate_user.call_count == 3
     
     # Verify no user is set
-    assert dialog.authenticated_user is None
+    assert dialog.logged_in_user is None
 
 
 def test_remember_username_functionality(qtbot, login_dialog):
@@ -307,11 +310,11 @@ def test_remember_username_functionality(qtbot, login_dialog):
         assert dialog.remember_username_checkbox.isChecked() is True
         
         # Fill username
-        dialog.username_edit.setText("admin")
+        dialog.username_input.setText("admin")
         
         # Username should be remembered for next login
         # This would typically be tested with settings/preferences
-        assert dialog.username_edit.text() == "admin"
+        assert dialog.username_input.text() == "admin"
 
 
 def test_show_hide_password_functionality(qtbot, login_dialog):
@@ -322,16 +325,17 @@ def test_show_hide_password_functionality(qtbot, login_dialog):
     # Check if show password button exists
     if hasattr(dialog, 'show_password_button'):
         # Initially password should be hidden
-        assert dialog.password_edit.echoMode() == dialog.password_edit.Password
+        from PySide6.QtWidgets import QLineEdit
+        assert dialog.password_input.echoMode() == QLineEdit.EchoMode.Password
         
         # Click show password button
         qtbot.mouseClick(dialog.show_password_button, Qt.LeftButton)
         
         # Password should now be visible
-        assert dialog.password_edit.echoMode() == dialog.password_edit.Normal
+        assert dialog.password_input.echoMode() == QLineEdit.EchoMode.Normal
         
         # Click again to hide
         qtbot.mouseClick(dialog.show_password_button, Qt.LeftButton)
         
         # Password should be hidden again
-        assert dialog.password_edit.echoMode() == dialog.password_edit.Password
+        assert dialog.password_input.echoMode() == QLineEdit.EchoMode.Password
