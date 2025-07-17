@@ -43,226 +43,12 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy import or_
 
 from infrastructure.persistence.sqlite.cash_drawer_repository import SQLiteCashDrawerRepository
+from infrastructure.persistence.mappers import ModelMapper
 
 import bcrypt
 
-# --- Helper Function for ORM to Domain Model Mapping ---
-
-def _map_department_orm_to_model(dept_orm: "DepartmentOrm") -> Optional[Department]:
-    """Maps the DepartmentOrm object to the Department domain model."""
-    if not dept_orm:
-        return None
-    # Department Pydantic model has id, name, description
-    return Department(
-        id=dept_orm.id,
-        name=dept_orm.name,
-        description=getattr(dept_orm, 'description', None) # Assuming description might not exist in older ORM versions
-    )
-
-# --- Helper Function for Product ORM to Domain Model Mapping ---
-
-def _map_product_orm_to_model(prod_orm: "ProductOrm") -> Optional[Product]:
-    """Maps the ProductOrm object to the Product domain model."""
-    if not prod_orm:
-        return None
-    # Map the related DepartmentOrm to Department model if it exists
-    department_model = _map_department_orm_to_model(prod_orm.department) if prod_orm.department else None
-
-    # Numeric fields from ORM map directly to Decimal fields in Pydantic model
-    return Product(
-        id=prod_orm.id,
-        code=prod_orm.code,
-        description=prod_orm.description,
-        cost_price=prod_orm.cost_price, # Numeric -> Decimal
-        sell_price=prod_orm.sell_price, # Numeric -> Decimal
-        wholesale_price=prod_orm.wholesale_price, # Numeric -> Decimal
-        special_price=prod_orm.special_price, # Numeric -> Decimal
-        department_id=prod_orm.department_id,
-        department=department_model, # Assign the mapped Department model
-        unit=prod_orm.unit,
-        uses_inventory=prod_orm.uses_inventory,
-        quantity_in_stock=prod_orm.quantity_in_stock, # Numeric -> Decimal
-        min_stock=prod_orm.min_stock, # Numeric -> Decimal
-        max_stock=prod_orm.max_stock, # Numeric -> Decimal
-        last_updated=prod_orm.last_updated,
-        notes=prod_orm.notes,
-        is_active=prod_orm.is_active
-    )
-
-# --- Helper Function for Inventory Movement ORM to Domain Model Mapping ---
-
-def _map_movement_orm_to_model(move_orm: "InventoryMovementOrm") -> Optional[InventoryMovement]:
-    """Maps the InventoryMovementOrm object to the InventoryMovement domain model."""
-    if not move_orm:
-        return None
-    return InventoryMovement(
-        id=move_orm.id,
-        product_id=move_orm.product_id,
-        user_id=move_orm.user_id,
-        timestamp=move_orm.timestamp,
-        movement_type=move_orm.movement_type,
-        quantity=move_orm.quantity, # Numeric -> Decimal
-        description=move_orm.description,
-        related_id=move_orm.related_id
-    )
-
-# --- Helper Functions for Sale ORM to Domain Model Mapping ---
-
-def _map_sale_item_orm_to_model(item_orm: "SaleItemOrm") -> Optional[SaleItem]:
-    """
-    Maps the SaleItemOrm object to the SaleItem domain model.
-    Numeric types map to Decimal.
-    """
-    if not item_orm:
-        return None
-    return SaleItem(
-        id=item_orm.id,
-        sale_id=item_orm.sale_id,
-        product_id=item_orm.product_id,
-        quantity=item_orm.quantity, # Numeric -> Decimal
-        unit_price=item_orm.unit_price, # Numeric -> Decimal
-        product_code=item_orm.product_code,
-        product_description=item_orm.product_description
-    )
-
-def _map_sale_orm_to_model(sale_orm: "SaleOrm") -> Optional[Sale]:
-    """Maps the SaleOrm object to the Sale domain model."""
-    if not sale_orm:
-        return None
-    # Map related items using the item mapper
-    # Ensure items are loaded (e.g., via lazy='selectin' or joinedload)
-    items_model = [_map_sale_item_orm_to_model(item) for item in sale_orm.items] if sale_orm.items else []
-
-    return Sale(
-        id=sale_orm.id,
-        timestamp=sale_orm.date_time,
-        items=items_model,
-        customer_id=sale_orm.customer_id, # Map customer_id
-        is_credit_sale=sale_orm.is_credit_sale, # Map is_credit_sale
-        user_id=sale_orm.user_id, # Map user_id
-        payment_type=sale_orm.payment_type # Map payment_type
-        # total is a calculated property in Sale domain model
-    )
-
-# --- Helper Function for Customer ORM to Domain Model Mapping ---
-
-def _map_customer_orm_to_model(cust_orm: "CustomerOrm") -> Optional[Customer]:
-    """Maps the CustomerOrm object to the Customer domain model."""
-    if not cust_orm:
-        return None
-    return Customer(
-        id=cust_orm.id, # UUID
-        name=cust_orm.name,
-        phone=cust_orm.phone,
-        email=cust_orm.email,
-        address=cust_orm.address,
-        cuit=cust_orm.cuit,
-        iva_condition=cust_orm.iva_condition,
-        credit_limit=cust_orm.credit_limit, # Numeric -> Decimal/float (check Customer model)
-        credit_balance=cust_orm.credit_balance, # Numeric -> Decimal/float (check Customer model)
-        is_active=cust_orm.is_active
-    )
-
-# --- Helper Function for CreditPayment ORM to Domain Model Mapping ---
-
-def _map_credit_payment_orm_to_model(payment_orm: "CreditPaymentOrm") -> Optional[CreditPayment]:
-    """
-    Maps the CreditPaymentOrm object to the CreditPayment domain model.
-    Numeric maps to Decimal.
-    """
-    if not payment_orm:
-        return None
-    return CreditPayment(
-        id=payment_orm.id,
-        customer_id=payment_orm.customer_id, # UUID
-        amount=payment_orm.amount, # Numeric -> Decimal
-        timestamp=payment_orm.timestamp, # Already matches
-        notes=payment_orm.notes, # Already matches
-        user_id=payment_orm.user_id
-    )
-
-# --- Helper Function for User ORM to Domain Model Mapping ---
-
-def _map_user_orm_to_model(user_orm: "UserOrm") -> Optional[User]:
-    """Maps the UserOrm object to the User domain model."""
-    if not user_orm:
-        return None
-    return User(
-        id=user_orm.id,
-        username=user_orm.username,
-        password_hash=user_orm.password_hash,
-        email=user_orm.email, # Added email
-        is_active=user_orm.is_active,
-        is_admin=user_orm.is_admin # Added is_admin
-    )
-
-# --- Helper Function for Invoice ORM to Domain Model Mapping ---
-
-def _map_invoice_orm_to_model(invoice_orm: "InvoiceOrm") -> Optional[Invoice]:
-    """Maps the InvoiceOrm object to the Invoice domain model."""
-    if not invoice_orm:
-        return None
-
-    # Deserialize customer_details if it's stored as JSON string
-    customer_details_dict = {}
-    if invoice_orm.customer_details:
-        try:
-            customer_details_dict = json.loads(invoice_orm.customer_details)
-        except json.JSONDecodeError:
-            logging.warning(f"Could not decode customer_details JSON for invoice {invoice_orm.id}")
-            customer_details_dict = {} # Default to empty dict on error
-
-    return Invoice(
-        id=invoice_orm.id,
-        sale_id=invoice_orm.sale_id,
-        customer_id=invoice_orm.customer_id,
-        invoice_number=invoice_orm.invoice_number,
-        invoice_date=invoice_orm.invoice_date,
-        invoice_type=invoice_orm.invoice_type,
-        customer_details=customer_details_dict,
-        subtotal=invoice_orm.subtotal, # Numeric -> Decimal
-        iva_amount=invoice_orm.iva_amount, # Numeric -> Decimal
-        total=invoice_orm.total, # Numeric -> Decimal
-        iva_condition=invoice_orm.iva_condition,
-        cae=invoice_orm.cae,
-        cae_due_date=invoice_orm.cae_due_date,
-        notes=invoice_orm.notes,
-        is_active=invoice_orm.is_active
-    )
-
-# --- Helper Function for mapping Domain Invoice to ORM --- 
-# (Useful for add/update methods)
-
-def _map_invoice_model_to_orm(invoice: Invoice, invoice_orm: Optional["InvoiceOrm"] = None) -> "InvoiceOrm":
-    """Maps the Invoice domain model object to an InvoiceOrm object."""
-    if not invoice_orm: 
-        invoice_orm = InvoiceOrm() # Create new ORM instance if not updating
-
-    # Assign attributes from domain model to ORM model
-    # ID is usually handled by DB or not set on creation
-    invoice_orm.sale_id = invoice.sale_id
-    invoice_orm.customer_id = invoice.customer_id
-    invoice_orm.invoice_number = invoice.invoice_number
-    invoice_orm.invoice_date = invoice.invoice_date
-    invoice_orm.invoice_type = invoice.invoice_type
-    
-    # Serialize customer_details dictionary to JSON string
-    try:
-        invoice_orm.customer_details = json.dumps(invoice.customer_details)
-    except TypeError:
-        logging.warning(f"Could not serialize customer_details for invoice related to sale {invoice.sale_id}")
-        invoice_orm.customer_details = "{}" # Default to empty JSON object
-        
-    invoice_orm.subtotal = invoice.subtotal
-    invoice_orm.iva_amount = invoice.iva_amount
-    invoice_orm.total = invoice.total
-    invoice_orm.iva_condition = invoice.iva_condition
-    invoice_orm.cae = invoice.cae
-    invoice_orm.cae_due_date = invoice.cae_due_date
-    invoice_orm.notes = invoice.notes
-    invoice_orm.is_active = invoice.is_active
-
-    return invoice_orm
+# All ORM-to-Domain mapping functions have been centralized in infrastructure.persistence.mappers.ModelMapper
+# This provides better maintainability and consistency across the codebase.
 
 # --- Repository Implementation ---
 
@@ -293,7 +79,7 @@ class SqliteDepartmentRepository(IDepartmentRepository):
             self.session.flush() # Flush to get the ID assigned by the database
             self.session.refresh(department_orm)
             # Map the ORM model (with ID) back to domain model and return
-            return _map_department_orm_to_model(department_orm)
+            return ModelMapper.department_orm_to_domain(department_orm)
         except IntegrityError as e:
             self.session.rollback()
             # Log error or handle specific constraint violations
@@ -307,19 +93,19 @@ class SqliteDepartmentRepository(IDepartmentRepository):
     def get_by_id(self, department_id: int) -> Optional[Department]: # Changed type hint to int
         """Retrieves a department by its ID."""
         department_orm = self.session.get(DepartmentOrm, department_id)
-        return _map_department_orm_to_model(department_orm)
+        return ModelMapper.department_orm_to_domain(department_orm)
 
     def get_by_name(self, name: str) -> Optional[Department]:
         """Retrieves a department by its name."""
         stmt = select(DepartmentOrm).where(DepartmentOrm.name == name)
         department_orm = self.session.scalars(stmt).first()
-        return _map_department_orm_to_model(department_orm)
+        return ModelMapper.department_orm_to_domain(department_orm)
 
     def get_all(self) -> List[Department]:
         """Retrieves all departments, ordered by name."""
         stmt = select(DepartmentOrm).order_by(DepartmentOrm.name)
         results_orm = self.session.scalars(stmt).all()
-        return [_map_department_orm_to_model(dept) for dept in results_orm]
+        return [ModelMapper.department_orm_to_domain(dept) for dept in results_orm]
 
     def update(self, department: Department) -> Department:
         """Updates an existing department."""
@@ -342,7 +128,7 @@ class SqliteDepartmentRepository(IDepartmentRepository):
             
             self.session.flush()
             self.session.refresh(department_orm)
-            return _map_department_orm_to_model(department_orm)
+            return ModelMapper.department_orm_to_domain(department_orm)
         except IntegrityError as e:
             self.session.rollback()
             logging.error(f"Database integrity error updating department {department.id}: {e}")
@@ -424,7 +210,7 @@ class SqliteProductRepository(IProductRepository):
             self.session.add(product_orm)
             self.session.flush()
             self.session.refresh(product_orm, attribute_names=['id', 'department']) # Refresh to get ID and potentially loaded department
-            return _map_product_orm_to_model(product_orm)
+            return ModelMapper.product_orm_to_domain(product_orm)
         except IntegrityError as e:
             self.session.rollback()
             logging.error(f"Database integrity error adding product: {e}")
@@ -439,7 +225,7 @@ class SqliteProductRepository(IProductRepository):
         # Use joinedload to eager load department
         stmt = select(ProductOrm).options(joinedload(ProductOrm.department)).where(ProductOrm.id == product_id)
         product_orm = self.session.scalars(stmt).first()
-        return _map_product_orm_to_model(product_orm)
+        return ModelMapper.product_orm_to_domain(product_orm)
 
     def get_by_code(self, code: str) -> Optional[Product]:
         """Retrieves a product by its code, eagerly loading the department."""
@@ -450,7 +236,7 @@ class SqliteProductRepository(IProductRepository):
             return None
             
         # Map ORM to domain model
-        return _map_product_orm_to_model(product_orm)
+        return ModelMapper.product_orm_to_domain(product_orm)
         
     def get_all(self, filter_params: Optional[Dict[str, Any]] = None, 
                 sort_by: Optional[str] = None, limit: Optional[int] = None, 
@@ -497,14 +283,14 @@ class SqliteProductRepository(IProductRepository):
             stmt = stmt.limit(limit)
             
         results_orm = self.session.scalars(stmt).all()
-        return [_map_product_orm_to_model(prod) for prod in results_orm]
+        return [ModelMapper.product_orm_to_domain(prod) for prod in results_orm]
 
     def get_by_department_id(self, department_id: int) -> List[Product]:
         """Retrieves all products for a specific department."""
         stmt = select(ProductOrm).where(ProductOrm.department_id == department_id).order_by(ProductOrm.description)
         results_orm = self.session.scalars(stmt).all()
         # Map ORM objects to domain models
-        return [_map_product_orm_to_model(prod) for prod in results_orm]
+        return [ModelMapper.product_orm_to_domain(prod) for prod in results_orm]
 
     def update(self, product: Product) -> Product:
         """Updates an existing product."""
@@ -550,7 +336,7 @@ class SqliteProductRepository(IProductRepository):
             
             self.session.flush()
             self.session.refresh(product_orm, attribute_names=['department']) # Refresh to get loaded department
-            return _map_product_orm_to_model(product_orm)
+            return ModelMapper.product_orm_to_domain(product_orm)
         except IntegrityError as e:
             self.session.rollback()
             logging.error(f"Database integrity error updating product {product.id}: {e}")
@@ -585,7 +371,7 @@ class SqliteProductRepository(IProductRepository):
             )
         ).order_by(ProductOrm.description)
         results_orm = self.session.scalars(stmt).all()
-        return [_map_product_orm_to_model(prod) for prod in results_orm]
+        return [ModelMapper.product_orm_to_domain(prod) for prod in results_orm]
 
     def get_low_stock(self, threshold: Optional[Decimal] = None) -> List[Product]: # Changed threshold to Decimal
         """Retrieves products where stock <= min_stock or below optional threshold."""
@@ -607,7 +393,7 @@ class SqliteProductRepository(IProductRepository):
             
         stmt = stmt.order_by(ProductOrm.description)
         results_orm = self.session.scalars(stmt).all()
-        return [_map_product_orm_to_model(prod) for prod in results_orm]
+        return [ModelMapper.product_orm_to_domain(prod) for prod in results_orm]
 
     def update_stock(self, product_id: int, quantity_change: Decimal, cost_price: Optional[Decimal] = None) -> Optional[Product]: # Changed types to Decimal
         """Updates the stock quantity and optionally the cost price of a specific product."""
@@ -626,7 +412,7 @@ class SqliteProductRepository(IProductRepository):
                 product_orm.last_updated = datetime.now()
                 self.session.flush()
                 self.session.refresh(product_orm, attribute_names=['department'])
-                return _map_product_orm_to_model(product_orm)
+                return ModelMapper.product_orm_to_domain(product_orm)
             except Exception as e:
                  self.session.rollback()
                  logging.error(f"Error updating stock for product {product_id}: {e}")
@@ -658,7 +444,7 @@ class SqliteInventoryRepository(IInventoryRepository):
             self.session.add(movement_orm)
             self.session.flush()
             self.session.refresh(movement_orm)
-            return _map_movement_orm_to_model(movement_orm)
+            return ModelMapper.inventory_movement_orm_to_domain(movement_orm)
         except Exception as e:
             self.session.rollback()
             logging.error(f"Error adding inventory movement: {e}")
@@ -673,7 +459,7 @@ class SqliteInventoryRepository(IInventoryRepository):
             stmt = stmt.where(InventoryMovementOrm.timestamp <= end_date)
         stmt = stmt.order_by(InventoryMovementOrm.timestamp.desc())
         results_orm = self.session.scalars(stmt).all()
-        return [_map_movement_orm_to_model(move) for move in results_orm]
+        return [ModelMapper.inventory_movement_orm_to_domain(move) for move in results_orm]
 
     def get_all_movements(self, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> List[InventoryMovement]:
         """Retrieves all inventory movements within an optional date range."""
@@ -684,7 +470,7 @@ class SqliteInventoryRepository(IInventoryRepository):
             stmt = stmt.where(InventoryMovementOrm.timestamp <= end_date)
         stmt = stmt.order_by(InventoryMovementOrm.timestamp.desc())
         results_orm = self.session.scalars(stmt).all()
-        return [_map_movement_orm_to_model(move) for move in results_orm]
+        return [ModelMapper.inventory_movement_orm_to_domain(move) for move in results_orm]
 
 # --- Sale Repository Implementation ---
 
@@ -723,7 +509,7 @@ class SqliteSaleRepository(ISaleRepository):
             self.session.refresh(sale_orm)
             # Need to eager load items when refreshing/mapping back if required by caller
             # Or map back manually here including items
-            return _map_sale_orm_to_model(sale_orm)
+            return ModelMapper.sale_orm_to_domain(sale_orm)
         except Exception as e:
             self.session.rollback()
             logging.error(f"Error adding sale: {e}")
@@ -733,7 +519,7 @@ class SqliteSaleRepository(ISaleRepository):
         """Retrieves a single sale by its ID, including its items."""
         stmt = select(SaleOrm).options(joinedload(SaleOrm.items)).where(SaleOrm.id == sale_id)
         sale_orm = self.session.scalars(stmt).first()
-        return _map_sale_orm_to_model(sale_orm)
+        return ModelMapper.sale_orm_to_domain(sale_orm)
 
     # Keeping the duplicate method name as it was in the original file
     def get_sale_by_id(self, sale_id: int) -> Optional[Sale]:
@@ -753,7 +539,7 @@ class SqliteSaleRepository(ISaleRepository):
         
         # Use unique() to handle eager loading with collections
         results_orm = self.session.scalars(stmt).unique().all()
-        return [_map_sale_orm_to_model(sale) for sale in results_orm]
+        return [ModelMapper.sale_orm_to_domain(sale) for sale in results_orm]
 
     # Aggregation methods remain largely the same, as they return Dicts, not domain models directly
     # (Ensure they query the ORM models correctly)
@@ -1036,7 +822,7 @@ class SqliteSaleRepository(ISaleRepository):
             
             self.session.commit()
             self.session.refresh(sale_orm) # Refresh to get any DB-generated values or updated state
-            return _map_sale_orm_to_model(sale_orm)
+            return ModelMapper.sale_orm_to_domain(sale_orm)
         except Exception as e:
             self.session.rollback()
             logging.error(f"Error updating sale ID {sale_id} with data {data}: {e}")
@@ -1106,7 +892,7 @@ class SqliteCustomerRepository(ICustomerRepository):
             self.session.refresh(customer_orm)
             
             # Map back to domain model
-            return _map_customer_orm_to_model(customer_orm)
+            return ModelMapper.customer_orm_to_domain(customer_orm)
         except Exception as e:
             # Log the error
             logging.error(f"Error adding customer: {e}")
@@ -1115,14 +901,14 @@ class SqliteCustomerRepository(ICustomerRepository):
     def get_by_id(self, customer_id) -> Optional[Customer]:
         """Get a customer by ID."""
         customer_orm = self.session.query(CustomerOrm).filter(CustomerOrm.id == customer_id).first()
-        return _map_customer_orm_to_model(customer_orm)
+        return ModelMapper.customer_orm_to_domain(customer_orm)
         
     def get_by_cuit(self, cuit: str) -> Optional[Customer]:
         """Get a customer by CUIT."""
         if not cuit:
             return None
         customer_orm = self.session.query(CustomerOrm).filter(CustomerOrm.cuit == cuit).first()
-        return _map_customer_orm_to_model(customer_orm)
+        return ModelMapper.customer_orm_to_domain(customer_orm)
         
     def search(self, term: str, limit: Optional[int] = None, offset: Optional[int] = None) -> List[Customer]:
         """Search for customers by name, phone, email, or CUIT, with optional pagination."""
@@ -1145,7 +931,7 @@ class SqliteCustomerRepository(ICustomerRepository):
             query = query.offset(offset)
         
         results = query.all()
-        return [_map_customer_orm_to_model(orm) for orm in results]
+        return [ModelMapper.customer_orm_to_domain(orm) for orm in results]
         
     def get_all(self, limit: Optional[int] = None, offset: Optional[int] = None) -> List[Customer]:
         """Get all customers, with optional pagination."""
@@ -1155,7 +941,7 @@ class SqliteCustomerRepository(ICustomerRepository):
         if offset is not None:
             query = query.offset(offset)
         customers_orm = query.all()
-        return [_map_customer_orm_to_model(orm) for orm in customers_orm]
+        return [ModelMapper.customer_orm_to_domain(orm) for orm in customers_orm]
         
     def update(self, customer: Customer) -> Customer:
         """Update an existing customer."""
@@ -1183,7 +969,7 @@ class SqliteCustomerRepository(ICustomerRepository):
             self.session.refresh(customer_orm)
             
             # Return updated customer
-            return _map_customer_orm_to_model(customer_orm)
+            return ModelMapper.customer_orm_to_domain(customer_orm)
         except Exception as e:
             # Log the error
             logging.error(f"Error updating customer: {e}")
@@ -1241,7 +1027,7 @@ class SqliteInvoiceRepository(IInvoiceRepository):
                 raise ValueError(f"Invoice for sale ID {invoice.sale_id} already exists")
             
             # Map to ORM 
-            invoice_orm = _map_invoice_model_to_orm(invoice)
+            invoice_orm = ModelMapper.invoice_domain_to_orm(invoice)
             
             # Add to session
             self.session.add(invoice_orm)
@@ -1249,7 +1035,7 @@ class SqliteInvoiceRepository(IInvoiceRepository):
             self.session.refresh(invoice_orm)
             
             # Map back to domain model and return
-            return _map_invoice_orm_to_model(invoice_orm)
+            return ModelMapper.invoice_orm_to_domain(invoice_orm)
         except Exception as e:
             # Log error and re-raise
             logging.error(f"Error adding invoice: {e}")
@@ -1258,22 +1044,22 @@ class SqliteInvoiceRepository(IInvoiceRepository):
     def get_by_id(self, invoice_id: int) -> Optional[Invoice]:
         """Get an invoice by its ID."""
         invoice_orm = self.session.query(InvoiceOrm).filter(InvoiceOrm.id == invoice_id).first()
-        return _map_invoice_orm_to_model(invoice_orm)
+        return ModelMapper.invoice_orm_to_domain(invoice_orm)
     
     def get_by_sale_id(self, sale_id: int) -> Optional[Invoice]:
         """Get an invoice for a specific sale."""
         invoice_orm = self.session.query(InvoiceOrm).filter(InvoiceOrm.sale_id == sale_id).first()
-        return _map_invoice_orm_to_model(invoice_orm)
+        return ModelMapper.invoice_orm_to_domain(invoice_orm)
         
     def get_by_invoice_number(self, invoice_number: str) -> Optional[Invoice]:
         """Get an invoice by its number."""
         invoice_orm = self.session.query(InvoiceOrm).filter(InvoiceOrm.invoice_number == invoice_number).first()
-        return _map_invoice_orm_to_model(invoice_orm)
+        return ModelMapper.invoice_orm_to_domain(invoice_orm)
     
     def get_all(self) -> List[Invoice]:
         """Get all invoices."""
         invoice_orms = self.session.query(InvoiceOrm).all()
-        return [_map_invoice_orm_to_model(orm) for orm in invoice_orms if orm is not None]
+        return [ModelMapper.invoice_orm_to_domain(orm) for orm in invoice_orms if orm is not None]
     
     def update(self, invoice: Invoice) -> Invoice:
         """Update an existing invoice."""
@@ -1284,14 +1070,14 @@ class SqliteInvoiceRepository(IInvoiceRepository):
                 raise ValueError(f"Invoice with ID {invoice.id} not found")
             
             # Update the ORM object with new values
-            updated_orm = _map_invoice_model_to_orm(invoice, existing_orm)
+            updated_orm = ModelMapper.invoice_domain_to_orm(invoice, existing_orm)
             
             # Flush to ensure changes are reflected
             self.session.flush()
             self.session.refresh(updated_orm)
             
             # Return mapped domain model
-            return _map_invoice_orm_to_model(updated_orm)
+            return ModelMapper.invoice_orm_to_domain(updated_orm)
         except Exception as e:
             # Log error and re-raise
             logging.error(f"Error updating invoice: {e}")
@@ -1341,7 +1127,7 @@ class SqliteCreditPaymentRepository(ICreditPaymentRepository):
             self.session.refresh(payment_orm)
             
             # Map back to domain model
-            return _map_credit_payment_orm_to_model(payment_orm)
+            return ModelMapper.credit_payment_orm_to_domain(payment_orm)
         except Exception as e:
             logging.error(f"Error adding credit payment: {e}")
             raise
@@ -1349,12 +1135,12 @@ class SqliteCreditPaymentRepository(ICreditPaymentRepository):
     def get_by_id(self, payment_id: int) -> Optional[CreditPayment]:
         """Gets a credit payment by its ID."""
         payment_orm = self.session.query(CreditPaymentOrm).filter(CreditPaymentOrm.id == payment_id).first()
-        return _map_credit_payment_orm_to_model(payment_orm)
+        return ModelMapper.credit_payment_orm_to_domain(payment_orm)
         
     def get_for_customer(self, customer_id: int) -> List[CreditPayment]:
         """Get all credit payments for a customer."""
         payments = self.session.query(CreditPaymentOrm).filter_by(customer_id=customer_id).order_by(CreditPaymentOrm.timestamp.desc()).all()
-        return [_map_credit_payment_orm_to_model(p) for p in payments]
+        return [ModelMapper.credit_payment_orm_to_domain(p) for p in payments]
         
     def delete(self, payment_id: int) -> bool:
         """Delete a credit payment by ID."""
@@ -1409,7 +1195,7 @@ class SqliteUserRepository(IUserRepository):
             self.session.refresh(user_orm)
             
             # Map back to domain model
-            return _map_user_orm_to_model(user_orm)
+            return ModelMapper.user_orm_to_domain(user_orm)
         except Exception as e:
             logging.error(f"Error adding user: {e}")
             raise
@@ -1417,12 +1203,12 @@ class SqliteUserRepository(IUserRepository):
     def get_by_id(self, user_id: int) -> Optional[User]:
         """Retrieves a user by their ID."""
         user_orm = self.session.query(UserOrm).filter(UserOrm.id == user_id).first()
-        return _map_user_orm_to_model(user_orm)
+        return ModelMapper.user_orm_to_domain(user_orm)
         
     def get_by_username(self, username: str) -> Optional[User]:
         """Retrieves a user by their username."""
         user_orm = self.session.query(UserOrm).filter(UserOrm.username == username).first()
-        return _map_user_orm_to_model(user_orm)
+        return ModelMapper.user_orm_to_domain(user_orm)
         
     def update(self, user: User) -> Optional[User]:
         """Updates an existing user."""
@@ -1451,7 +1237,7 @@ class SqliteUserRepository(IUserRepository):
             self.session.refresh(user_orm)
             
             # Map back to domain
-            return _map_user_orm_to_model(user_orm)
+            return ModelMapper.user_orm_to_domain(user_orm)
         except Exception as e:
             logging.error(f"Error updating user: {e}")
             raise
@@ -1473,7 +1259,7 @@ class SqliteUserRepository(IUserRepository):
     def get_all(self) -> List[User]:
         """Retrieves all users."""
         users_orm = self.session.query(UserOrm).all()
-        return [_map_user_orm_to_model(user) for user in users_orm]
+        return [ModelMapper.user_orm_to_domain(user) for user in users_orm]
 
 class SqliteCashDrawerRepository(SQLiteCashDrawerRepository):
     """Adapter class for SQLiteCashDrawerRepository to maintain API compatibility."""
