@@ -60,7 +60,7 @@ def test_add_department_duplicate_name(svc, dept_repo):
     existing = Department(id=2, name="Exist")
     dept_repo.get_by_name.return_value = existing
 
-    with pytest.raises(ValueError, match="Departamento 'Exist' ya existe"):
+    with pytest.raises(ValueError, match="Department name 'Exist' already exists"):
         svc.add_department(dept)
     dept_repo.add.assert_not_called()
 
@@ -88,7 +88,7 @@ def test_delete_department_in_use_fails(svc, prod_repo, dept_repo):
     dept_repo.get_by_id.return_value = dept
     prod_repo.get_by_department_id.return_value = [MagicMock()]
 
-    with pytest.raises(ValueError, match=r"no puede ser eliminado.*producto"):
+    with pytest.raises(ValueError, match=r"cannot be deleted.*product"):
         svc.delete_department(3)
     dept_repo.delete.assert_not_called()
 
@@ -111,7 +111,7 @@ def test_update_department_missing_id(svc):
 def test_update_department_not_found(svc, dept_repo):
     dept = Department(id=5, name="Y")
     dept_repo.get_by_id.return_value = None
-    with pytest.raises(ValueError, match="Departamento con ID 5 no encontrado"):
+    with pytest.raises(ValueError, match="Department with ID 5 not found"):
         svc.update_department(dept)
 
 
@@ -122,7 +122,7 @@ def test_update_department_validation_fails(svc, dept_repo):
     dept_repo.get_by_id.return_value = existing
     dept_repo.get_by_name.return_value = existing
 
-    with pytest.raises(ValueError, match="Departamento 'Z' ya existe"):
+    with pytest.raises(ValueError, match="Department name 'Z' already exists"):
         svc.update_department(dept)
 
 

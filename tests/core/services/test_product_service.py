@@ -66,10 +66,12 @@ def test_add_product_success(product_service, mock_product_repo, mock_dept_repo)
     assert added_product.code == "P001"
 
 @pytest.mark.parametrize("invalid_product, expected_error_msg", [
-    (Product(code="", description="Test", cost_price=Decimal('10.00'), sell_price=Decimal('20.00')), "Código es requerido"),
-    (Product(code="P002", description="", cost_price=Decimal('10.00'), sell_price=Decimal('20.00')), "Descripción es requerida"),
-    (Product(code="P003", description="Test", cost_price=Decimal('10.00'), sell_price=Decimal('-1.00')), "Precio de venta debe ser positivo"),
-    (Product(code="P004", description="Test", cost_price=Decimal('-5.00'), sell_price=Decimal('20.00')), "Precio de costo debe ser positivo"),
+    (Product(code="", description="Test", cost_price=Decimal('10.00'), sell_price=Decimal('20.00')), "Code cannot be empty"),
+    (Product(code="P002", description="", cost_price=Decimal('10.00'), sell_price=Decimal('20.00')), "Description cannot be empty"),
+    (Product(code="P003", description="Test", cost_price=Decimal('10.00'), sell_price=Decimal('-1.00')), "Sell price must be positive"),
+    (Product(code="P004", description="Test", cost_price=Decimal('-5.00'), sell_price=Decimal('20.00')), "Cost price must be positive"),
+    (Product(code="P005", description="Test", cost_price=Decimal('0.00'), sell_price=Decimal('20.00')), "Cost price cannot be zero"),
+    (Product(code="P006", description="Test", cost_price=Decimal('10.00'), sell_price=Decimal('0.00')), "Sell price cannot be zero"),
 ])
 def test_add_product_basic_validation_fails(product_service, mock_product_repo, mock_dept_repo, invalid_product, expected_error_msg):
     """Test validation failures for basic required fields and positive prices."""
@@ -86,7 +88,7 @@ def test_add_product_duplicate_code_fails(product_service, mock_product_repo, mo
     mock_dept_repo.get_by_id.return_value = Department(id=1, name="Exists")
     mock_product_repo.get_by_code.return_value = Product(id=99, code="DUP01", description="Existing", cost_price=Decimal('10.00'), sell_price=Decimal('20.00')) # Simulate duplicate
 
-    with pytest.raises(ValueError, match="Código \'DUP01\' ya existe"): # Check error message
+    with pytest.raises(ValueError, match="Code 'DUP01' already exists"): # Check error message
         product_service.add_product(product_data)
     mock_product_repo.add.assert_not_called()
 
@@ -95,7 +97,7 @@ def test_add_product_nonexistent_dept_fails(product_service, mock_product_repo, 
     product_data = Product(code="P005", description="Valid Desc", department_id=99, cost_price=Decimal('10.00'), sell_price=Decimal('20.00'))
     mock_dept_repo.get_by_id.return_value = None # Simulate department not found
 
-    with pytest.raises(ValueError, match="Departamento con ID 99 no existe"):
+    with pytest.raises(ValueError, match="Department with ID 99 does not exist"):
         product_service.add_product(product_data)
     mock_dept_repo.get_by_id.assert_called_once_with(99)
     mock_product_repo.add.assert_not_called()
@@ -134,12 +136,17 @@ def test_update_product_validation_fails(product_service, mock_product_repo, moc
 
     # Test empty description
     invalid_update = Product(id=101, code="P001", description="", department_id=1, cost_price=Decimal('10.00'), sell_price=Decimal('20.00'))
-    with pytest.raises(ValueError, match="Descripción es requerida"):
+    with pytest.raises(ValueError, match="Description cannot be empty"):
         product_service.update_product(invalid_update)
 
     # Test negative price
     invalid_update = Product(id=101, code="P001", description="Desc", sell_price=Decimal('-5.00'), department_id=1, cost_price=Decimal('10.00'))
-    with pytest.raises(ValueError, match="Precio de venta debe ser positivo"):
+    with pytest.raises(ValueError, match="Sell price must be positive"):
+        product_service.update_product(invalid_update)
+
+    # Test zero price
+    invalid_update = Product(id=101, code="P001", description="Desc", sell_price=Decimal('0.00'), department_id=1, cost_price=Decimal('10.00'))
+    with pytest.raises(ValueError, match="Sell price cannot be zero"):
         product_service.update_product(invalid_update)
 
     mock_product_repo.update.assert_not_called()
@@ -154,7 +161,7 @@ def test_update_product_code_conflict_fails(product_service, mock_product_repo, 
     mock_dept_repo.get_by_id.return_value = Department(id=1, name="Exists")
     mock_product_repo.get_by_code.return_value = existing_product2 # Simulate code conflict
 
-    with pytest.raises(ValueError, match="Código \'P002\' ya existe para otro producto"):
+    with pytest.raises(ValueError, match="Code 'P002' already exists for another record"):
         product_service.update_product(product_update_data)
 
     mock_product_repo.get_by_code.assert_called_once_with("P002")
@@ -171,7 +178,7 @@ def test_update_product_nonexistent_fails(product_service, mock_product_repo):
     )
     mock_product_repo.get_by_id.return_value = None # Simulate product not found
 
-    with pytest.raises(ValueError, match="Producto con ID 999 no encontrado"):
+    with pytest.raises(ValueError, match="Product with ID 999 not found"):
         product_service.update_product(product_update_data)
     mock_product_repo.update.assert_not_called()
 
@@ -196,7 +203,7 @@ def test_delete_product_with_stock_fails(product_service, mock_product_repo):
     mock_product_repo.get_by_id.return_value = product_with_stock
 
     # The service should raise ValueError when trying to delete a product with stock
-    with pytest.raises(ValueError, match="Producto 'DEL03' no puede ser eliminado porque tiene stock"):
+    with pytest.raises(ValueError, match="Product 'DEL03' cannot be deleted because it has stock"):
         product_service.delete_product(203)
     
     # Verify delete was NOT called
@@ -241,7 +248,7 @@ def test_add_department_success(product_service, mock_dept_repo):
     assert added_dept.id == 5
 
 @pytest.mark.parametrize("invalid_dept, expected_error_msg", [
-    (Department(name=""), "Nombre de departamento es requerido"),
+    (Department(name=""), "Name cannot be empty"),
 ])
 def test_add_department_validation_fails(product_service, mock_dept_repo, invalid_dept, expected_error_msg):
     """Test validation failures for department name."""
@@ -254,7 +261,7 @@ def test_add_department_duplicate_name_fails(product_service, mock_dept_repo):
     dept_data = Department(name="Existing Dept")
     mock_dept_repo.get_by_name.return_value = Department(id=9, name="Existing Dept") # Simulate duplicate
 
-    with pytest.raises(ValueError, match="Departamento \'Existing Dept\' ya existe"):
+    with pytest.raises(ValueError, match="Department name 'Existing Dept' already exists"):
         product_service.add_department(dept_data)
     mock_dept_repo.add.assert_not_called()
 
@@ -288,7 +295,7 @@ def test_delete_department_in_use_fails(product_service, mock_dept_repo, mock_pr
         )
     ]
 
-    with pytest.raises(ValueError, match=f"Departamento '{dept_name}' no puede ser eliminado, está en uso por 1 producto"):
+    with pytest.raises(ValueError, match=f"Department '{dept_name}' cannot be deleted, it is used by 1 product"):
         product_service.delete_department(dept_id_to_delete)
 
     mock_dept_repo.get_by_id.assert_called_once_with(dept_id_to_delete)
@@ -323,7 +330,7 @@ def test_update_department_validation_fails(product_service, mock_dept_repo):
     existing_dept = Department(id=5, name="Old Name")
     mock_dept_repo.get_by_id.return_value = existing_dept # Department exists
 
-    with pytest.raises(ValueError, match="Nombre de departamento es requerido"):
+    with pytest.raises(ValueError, match="Name cannot be empty"):
         product_service.update_department(dept_update_data)
 
     mock_dept_repo.update.assert_not_called()
@@ -337,7 +344,7 @@ def test_update_department_duplicate_name_fails(product_service, mock_dept_repo)
     mock_dept_repo.get_by_id.return_value = existing_dept_to_update
     mock_dept_repo.get_by_name.return_value = conflicting_dept # Simulate name conflict
 
-    with pytest.raises(ValueError, match="Departamento 'Existing Name' ya existe"):
+    with pytest.raises(ValueError, match="Department name 'Existing Name' already exists"):
         product_service.update_department(dept_update_data)
 
     mock_dept_repo.get_by_name.assert_called_once_with("Existing Name")
@@ -348,7 +355,7 @@ def test_update_department_nonexistent_fails(product_service, mock_dept_repo):
     dept_update_data = Department(id=999, name="Nonexistent Dept")
     mock_dept_repo.get_by_id.return_value = None # Simulate department not found
 
-    with pytest.raises(ValueError, match="Departamento con ID 999 no encontrado"):
+    with pytest.raises(ValueError, match="Department with ID 999 not found"):
         product_service.update_department(dept_update_data)
 
     mock_dept_repo.update.assert_not_called()
@@ -430,7 +437,7 @@ def test_product_service_integration(test_db_session_factory): # Depend on the f
     assert retrieved_product.id == added_product.id
 
     # Attempt to delete department in use (should fail) - Use the updated error message format and fix escape sequence warning
-    expected_error_msg = f"Departamento '{added_dept.name}' no puede ser eliminado, está en uso por 1 producto\\(s\\)."
+    expected_error_msg = f"Department '{added_dept.name}' cannot be deleted, it is used by 1 product\\(s\\)."
     with pytest.raises(ValueError, match=expected_error_msg):
         service.delete_department(added_dept.id)
 
@@ -524,7 +531,7 @@ def test_update_prices_no_products_found_department(product_service, mock_produc
 ])
 def test_update_prices_invalid_percentage(product_service, mock_product_repo, invalid_percentage):
     """Test updating prices with an invalid percentage (<= -100%)."""
-    with pytest.raises(ValueError, match="Porcentaje debe ser un número mayor que -100."):
+    with pytest.raises(ValueError, match="Percentage must be a number greater than -100."):
         product_service.update_prices_by_percentage(invalid_percentage)
     mock_product_repo.update.assert_not_called()
 

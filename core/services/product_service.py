@@ -9,6 +9,12 @@ from core.interfaces.repository_interfaces import IProductRepository, IDepartmen
 from core.models.product import Product, Department
 from infrastructure.persistence.utils import session_scope
 from core.services.service_base import ServiceBase
+from core.utils.validation import (
+    validate_required_field,
+    validate_positive_number,
+    validate_unique_field,
+    validate_exists
+)
 
 class ProductService(ServiceBase):
     """Service for product and department management."""
@@ -30,34 +36,44 @@ class ProductService(ServiceBase):
         self.department_repo_factory = department_repo_factory
 
     def _validate_product(self, session: Session, product: Product, is_update: bool = False, existing_product_id: Optional[int] = None):
-        """Common validation logic for adding/updating products."""
-        if not product.code:
-            raise ValueError("Código es requerido")
-        if not product.description:
-            raise ValueError("Descripción es requerida")
-        if product.sell_price is not None and product.sell_price < 0:
-            raise ValueError("Precio de venta debe ser positivo")
-        if product.cost_price is not None and product.cost_price < 0:
-            raise ValueError("Precio de costo debe ser positivo")
+        """Common validation logic for adding/updating products using centralized validation utilities."""
+        # Validate required fields
+        validate_required_field(product.code, "Code")
+        validate_required_field(product.description, "Description")
+        
+        # Validate prices - must be positive and non-zero
+        if product.sell_price is not None:
+            validate_positive_number(product.sell_price, "Sell price")
+            if product.sell_price == 0:
+                raise ValueError("Sell price cannot be zero")
+        
+        if product.cost_price is not None:
+            validate_positive_number(product.cost_price, "Cost price")
+            if product.cost_price == 0:
+                raise ValueError("Cost price cannot be zero")
 
         # Get repositories from factories
         dept_repo = self._get_repository(self.department_repo_factory, session)
         prod_repo = self._get_repository(self.product_repo_factory, session)
 
-        # Check department existence
+        # Validate department exists
         if product.department_id is not None:
             department = dept_repo.get_by_id(product.department_id)
-            if not department:
-                raise ValueError(f"Departamento con ID {product.department_id} no existe")
+            validate_exists(department is not None, "Department", product.department_id)
 
-        # Check code uniqueness
+        # Validate product code uniqueness
         existing_by_code = prod_repo.get_by_code(product.code)
-        if existing_by_code:
-            if is_update and existing_by_code.id == existing_product_id:
-                pass # It's okay if the code belongs to the product being updated
-            else:
-                error_suffix = " para otro producto" if is_update else ""
-                raise ValueError(f"Código '{product.code}' ya existe{error_suffix}")
+        if is_update:
+            # For updates, check uniqueness excluding current product
+            if existing_by_code and existing_by_code.id != existing_product_id:
+                raise ValueError(f"Code '{product.code}' already exists for another record")
+        else:
+            # For new products, check if code exists
+            validate_unique_field(
+                existing_by_code is not None,
+                "Code",
+                product.code
+            )
 
     def add_product(self, product_data: Product) -> Product:
         """Adds a new product after validation."""
@@ -84,7 +100,7 @@ class ProductService(ServiceBase):
             
             existing_product = prod_repo.get_by_id(product_update_data.id)
             if not existing_product:
-                raise ValueError(f"Producto con ID {product_update_data.id} no encontrado")
+                raise ValueError(f"Product with ID {product_update_data.id} not found")
 
             # Validate the incoming data, considering it's an update
             self._validate_product(session, product_update_data, is_update=True, existing_product_id=product_update_data.id)
@@ -108,7 +124,7 @@ class ProductService(ServiceBase):
                     quantity_in_stock = float(product.quantity_in_stock)
                     
                 if has_inventory and quantity_in_stock > 0:
-                    raise ValueError(f"Producto '{product.code}' no puede ser eliminado porque tiene stock ({quantity_in_stock})")
+                    raise ValueError(f"Product '{product.code}' cannot be deleted because it has stock ({quantity_in_stock})")
                 self.logger.info(f"Deleting product with ID: {product_id}")
                 return prod_repo.delete(product_id)
             else:
@@ -188,7 +204,7 @@ class ProductService(ServiceBase):
     def _validate_department(self, session: Session, department: Department, is_update: bool = False):
         """Common validation for department add/update."""
         if not department.name:
-            raise ValueError("Nombre de departamento es requerido")
+            raise ValueError("Name cannot be empty")
         
         # Get repository from factory
         dept_repo = self._get_repository(self.department_repo_factory, session)
@@ -198,7 +214,7 @@ class ProductService(ServiceBase):
         if existing:
             # Check if the found department is the same one being updated
             if not (is_update and existing.id == department.id):
-                 raise ValueError(f"Departamento '{department.name}' ya existe")
+                 raise ValueError(f"Department name '{department.name}' already exists")
 
     def add_department(self, department_data: Department) -> Department:
         """Adds a new department after validation."""
@@ -241,7 +257,7 @@ class ProductService(ServiceBase):
             # Check if department is in use
             products_in_dept = prod_repo.get_by_department_id(department_id)
             if products_in_dept:
-                raise ValueError(f"Departamento '{department.name}' no puede ser eliminado, está en uso por {len(products_in_dept)} producto(s).")
+                raise ValueError(f"Department '{department.name}' cannot be deleted, it is used by {len(products_in_dept)} product(s).")
 
             self.logger.info(f"Deleting department with ID: {department_id}")
             return dept_repo.delete(department_id)
@@ -259,7 +275,7 @@ class ProductService(ServiceBase):
             
             existing_department = dept_repo.get_by_id(department_data.id)
             if not existing_department:
-                raise ValueError(f"Departamento con ID {department_data.id} no encontrado")
+                raise ValueError(f"Department with ID {department_data.id} not found")
                 
             # Validate the incoming data, considering it's an update
             self._validate_department(session, department_data, is_update=True)
@@ -277,7 +293,7 @@ class ProductService(ServiceBase):
         Returns the number of products updated.
         """
         if not isinstance(percentage, Decimal) or percentage <= Decimal("-100") :
-            raise ValueError("Porcentaje debe ser un número mayor que -100.")
+            raise ValueError("Percentage must be a number greater than -100.")
 
         def _update_prices(session: Session, percentage: Decimal, department_id: Optional[int]) -> int:
             prod_repo = self._get_repository(self.product_repo_factory, session)

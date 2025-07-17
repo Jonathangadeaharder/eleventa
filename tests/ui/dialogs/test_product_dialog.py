@@ -127,70 +127,80 @@ def test_departments_loaded(qtbot, dialog_add_mode, mock_product_service):
     assert dialog.department_combo.itemData(2) == 2
 
 
-def test_validation_empty_code(qtbot, dialog_add_mode):
-    """Test validation when code is empty."""
+def test_service_validation_empty_code(qtbot, dialog_add_mode, mock_product_service):
+    """Test handling of service validation error for empty code."""
     dialog = dialog_add_mode
     qtbot.addWidget(dialog)
     
-    # Leave code empty and try to accept
+    # Fill in data with empty code
+    dialog.code_input.setText("")  # Empty code
     dialog.description_input.setText("Test Product")
     dialog.cost_price_input.setValue(10.0)
     dialog.sale_price_input.setValue(15.0)
     
-    with patch.object(QMessageBox, 'warning') as mock_warning:
+    # Mock service to raise validation error
+    mock_product_service.add_product.side_effect = ValueError("Code cannot be empty")
+    
+    with patch('ui.dialogs.product_dialog.show_error_message') as mock_error:
         dialog.accept()
-        mock_warning.assert_called_once()
-        assert "código" in mock_warning.call_args[0][2].lower()
+        mock_error.assert_called_once_with(dialog, "Error de validación", "Code cannot be empty")
 
 
-def test_validation_empty_description(qtbot, dialog_add_mode):
-    """Test validation when description is empty."""
+def test_service_validation_empty_description(qtbot, dialog_add_mode, mock_product_service):
+    """Test handling of service validation error for empty description."""
     dialog = dialog_add_mode
     qtbot.addWidget(dialog)
     
-    # Leave description empty and try to accept
+    # Fill in data with empty description
     dialog.code_input.setText("TEST001")
+    dialog.description_input.setText("")  # Empty description
     dialog.cost_price_input.setValue(10.0)
     dialog.sale_price_input.setValue(15.0)
     
-    with patch.object(QMessageBox, 'warning') as mock_warning:
+    # Mock service to raise validation error
+    mock_product_service.add_product.side_effect = ValueError("Description cannot be empty")
+    
+    with patch('ui.dialogs.product_dialog.show_error_message') as mock_error:
         dialog.accept()
-        mock_warning.assert_called_once()
-        assert "descripción" in mock_warning.call_args[0][2].lower()
+        mock_error.assert_called_once_with(dialog, "Error de validación", "Description cannot be empty")
 
 
-def test_validation_zero_cost_price(qtbot, dialog_add_mode):
-    """Test validation when cost price is zero."""
+def test_service_validation_zero_cost_price(qtbot, dialog_add_mode, mock_product_service):
+    """Test handling of service validation error for zero cost price."""
     dialog = dialog_add_mode
     qtbot.addWidget(dialog)
     
-    # Set cost price to zero and try to accept
+    # Set cost price to zero
     dialog.code_input.setText("TEST001")
     dialog.description_input.setText("Test Product")
     dialog.cost_price_input.setValue(0.0)
     dialog.sale_price_input.setValue(15.0)
     
-    with patch.object(QMessageBox, 'warning') as mock_warning:
+    # Mock service to raise validation error
+    mock_product_service.add_product.side_effect = ValueError("Cost price cannot be zero")
+    
+    with patch('ui.dialogs.product_dialog.show_error_message') as mock_error:
         dialog.accept()
-        mock_warning.assert_called_once()
-        assert "costo" in mock_warning.call_args[0][2].lower()
+        mock_error.assert_called_once_with(dialog, "Error de validación", "Cost price cannot be zero")
 
 
-def test_validation_zero_sell_price(qtbot, dialog_add_mode):
-    """Test validation when sell price is zero."""
+def test_service_validation_zero_sell_price(qtbot, dialog_add_mode, mock_product_service):
+    """Test handling of service validation error for zero sell price."""
     dialog = dialog_add_mode
     qtbot.addWidget(dialog)
     
-    # Set sell price to zero and try to accept
+    # Set sell price to zero
     dialog.code_input.setText("TEST001")
     dialog.description_input.setText("Test Product")
     dialog.cost_price_input.setValue(10.0)
     dialog.sale_price_input.setValue(0.0)
     
-    with patch.object(QMessageBox, 'warning') as mock_warning:
+    # Mock service to raise validation error
+    mock_product_service.add_product.side_effect = ValueError("Sell price cannot be zero")
+    
+    with patch('ui.dialogs.product_dialog.show_error_message') as mock_error:
         dialog.accept()
-        mock_warning.assert_called_once()
-        assert "venta" in mock_warning.call_args[0][2].lower()
+        mock_error.assert_called_once_with(dialog, "Error de validación", "Sell price cannot be zero")
 
 
 def test_successful_add_product(qtbot, dialog_add_mode, mock_product_service, monkeypatch):
@@ -226,14 +236,14 @@ def test_successful_add_product(qtbot, dialog_add_mode, mock_product_service, mo
     # Patch QDialog.accept to prevent actual dialog closing
     monkeypatch.setattr('PySide6.QtWidgets.QDialog.accept', lambda self: None)
     
-    with patch.object(QMessageBox, 'information') as mock_info, \
-         patch.object(QMessageBox, 'critical') as mock_critical:
+    with patch('ui.dialogs.product_dialog.show_info_message') as mock_info, \
+         patch('ui.dialogs.product_dialog.show_error_message') as mock_error:
         # Accept the dialog
         dialog.accept()
         # Verify success message was shown
-        mock_info.assert_called_once()
-        # Verify no critical error was shown
-        mock_critical.assert_not_called()
+        mock_info.assert_called_once_with(dialog, "Éxito", "Producto agregado correctamente")
+        # Verify no error was shown
+        mock_error.assert_not_called()
     
     # Verify service was called with correct data
     mock_product_service.add_product.assert_called_once()
@@ -261,14 +271,14 @@ def test_successful_edit_product(qtbot, dialog_edit_mode, mock_product_service, 
     # Patch QDialog.accept to prevent actual dialog closing
     monkeypatch.setattr('PySide6.QtWidgets.QDialog.accept', lambda self: None)
     
-    with patch.object(QMessageBox, 'information') as mock_info, \
-         patch.object(QMessageBox, 'critical') as mock_critical:
+    with patch('ui.dialogs.product_dialog.show_info_message') as mock_info, \
+         patch('ui.dialogs.product_dialog.show_error_message') as mock_error:
         # Accept the dialog
         dialog.accept()
         # Verify success message was shown
-        mock_info.assert_called_once()
-        # Verify no critical error was shown
-        mock_critical.assert_not_called()
+        mock_info.assert_called_once_with(dialog, "Éxito", "Producto modificado correctamente")
+        # Verify no error was shown
+        mock_error.assert_not_called()
     
     # Verify service was called with correct data
     mock_product_service.update_product.assert_called_once()
@@ -292,10 +302,88 @@ def test_service_error_handling_add(qtbot, dialog_add_mode, mock_product_service
     # Mock service error
     mock_product_service.add_product.side_effect = Exception("Database error")
     
-    with patch.object(QMessageBox, 'critical') as mock_critical:
+    with patch('ui.dialogs.product_dialog.show_error_message') as mock_error:
         dialog.accept()
-        mock_critical.assert_called_once()
-        assert "error" in mock_critical.call_args[0][2].lower()
+        mock_error.assert_called_once()
+        # Check that error message contains "error"
+        call_args = mock_error.call_args[0]
+        assert "error" in call_args[2].lower()
+
+
+def test_field_focus_on_validation_error(qtbot, dialog_add_mode, mock_product_service):
+    """Test that the correct field gets focus when validation errors occur."""
+    dialog = dialog_add_mode
+    qtbot.addWidget(dialog)
+    
+    # Show the dialog to ensure it can receive focus
+    dialog.show()
+    qtbot.waitExposed(dialog)
+    
+    # Test code field focus
+    dialog.code_input.setText("")
+    dialog.description_input.setText("Test Product")
+    mock_product_service.add_product.side_effect = ValueError("Code cannot be empty")
+    
+    with patch('ui.dialogs.product_dialog.show_error_message'):
+        dialog.accept()
+        qtbot.wait(10)  # Allow time for focus to be set
+        assert dialog.code_input.hasFocus()
+    
+    # Test description field focus
+    dialog.code_input.setText("TEST001")
+    dialog.description_input.setText("")
+    mock_product_service.add_product.side_effect = ValueError("Description cannot be empty")
+    
+    with patch('ui.dialogs.product_dialog.show_error_message'):
+        dialog.accept()
+        qtbot.wait(10)  # Allow time for focus to be set
+        assert dialog.description_input.hasFocus()
+    
+    # Test cost price field focus
+    dialog.description_input.setText("Test Product")
+    dialog.cost_price_input.setValue(0.0)
+    mock_product_service.add_product.side_effect = ValueError("Cost price cannot be zero")
+    
+    with patch('ui.dialogs.product_dialog.show_error_message'):
+        dialog.accept()
+        qtbot.wait(10)  # Allow time for focus to be set
+        assert dialog.cost_price_input.hasFocus()
+    
+    # Test sell price field focus
+    dialog.cost_price_input.setValue(10.0)
+    dialog.sale_price_input.setValue(0.0)
+    mock_product_service.add_product.side_effect = ValueError("Sell price cannot be zero")
+    
+    with patch('ui.dialogs.product_dialog.show_error_message'):
+        dialog.accept()
+        qtbot.wait(10)  # Allow time for focus to be set
+        assert dialog.sale_price_input.hasFocus()
+
+
+def test_duplicate_code_error_handling(qtbot, dialog_add_mode, mock_product_service):
+    """Test handling of duplicate product code error."""
+    dialog = dialog_add_mode
+    qtbot.addWidget(dialog)
+    
+    # Show the dialog to ensure it can receive focus
+    dialog.show()
+    qtbot.waitExposed(dialog)
+    
+    # Fill in data
+    dialog.code_input.setText("DUP001")
+    dialog.description_input.setText("Test Product")
+    dialog.cost_price_input.setValue(10.0)
+    dialog.sale_price_input.setValue(15.0)
+    
+    # Mock service to raise duplicate code error
+    mock_product_service.add_product.side_effect = ValueError("Product code 'DUP001' already exists")
+    
+    with patch('ui.dialogs.product_dialog.show_error_message') as mock_error:
+        dialog.accept()
+        mock_error.assert_called_once_with(dialog, "Error de validación", "Product code 'DUP001' already exists")
+        # Code field should get focus for duplicate code error
+        qtbot.wait(10)  # Allow time for focus to be set
+        assert dialog.code_input.hasFocus()
 
 
 def test_service_error_handling_edit(qtbot, dialog_edit_mode, mock_product_service):
@@ -306,10 +394,12 @@ def test_service_error_handling_edit(qtbot, dialog_edit_mode, mock_product_servi
     # Mock service error
     mock_product_service.update_product.side_effect = Exception("Database error")
     
-    with patch.object(QMessageBox, 'critical') as mock_critical:
+    with patch('ui.dialogs.product_dialog.show_error_message') as mock_error:
         dialog.accept()
-        mock_critical.assert_called_once()
-        assert "error" in mock_critical.call_args[0][2].lower()
+        mock_error.assert_called_once()
+        # Check that error message contains "error"
+        call_args = mock_error.call_args[0]
+        assert "error" in call_args[2].lower()
 
 
 def test_cancel_dialog(qtbot, dialog_add_mode):

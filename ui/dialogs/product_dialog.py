@@ -22,7 +22,7 @@ from core.models.product import Product, Department
 from core.services.product_service import ProductService # Keep this import
 
 # Import common UI functions
-from ui.utils import show_error_message, style_text_input, style_dropdown, style_primary_button, style_secondary_button, style_heading_label, apply_standard_form_style
+from ui.utils import show_error_message, show_info_message, style_text_input, style_dropdown, style_primary_button, style_secondary_button, style_heading_label, apply_standard_form_style
 
 
 class ProductDialog(QDialog):
@@ -280,107 +280,74 @@ class ProductDialog(QDialog):
 
 
     def accept(self):
-        """Handles the OK button click: validates and saves the product."""
-        code = self.code_input.text().strip()
-        description = self.description_input.text().strip()
-        sell_price = self.sale_price_input.value()
-        cost_price = self.cost_price_input.value()
-        unit = self.unit_input.text().strip() or "U"
-        uses_inventory = self.inventory_checkbox.isChecked()
-        stock = self.stock_input.value() if uses_inventory else 0.0
-        min_stock = self.min_stock_input.value() if uses_inventory else 0.0
-        dept_index = self.department_combo.currentIndex()
-        department_id = self.department_combo.itemData(dept_index) if dept_index > 0 else None
-
-        # --- Basic Validation ---
-        if not code:
-            QMessageBox.warning(self, "Entrada Inválida", "El código del producto es obligatorio.")
-            self.code_input.setFocus()
-            self.validation_failed.emit("El código del producto es obligatorio.")
-            return
-        if not description:
-            QMessageBox.warning(self, "Entrada Inválida", "La descripción del producto es obligatoria.")
-            self.description_input.setFocus()
-            self.validation_failed.emit("La descripción del producto es obligatoria.")
-            return
-        if sell_price < 0:
-             QMessageBox.warning(self, "Entrada Inválida", "El precio de venta no puede ser negativo.")
-             self.sale_price_input.setFocus()
-             self.validation_failed.emit("El precio de venta no puede ser negativo.")
-             return
-        if sell_price == 0:
-             QMessageBox.warning(self, "Entrada Inválida", "El precio de venta no puede ser cero.")
-             self.sale_price_input.setFocus()
-             self.validation_failed.emit("El precio de venta no puede ser cero.")
-             return
-        if cost_price < 0:
-             QMessageBox.warning(self, "Entrada Inválida", "El precio de costo no puede ser negativo.")
-             self.cost_price_input.setFocus()
-             self.validation_failed.emit("El precio de costo no puede ser negativo.")
-             return
-        if cost_price == 0:
-             QMessageBox.warning(self, "Entrada Inválida", "El precio de costo no puede ser cero.")
-             self.cost_price_input.setFocus()
-             self.validation_failed.emit("El precio de costo no puede ser cero.")
-             return
-        # Add more validation as needed (e.g., code format)
-
-        product_data = {
-            "code": code,
-            "description": description,
-            "sell_price": sell_price,
-            "cost_price": cost_price,
-            "department_id": department_id,
-            "unit": unit,
-            "uses_inventory": uses_inventory,
-            "min_stock": min_stock,
-            # Stock is handled separately (only set on creation if inventory used, not editable here)
-        }
-        # Only include initial stock if adding a new product that uses inventory
-        if not self.is_edit_mode and uses_inventory:
-             product_data["quantity_in_stock"] = stock
-
-        # Create a Product object from the dictionary
+        """Handles the OK button click: collects data and delegates validation to service layer."""
         try:
-            # Ensure correct types (especially for Decimal if used, but service likely handles floats now)
+            # Collect data from UI without validation
+            code = self.code_input.text().strip()
+            description = self.description_input.text().strip()
+            sell_price = self.sale_price_input.value()
+            cost_price = self.cost_price_input.value()
+            unit = self.unit_input.text().strip() or "U"
+            uses_inventory = self.inventory_checkbox.isChecked()
+            stock = self.stock_input.value() if uses_inventory else 0.0
+            min_stock = self.min_stock_input.value() if uses_inventory else 0.0
+            dept_index = self.department_combo.currentIndex()
+            department_id = self.department_combo.itemData(dept_index) if dept_index > 0 else None
+
+            # Create Product object
             product_obj = Product(
                 id=self.product_to_edit.id if self.is_edit_mode else None,
-                code=product_data["code"],
-                description=product_data["description"],
-                sell_price=product_data["sell_price"],
-                cost_price=product_data["cost_price"],
-                department_id=product_data["department_id"],
-                unit=product_data["unit"],
-                uses_inventory=product_data["uses_inventory"],
-                quantity_in_stock=product_data.get("quantity_in_stock", 0.0), # Use get with default
-                min_stock=product_data["min_stock"]
+                code=code,
+                description=description,
+                sell_price=sell_price,
+                cost_price=cost_price,
+                department_id=department_id,
+                unit=unit,
+                uses_inventory=uses_inventory,
+                quantity_in_stock=stock if not self.is_edit_mode and uses_inventory else (self.product_to_edit.quantity_in_stock if self.is_edit_mode else 0.0),
+                min_stock=min_stock
             )
-        except KeyError as e:
-            QMessageBox.critical(self, "Error Interno", f"Falta clave al crear objeto Producto: {e}")
-            return
 
-        try:
+            # Call service - validation happens here
             if self.is_edit_mode:
-                print(f"[ProductDialog] Attempting to update product ID: {product_obj.id}")
-                # Pass the Product object
                 self.product_service.update_product(product_obj)
-                QMessageBox.information(self, "Producto Modificado", f"Producto '{product_obj.description}' modificado correctamente.")
+                show_info_message(self, "Éxito", "Producto modificado correctamente")
             else:
-                print("[ProductDialog] Attempting to add new product")
-                # Pass the Product object
                 new_product = self.product_service.add_product(product_obj)
-                QMessageBox.information(self, "Producto Agregado", f"Producto '{new_product.description}' agregado correctamente.")
+                show_info_message(self, "Éxito", "Producto agregado correctamente")
 
-            super().accept() # Close the dialog successfully
+            super().accept()  # Close dialog successfully
 
-        except ValueError as e: # Catch validation errors from service (e.g., duplicate code)
-             QMessageBox.warning(self, "Error al Guardar", str(e))
-        except AttributeError as e:
-            QMessageBox.critical(self, "Error de Servicio", f"Error llamando al servicio: {e}")
-            print(f"Attribute error calling service: {e}")
-        except Exception as e: # Catch unexpected errors
-             QMessageBox.critical(self, "Error Inesperado", f"Ocurrió un error al guardar el producto:\n{e}")
-             print(f"Error saving product: {e}") # Log error for debugging
+        except ValueError as e:
+            # Handle validation errors from service
+            error_message = str(e)
+            show_error_message(self, "Error de validación", error_message)
+            self._focus_field_for_error(error_message)
+            self.validation_failed.emit(error_message)
+
+        except Exception as e:
+            # Handle unexpected errors
+            show_error_message(self, "Error", f"Ocurrió un error inesperado: {str(e)}")
+            print(f"Error saving product: {e}")  # Log for debugging
+
+    def _focus_field_for_error(self, error_message):
+        """Focus the appropriate field based on the error message for better UX."""
+        error_lower = error_message.lower()
+        
+        if 'code' in error_lower:
+            self.code_input.setFocus()
+            self.code_input.selectAll()
+        elif 'description' in error_lower:
+            self.description_input.setFocus()
+            self.description_input.selectAll()
+        elif 'sell price' in error_lower:
+            self.sale_price_input.setFocus()
+            self.sale_price_input.selectAll()
+        elif 'cost price' in error_lower:
+            self.cost_price_input.setFocus()
+            self.cost_price_input.selectAll()
+        elif 'department' in error_lower:
+            self.department_combo.setFocus()
 
 
 # Example of running this dialog directly (for testing)
