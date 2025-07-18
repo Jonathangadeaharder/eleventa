@@ -9,26 +9,24 @@ from core.services.reporting_service import ReportingService
 class TestReportingService:
     @pytest.fixture(autouse=True)
     def setup_service(self):
-        # Patch the repository factory to return a mock repo
-        self.mock_repo = MagicMock()
-        # Create a factory that accepts a session parameter and returns the mock repo
-        self.service = ReportingService(sale_repo_factory=lambda session: self.mock_repo)
+        # Create service with Unit of Work pattern
+        self.service = ReportingService()
         
         # Define sample date range for tests
         self.start_time = datetime(2024, 1, 1)
         self.end_time = datetime(2024, 1, 31, 23, 59, 59)
 
-    def test_get_sales_summary_by_period(self):
+    @patch('core.services.reporting_service.unit_of_work')
+    def test_get_sales_summary_by_period(self, mock_uow):
         # Define expected return value from repo
         expected_repo_return = [
             {"date": "2024-01-01", "total_sales": 100.0, "num_sales": 2}
         ]
-        self.mock_repo.get_sales_summary_by_period.return_value = expected_repo_return
-
-        # Print for debugging
-        print("\nDEBUG: ReportingService implementation:")
-        import inspect
-        print(inspect.getsource(self.service.get_sales_summary_by_period))
+        
+        # Set up Unit of Work mock
+        mock_context = MagicMock()
+        mock_uow.return_value.__enter__.return_value = mock_context
+        mock_context.sales.get_sales_summary_by_period.return_value = expected_repo_return
 
         # Call service method with required args
         result = self.service.get_sales_summary_by_period(
@@ -36,72 +34,107 @@ class TestReportingService:
         )
 
         # Assert repo was called correctly
-        self.mock_repo.get_sales_summary_by_period.assert_called_once_with(
+        mock_context.sales.get_sales_summary_by_period.assert_called_once_with(
             self.start_time, self.end_time, "day"
         )
         # Assert result matches expected repo return
         assert result == expected_repo_return
 
-    def test_get_sales_by_payment_type(self):
+    @patch('core.services.reporting_service.unit_of_work')
+    def test_get_sales_by_payment_type(self, mock_uow):
         expected_repo_return = [
             {"payment_type": "Efectivo", "total_amount": 200.0, "num_sales": 5}  # Use correct keys from repo interface
         ]
-        self.mock_repo.get_sales_by_payment_type.return_value = expected_repo_return
+        
+        # Set up Unit of Work mock
+        mock_context = MagicMock()
+        mock_uow.return_value.__enter__.return_value = mock_context
+        mock_context.sales.get_sales_by_payment_type.return_value = expected_repo_return
+        
         result = self.service.get_sales_by_payment_type(self.start_time, self.end_time)  # Add args
-        self.mock_repo.get_sales_by_payment_type.assert_called_once_with(self.start_time, self.end_time)
+        mock_context.sales.get_sales_by_payment_type.assert_called_once_with(self.start_time, self.end_time)
         assert result == expected_repo_return  # Assert against expected structure
 
-    def test_get_sales_by_department(self):
+    @patch('core.services.reporting_service.unit_of_work')
+    def test_get_sales_by_department(self, mock_uow):
         expected_repo_return = [
             {"department_id": 1, "department_name": "Dept1", "total_amount": 300.0, "num_items": 10}  # Use correct keys
         ]
-        self.mock_repo.get_sales_by_department.return_value = expected_repo_return
+        
+        # Set up Unit of Work mock
+        mock_context = MagicMock()
+        mock_uow.return_value.__enter__.return_value = mock_context
+        mock_context.sales.get_sales_by_department.return_value = expected_repo_return
+        
         result = self.service.get_sales_by_department(self.start_time, self.end_time)  # Add args
-        self.mock_repo.get_sales_by_department.assert_called_once_with(self.start_time, self.end_time)
+        mock_context.sales.get_sales_by_department.assert_called_once_with(self.start_time, self.end_time)
         assert result == expected_repo_return
 
-    def test_get_sales_by_customer(self):
+    @patch('core.services.reporting_service.unit_of_work')
+    def test_get_sales_by_customer(self, mock_uow):
         expected_repo_return = [
             {"customer_id": 1, "customer_name": "Cust1", "total_amount": 400.0, "num_sales": 3}  # Use correct keys
         ]
-        self.mock_repo.get_sales_by_customer.return_value = expected_repo_return
+        
+        # Set up Unit of Work mock
+        mock_context = MagicMock()
+        mock_uow.return_value.__enter__.return_value = mock_context
+        mock_context.sales.get_sales_by_customer.return_value = expected_repo_return
+        
         result = self.service.get_sales_by_customer(self.start_time, self.end_time, limit=5)  # Add args
-        self.mock_repo.get_sales_by_customer.assert_called_once_with(self.start_time, self.end_time, 5)
+        mock_context.sales.get_sales_by_customer.assert_called_once_with(self.start_time, self.end_time, 5)
         assert result == expected_repo_return
 
-    def test_get_top_selling_products(self):
+    @patch('core.services.reporting_service.unit_of_work')
+    def test_get_top_selling_products(self, mock_uow):
         expected_repo_return = [
             {"product_id": 1, "product_code": "P001", "product_description": "Prod1", "quantity_sold": 10, "total_amount": 150.0}  # Use correct keys
         ]
-        self.mock_repo.get_top_selling_products.return_value = expected_repo_return
+        
+        # Set up Unit of Work mock
+        mock_context = MagicMock()
+        mock_uow.return_value.__enter__.return_value = mock_context
+        mock_context.sales.get_top_selling_products.return_value = expected_repo_return
+        
         result = self.service.get_top_selling_products(self.start_time, self.end_time, limit=3)  # Add args
-        self.mock_repo.get_top_selling_products.assert_called_once_with(self.start_time, self.end_time, 3)
+        mock_context.sales.get_top_selling_products.assert_called_once_with(self.start_time, self.end_time, 3)
         assert result == expected_repo_return
 
-    def test_calculate_profit_for_period(self):
+    @patch('core.services.reporting_service.unit_of_work')
+    def test_calculate_profit_for_period(self, mock_uow):
         expected_repo_return = {
             "total_revenue": 500.0, "total_cost": 300.0, "total_profit": 200.0, "profit_margin": 0.4
         }
-        self.mock_repo.calculate_profit_for_period.return_value = expected_repo_return
+        
+        # Set up Unit of Work mock
+        mock_context = MagicMock()
+        mock_uow.return_value.__enter__.return_value = mock_context
+        mock_context.sales.calculate_profit_for_period.return_value = expected_repo_return
+        
         result = self.service.calculate_profit_for_period(self.start_time, self.end_time)  # Add datetime objects
-        self.mock_repo.calculate_profit_for_period.assert_called_once_with(self.start_time, self.end_time)
+        mock_context.sales.calculate_profit_for_period.assert_called_once_with(self.start_time, self.end_time)
         assert result == expected_repo_return  # Assert against expected structure
 
-    def test_get_daily_sales_report(self):
+    @patch('core.services.reporting_service.unit_of_work')
+    def test_get_daily_sales_report(self, mock_uow):
+        # Set up Unit of Work mock
+        mock_context = MagicMock()
+        mock_uow.return_value.__enter__.return_value = mock_context
+        
         # Mock all repository calls used in get_daily_sales_report
-        self.mock_repo.calculate_profit_for_period.return_value = {
+        mock_context.sales.calculate_profit_for_period.return_value = {
             "total_revenue": 1000.0,
             "total_cost": 600.0,
             "total_profit": 400.0,
             "profit_margin": 0.4
         }
-        self.mock_repo.get_sales_by_payment_type.return_value = [
+        mock_context.sales.get_sales_by_payment_type.return_value = [
             {"payment_type": "Efectivo", "num_sales": 2, "total_amount": 500.0}  # Add total_amount
         ]
-        self.mock_repo.get_top_selling_products.return_value = [
+        mock_context.sales.get_top_selling_products.return_value = [
             {"product_id": 1, "product_code": "P001", "product_description": "Prod1", "quantity_sold": 5, "total_amount": 100.0}
         ]
-        self.mock_repo.get_sales_by_department.return_value = [
+        mock_context.sales.get_sales_by_department.return_value = [
             {"department_id": 1, "department_name": "Dept1", "total_amount": 300.0, "num_items": 10}
         ]
 
@@ -111,10 +144,10 @@ class TestReportingService:
         # Verify calls were made with correct date ranges
         start_time = datetime.combine(date, datetime.min.time())
         end_time = datetime.combine(date, datetime.max.time())
-        self.mock_repo.calculate_profit_for_period.assert_called_once_with(start_time, end_time)
-        self.mock_repo.get_sales_by_payment_type.assert_called_once_with(start_time, end_time)
-        self.mock_repo.get_top_selling_products.assert_called_once_with(start_time, end_time, 5)
-        self.mock_repo.get_sales_by_department.assert_called_once_with(start_time, end_time)
+        mock_context.sales.calculate_profit_for_period.assert_called_once_with(start_time, end_time)
+        mock_context.sales.get_sales_by_payment_type.assert_called_once_with(start_time, end_time)
+        mock_context.sales.get_top_selling_products.assert_called_once_with(start_time, end_time, 5)
+        mock_context.sales.get_sales_by_department.assert_called_once_with(start_time, end_time)
 
         assert result["date"] == "2024-01-01"
         assert result["total_revenue"] == 1000.0
@@ -126,9 +159,14 @@ class TestReportingService:
         assert isinstance(result["top_products"], list)
         assert isinstance(result["sales_by_department"], list)
 
-    def test_get_sales_trend(self):
+    @patch('core.services.reporting_service.unit_of_work')
+    def test_get_sales_trend(self, mock_uow):
+        # Set up Unit of Work mock
+        mock_context = MagicMock()
+        mock_uow.return_value.__enter__.return_value = mock_context
+        
         # Mock get_sales_summary_by_period for daily trend
-        self.mock_repo.get_sales_summary_by_period.return_value = [
+        mock_context.sales.get_sales_summary_by_period.return_value = [
             {"date": "2024-01-01", "total_sales": 100.0, "num_sales": 2},
             {"date": "2024-01-03", "total_sales": 200.0, "num_sales": 3}
         ]
@@ -138,7 +176,7 @@ class TestReportingService:
         result = self.service.get_sales_trend(start_time, end_time, trend_type="daily")
         
         # Verify repo call was made correctly
-        self.mock_repo.get_sales_summary_by_period.assert_called_once_with(start_time, end_time, "day")
+        mock_context.sales.get_sales_summary_by_period.assert_called_once_with(start_time, end_time, "day")
         
         # Should fill in missing date (2024-01-02) with zeros
         assert result[0]["date"] == "2024-01-01"
@@ -147,17 +185,22 @@ class TestReportingService:
         assert result[2]["date"] == "2024-01-03"
         assert result[2]["total_sales"] == 200.0
 
-    def test_get_comparative_report(self):
+    @patch('core.services.reporting_service.unit_of_work')
+    def test_get_comparative_report(self, mock_uow):
+        # Set up Unit of Work mock
+        mock_context = MagicMock()
+        mock_uow.return_value.__enter__.return_value = mock_context
+        
         # Mock all repository calls used in get_comparative_report
-        self.mock_repo.calculate_profit_for_period.side_effect = [
+        mock_context.sales.calculate_profit_for_period.side_effect = [
             {"total_revenue": 1000.0, "total_cost": 600.0, "total_profit": 400.0, "profit_margin": 0.4},
             {"total_revenue": 800.0, "total_cost": 550.0, "total_profit": 250.0, "profit_margin": 0.31}
         ]
-        self.mock_repo.get_top_selling_products.side_effect = [
+        mock_context.sales.get_top_selling_products.side_effect = [
             [{"product_id": 1, "product_code": "P001", "product_description": "Prod1", "quantity_sold": 5, "total_amount": 100.0}],
             [{"product_id": 2, "product_code": "P002", "product_description": "Prod2", "quantity_sold": 3, "total_amount": 60.0}]
         ]
-        self.mock_repo.get_sales_by_payment_type.side_effect = [
+        mock_context.sales.get_sales_by_payment_type.side_effect = [
             [{"payment_type": "Efectivo", "total_amount": 600.0, "num_sales": 4}],
             [{"payment_type": "Tarjeta", "total_amount": 200.0, "num_sales": 2}]
         ]
@@ -170,9 +213,9 @@ class TestReportingService:
         result = self.service.get_comparative_report(current_start, current_end, prev_start, prev_end)
         
         # Verify repo calls were made correctly
-        assert self.mock_repo.calculate_profit_for_period.call_count == 2
-        assert self.mock_repo.get_top_selling_products.call_count == 2
-        assert self.mock_repo.get_sales_by_payment_type.call_count == 2
+        assert mock_context.sales.calculate_profit_for_period.call_count == 2
+        assert mock_context.sales.get_top_selling_products.call_count == 2
+        assert mock_context.sales.get_sales_by_payment_type.call_count == 2
         
         # Assert result contains expected values
         assert result["current_period_revenue"] == 1000.0
@@ -194,52 +237,50 @@ class TestReportingService:
     ('print_top_products_report', 'top_productos'),
     ('print_profit_analysis_report', 'analisis_ganancias')
 ])
-def test_print_report_methods(method_name, report_type, tmpdir):
+@patch('core.services.reporting_service.unit_of_work')
+def test_print_report_methods(mock_uow, method_name, report_type, tmpdir):
     """Test that all print report methods generate PDF files correctly."""
-    # Create mock repository and service
-    mock_repo = MagicMock()
+    # Set up Unit of Work mock
+    mock_context = MagicMock()
+    mock_uow.return_value.__enter__.return_value = mock_context
     
     # Set up mock returns for different method calls
     if 'period' in method_name:
-        mock_repo.get_sales_summary_by_period.return_value = [
+        mock_context.sales.get_sales_summary_by_period.return_value = [
             {'date': '2023-01-01', 'total_sales': Decimal('100.00'), 'num_sales': 5},
             {'date': '2023-01-02', 'total_sales': Decimal('200.00'), 'num_sales': 10}
         ]
     elif 'department' in method_name:
-        mock_repo.get_sales_by_department.return_value = [
+        mock_context.sales.get_sales_by_department.return_value = [
             {'department_id': 1, 'department_name': 'Electronics', 'total_amount': Decimal('500.00'), 'num_items': 20},
             {'department_id': 2, 'department_name': 'Furniture', 'total_amount': Decimal('300.00'), 'num_items': 5}
         ]
     elif 'customer' in method_name:
-        mock_repo.get_sales_by_customer.return_value = [
+        mock_context.sales.get_sales_by_customer.return_value = [
             {'customer_id': 1, 'customer_name': 'John Doe', 'total_amount': Decimal('800.00'), 'num_sales': 4},
             {'customer_id': 2, 'customer_name': 'Jane Smith', 'total_amount': Decimal('200.00'), 'num_sales': 1}
         ]
     elif 'product' in method_name:
-        mock_repo.get_top_selling_products.return_value = [
+        mock_context.sales.get_top_selling_products.return_value = [
             {'product_id': 101, 'product_code': 'P001', 'product_description': 'Smartphone', 
              'quantity_sold': 10, 'total_amount': Decimal('5000.00')},
             {'product_id': 102, 'product_code': 'P002', 'product_description': 'Tablet', 
              'quantity_sold': 5, 'total_amount': Decimal('2500.00')}
         ]
     elif 'profit' in method_name:
-        mock_repo.calculate_profit_for_period.return_value = {
+        mock_context.sales.calculate_profit_for_period.return_value = {
             'total_revenue': Decimal('1000.00'),
             'total_cost': Decimal('600.00'),
             'total_profit': Decimal('400.00'),
             'profit_margin': Decimal('0.40')
         }
-        mock_repo.get_sales_by_department.return_value = [
+        mock_context.sales.get_sales_by_department.return_value = [
             {'department_id': 1, 'department_name': 'Electronics', 'total_amount': Decimal('500.00'), 'num_items': 20},
             {'department_id': 2, 'department_name': 'Furniture', 'total_amount': Decimal('300.00'), 'num_items': 5}
         ]
     
-    # Create a mock factory that returns our mock repo
-    def mock_factory(session):
-        return mock_repo
-    
-    # Create the service with our mock factory
-    service = ReportingService(sale_repo_factory=mock_factory)
+    # Create the service with Unit of Work pattern
+    service = ReportingService()
     
     # Create a temporary file path for the PDF
     pdf_path = os.path.join(str(tmpdir), f"{report_type}_test.pdf")
@@ -298,18 +339,16 @@ def test_print_report_methods(method_name, report_type, tmpdir):
             assert 'profit_margin' in report_data
 
 
-def test_print_report_failure(tmpdir):
+@patch('core.services.reporting_service.unit_of_work')
+def test_print_report_failure(mock_uow, tmpdir):
     """Test that a RuntimeError is raised when PDF generation fails."""
-    # Create mock repository and service
-    mock_repo = MagicMock()
-    mock_repo.get_sales_summary_by_period.return_value = []
+    # Set up Unit of Work mock
+    mock_context = MagicMock()
+    mock_uow.return_value.__enter__.return_value = mock_context
+    mock_context.sales.get_sales_summary_by_period.return_value = []
     
-    # Create a mock factory that returns our mock repo
-    def mock_factory(session):
-        return mock_repo
-    
-    # Create the service with our mock factory
-    service = ReportingService(sale_repo_factory=mock_factory)
+    # Create the service with Unit of Work pattern
+    service = ReportingService()
     
     # Create a temporary file path for the PDF
     pdf_path = os.path.join(str(tmpdir), "failed_report.pdf")

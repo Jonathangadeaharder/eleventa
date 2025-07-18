@@ -1,27 +1,20 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date, timedelta
-from typing import Optional, List, Dict, Any, Callable
-from sqlalchemy.orm import Session
+from typing import Optional, List, Dict, Any
 
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
-from core.interfaces.repository_interfaces import ICashDrawerRepository
 from core.services.service_base import ServiceBase
-from infrastructure.persistence.utils import session_scope
-from decimal import Decimal, ROUND_HALF_UP
+from infrastructure.persistence.unit_of_work import UnitOfWork, unit_of_work
 
 
 class CashDrawerService(ServiceBase):
     """Service for cash drawer operations."""
     
-    def __init__(self, cash_drawer_repo_factory: Callable[[Session], ICashDrawerRepository]):
+    def __init__(self):
         """
-        Initialize the service with a repository factory.
-        
-        Args:
-            cash_drawer_repo_factory: Factory function to create cash drawer repository
+        Initialize the service.
         """
         super().__init__()  # Initialize base class with default logger
-        self.cash_drawer_repo_factory = cash_drawer_repo_factory
         
     def open_drawer(self, initial_amount: Decimal, description: str, user_id: int, drawer_id: Optional[int] = None) -> CashDrawerEntry:
         """
@@ -39,11 +32,9 @@ class CashDrawerService(ServiceBase):
         Raises:
             ValueError: If the drawer is already open or if the initial amount is invalid
         """
-        def _open_drawer(session, initial_amount, description, user_id, drawer_id):
-            repository = self._get_repository(self.cash_drawer_repo_factory, session)
-            
+        with unit_of_work() as uow:
             # Validate that the drawer is not already open
-            if repository.is_drawer_open(drawer_id):
+            if uow.cash_drawer.is_drawer_open(drawer_id):
                 raise ValueError("Cash drawer is already open")
                 
             # Validate initial amount
@@ -64,9 +55,7 @@ class CashDrawerService(ServiceBase):
             )
             
             # Add to repository
-            return repository.add_entry(entry)
-            
-        return self._with_session(_open_drawer, initial_amount, description, user_id, drawer_id)
+            return uow.cash_drawer.add_entry(entry)
         
     def add_cash(self, amount: Decimal, description: str, user_id: int, drawer_id: Optional[int] = None) -> CashDrawerEntry:
         """
@@ -84,11 +73,9 @@ class CashDrawerService(ServiceBase):
         Raises:
             ValueError: If the drawer is not open or if the amount is invalid
         """
-        def _add_cash(session, amount, description, user_id, drawer_id):
-            repository = self._get_repository(self.cash_drawer_repo_factory, session)
-            
+        with unit_of_work() as uow:
             # Validate that the drawer is open
-            if not repository.is_drawer_open(drawer_id):
+            if not uow.cash_drawer.is_drawer_open(drawer_id):
                 raise ValueError("Cash drawer is not open")
                 
             # Validate amount
@@ -109,9 +96,7 @@ class CashDrawerService(ServiceBase):
             )
             
             # Add to repository
-            return repository.add_entry(entry)
-            
-        return self._with_session(_add_cash, amount, description, user_id, drawer_id)
+            return uow.cash_drawer.add_entry(entry)
         
     def remove_cash(self, amount: Decimal, description: str, user_id: int, drawer_id: Optional[int] = None) -> CashDrawerEntry:
         """
@@ -129,11 +114,9 @@ class CashDrawerService(ServiceBase):
         Raises:
             ValueError: If the drawer is not open, if the amount is invalid, or if there's insufficient cash
         """
-        def _remove_cash(session, amount, description, user_id, drawer_id):
-            repository = self._get_repository(self.cash_drawer_repo_factory, session)
-            
+        with unit_of_work() as uow:
             # Validate that the drawer is open
-            if not repository.is_drawer_open(drawer_id):
+            if not uow.cash_drawer.is_drawer_open(drawer_id):
                 raise ValueError("Cash drawer is not open")
                 
             # Validate amount
@@ -141,7 +124,7 @@ class CashDrawerService(ServiceBase):
                 raise ValueError("Amount must be positive")
                 
             # Check if there's enough cash in the drawer
-            current_balance = repository.get_current_balance(drawer_id)
+            current_balance = uow.cash_drawer.get_current_balance(drawer_id)
             if amount > current_balance:
                 raise ValueError(f"Insufficient cash in drawer. Current balance: {current_balance}")
                 
@@ -159,9 +142,7 @@ class CashDrawerService(ServiceBase):
             )
             
             # Add to repository
-            return repository.add_entry(entry)
-            
-        return self._with_session(_remove_cash, amount, description, user_id, drawer_id)
+            return uow.cash_drawer.add_entry(entry)
         
     def get_drawer_summary(self, drawer_id: Optional[int] = None) -> Dict[str, Any]:
         """
@@ -173,14 +154,12 @@ class CashDrawerService(ServiceBase):
         Returns:
             A dictionary with drawer summary information
         """
-        def _get_drawer_summary(session, drawer_id):
-            repository = self._get_repository(self.cash_drawer_repo_factory, session)
-            
+        with unit_of_work() as uow:
             # Get drawer status
-            is_open = repository.is_drawer_open(drawer_id)
+            is_open = uow.cash_drawer.is_drawer_open(drawer_id)
             
             # Get entries for today
-            entries_today = repository.get_today_entries(drawer_id)
+            entries_today = uow.cash_drawer.get_today_entries(drawer_id)
             
             # Calculate initial amount (from START entry)
             initial_amount = Decimal('0.00')
@@ -195,7 +174,7 @@ class CashDrawerService(ServiceBase):
                     break
                     
             # Calculate totals
-            current_balance = repository.get_current_balance(drawer_id)
+            current_balance = uow.cash_drawer.get_current_balance(drawer_id)
             
             total_in = sum([entry.amount for entry in entries_today 
                             if entry.entry_type == CashDrawerEntryType.IN], Decimal('0.00'))
@@ -214,8 +193,6 @@ class CashDrawerService(ServiceBase):
                 'opened_at': opened_at,
                 'opened_by': opened_by
             }
-            
-        return self._with_session(_get_drawer_summary, drawer_id)
 
     def close_drawer(self, actual_amount: Decimal, description: str, user_id: int, drawer_id: Optional[int] = None) -> CashDrawerEntry:
         """
@@ -233,10 +210,8 @@ class CashDrawerService(ServiceBase):
         Raises:
             ValueError: If the drawer is not open or if the actual amount is invalid.
         """
-        def _close_drawer(session, actual_amount, description, user_id, drawer_id):
-            repository = self._get_repository(self.cash_drawer_repo_factory, session)
-
-            if not repository.is_drawer_open(drawer_id):
+        with unit_of_work() as uow:
+            if not uow.cash_drawer.is_drawer_open(drawer_id):
                 raise ValueError("Cash drawer is not open. Cannot perform closing.")
 
             if actual_amount < 0:
@@ -253,6 +228,4 @@ class CashDrawerService(ServiceBase):
                 drawer_id=drawer_id
             )
 
-            return repository.add_entry(entry)
-
-        return self._with_session(_close_drawer, actual_amount, description, user_id, drawer_id)
+            return uow.cash_drawer.add_entry(entry)

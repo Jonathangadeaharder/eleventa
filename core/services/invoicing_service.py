@@ -1,9 +1,8 @@
-from typing import Optional, Dict, Any, Callable
+from typing import Optional, Dict, Any
 from decimal import Decimal
 import json
 from datetime import datetime
 import os
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 # Required imports for PDF generation
@@ -14,34 +13,23 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 
-from core.interfaces.repository_interfaces import IInvoiceRepository, ISaleRepository, ICustomerRepository
 from core.models.invoice import Invoice
 from core.models.sale import Sale
 from core.models.customer import Customer
 from config import Config
-from infrastructure.persistence.utils import session_scope
 from core.exceptions import ResourceNotFoundError, ExternalServiceError
 from core.services.service_base import ServiceBase
+from core.interfaces.repository_interfaces import IInvoiceRepository
+from infrastructure.persistence.unit_of_work import UnitOfWork, unit_of_work
 
 class InvoicingService(ServiceBase):
     """Service to handle invoice creation and management."""
     
-    def __init__(self, 
-                 invoice_repo_factory: Callable[[Session], IInvoiceRepository],
-                 sale_repo_factory: Callable[[Session], ISaleRepository],
-                 customer_repo_factory: Callable[[Session], ICustomerRepository]):
+    def __init__(self):
         """
-        Initialize with repository factories.
-        
-        Args:
-            invoice_repo_factory: Factory function to create invoice repository
-            sale_repo_factory: Factory function to create sale repository
-            customer_repo_factory: Factory function to create customer repository
+        Initialize the service.
         """
         super().__init__()  # Initialize base class with default logger
-        self.invoice_repo_factory = invoice_repo_factory
-        self.sale_repo_factory = sale_repo_factory
-        self.customer_repo_factory = customer_repo_factory
     
     def create_invoice_from_sale(self, sale_id: int) -> Invoice:
         """
@@ -56,19 +44,14 @@ class InvoicingService(ServiceBase):
         Raises:
             ValueError: If the sale doesn't exist, already has an invoice, or lacks required customer data
         """
-        def _create_invoice_from_sale(session, sale_id):
-            # Get repositories from factories
-            invoice_repo = self._get_repository(self.invoice_repo_factory, session)
-            sale_repo = self._get_repository(self.sale_repo_factory, session)
-            customer_repo = self._get_repository(self.customer_repo_factory, session)
-            
+        with unit_of_work() as uow:
             # Check if sale exists
-            sale = self._get_sale(sale_id, sale_repo)
+            sale = self._get_sale(sale_id, uow.sales)
             if not sale:
                 raise ValueError(f"Sale with ID {sale_id} not found")
                 
             # Check if sale already has an invoice
-            existing_invoice = invoice_repo.get_by_sale_id(sale_id)
+            existing_invoice = uow.invoices.get_by_sale_id(sale_id)
             if existing_invoice:
                 raise ValueError(f"Sale with ID {sale_id} already has an invoice")
                 
@@ -77,7 +60,7 @@ class InvoicingService(ServiceBase):
                 raise ValueError(f"Sale with ID {sale_id} has no associated customer. A customer is required for invoicing.")
                 
             # Get customer data
-            customer = self._get_customer(sale.customer_id, customer_repo)
+            customer = self._get_customer(sale.customer_id, uow.customers)
             if not customer:
                 raise ValueError(f"Customer with ID {sale.customer_id} not found")
             
@@ -92,7 +75,7 @@ class InvoicingService(ServiceBase):
             }
             
             # Generate invoice number
-            invoice_number = self._generate_next_invoice_number(invoice_repo)
+            invoice_number = self._generate_next_invoice_number(uow.invoices)
             
             # Determine invoice type based on customer's IVA condition
             invoice_type = self._determine_invoice_type(customer.iva_condition)
@@ -131,9 +114,8 @@ class InvoicingService(ServiceBase):
             
             try:
                 # Save to repository
-                new_invoice = invoice_repo.add(invoice)
-                # Attempt to flush to catch DB errors sooner, though commit is the final point.
-                # The session's commit will happen in the _with_session wrapper if successful.
+                new_invoice = uow.invoices.add(invoice)
+                uow.commit()
                 return new_invoice
             except (ValueError, IntegrityError) as e: # Catch both ValueError and IntegrityError
                 # Log the original error for debugging
@@ -185,10 +167,8 @@ class InvoicingService(ServiceBase):
                 else: # Should not happen if only ValueError or IntegrityError are caught
                     self.logger.error(f"Unhandled error type {type(e).__name__} during invoice creation for sale {sale_id}: {e}")
                     raise ValueError(f"Invoice creation failed with an unexpected error: {e}")
-                
-        return self._with_session(_create_invoice_from_sale, sale_id)
     
-    def _get_sale(self, sale_id: int, sale_repo: ISaleRepository) -> Optional[Sale]:
+    def _get_sale(self, sale_id: int, sale_repo) -> Optional[Sale]:
         """Get a sale by ID, handling any exceptions."""
         try:
             return sale_repo.get_by_id(sale_id)
@@ -197,7 +177,7 @@ class InvoicingService(ServiceBase):
             self.logger.error(f"Error retrieving sale: {e}")
             return None
     
-    def _get_customer(self, customer_id: int, customer_repo: ICustomerRepository) -> Optional[Customer]:
+    def _get_customer(self, customer_id: int, customer_repo) -> Optional[Customer]:
         """Get a customer by ID, handling any exceptions."""
         try:
             return customer_repo.get_by_id(customer_id)
@@ -300,27 +280,18 @@ class InvoicingService(ServiceBase):
     
     def get_invoice_by_id(self, invoice_id: int) -> Optional[Invoice]:
         """Get an invoice by ID."""
-        def _get_invoice_by_id(session, invoice_id):
-            invoice_repo = self._get_repository(self.invoice_repo_factory, session)
-            return invoice_repo.get_by_id(invoice_id)
-            
-        return self._with_session(_get_invoice_by_id, invoice_id)
+        with unit_of_work() as uow:
+            return uow.invoices.get_by_id(invoice_id)
     
     def get_invoice_by_sale_id(self, sale_id: int) -> Optional[Invoice]:
         """Get an invoice by its associated sale ID."""
-        def _get_invoice_by_sale_id(session, sale_id):
-            invoice_repo = self._get_repository(self.invoice_repo_factory, session)
-            return invoice_repo.get_by_sale_id(sale_id)
-            
-        return self._with_session(_get_invoice_by_sale_id, sale_id)
+        with unit_of_work() as uow:
+            return uow.invoices.get_by_sale_id(sale_id)
     
     def get_all_invoices(self):
         """Get all invoices."""
-        def _get_all_invoices(session):
-            invoice_repo = self._get_repository(self.invoice_repo_factory, session)
-            return invoice_repo.get_all()
-            
-        return self._with_session(_get_all_invoices)
+        with unit_of_work() as uow:
+            return uow.invoices.get_all()
     
     def generate_invoice_pdf(self, invoice_id: int, output_path: str = None, filename: str = None, store_info: dict = None) -> str:
         """
@@ -339,17 +310,13 @@ class InvoicingService(ServiceBase):
             ResourceNotFoundError: If the invoice or related sale/customer is not found.
             Exception: For errors during PDF generation.
         """
-        def _generate_invoice_pdf(session, invoice_id, output_path, filename, store_info):
-            # Get repositories from factories
-            invoice_repo = self._get_repository(self.invoice_repo_factory, session)
-            sale_repo = self._get_repository(self.sale_repo_factory, session)
-            
+        with unit_of_work() as uow:
             # Retrieve invoice and sale
-            invoice = invoice_repo.get_by_id(invoice_id)
+            invoice = uow.invoices.get_by_id(invoice_id)
             if not invoice:
                 raise ResourceNotFoundError(f"Invoice with ID {invoice_id} not found")
 
-            sale = sale_repo.get_by_id(invoice.sale_id)
+            sale = uow.sales.get_by_id(invoice.sale_id)
             if not sale:
                 raise ResourceNotFoundError(f"Sale with ID {invoice.sale_id} not found")
 
@@ -487,8 +454,6 @@ class InvoicingService(ServiceBase):
                 self.logger.error(f"Error generating PDF for invoice {invoice_id}: {e}")
                 # Raise a specific PDF generation error
                 raise ExternalServiceError(f"Failed to generate PDF for invoice {invoice_id}") from e
-                
-        return self._with_session(_generate_invoice_pdf, invoice_id, output_path, filename, store_info)
     
     def _generate_pdf_filename(self, invoice_number: str) -> str:
         """Generate a PDF filename from an invoice number."""

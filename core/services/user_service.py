@@ -1,24 +1,18 @@
 import bcrypt
-from typing import Optional, Callable
-from sqlalchemy.orm import Session
+from typing import Optional
 
 from core.services.service_base import ServiceBase
-from core.interfaces.repository_interfaces import IUserRepository
 from core.models.user import User
-from infrastructure.persistence.utils import session_scope
+from infrastructure.persistence.unit_of_work import UnitOfWork, unit_of_work
 
 class UserService(ServiceBase):
     """Handles business logic related to users."""
 
-    def __init__(self, user_repo_factory: Callable[[Session], IUserRepository]):
+    def __init__(self):
         """
-        Initialize the service with a repository factory.
-        
-        Args:
-            user_repo_factory: Factory function to create user repository
+        Initialize the service.
         """
         super().__init__()  # Initialize base class with default logger
-        self.user_repo_factory = user_repo_factory
 
     def _hash_password(self, password: str) -> str:
         """Hashes a plain text password using bcrypt."""
@@ -40,14 +34,12 @@ class UserService(ServiceBase):
 
     def add_user(self, username: str, password: str) -> Optional[User]:
         """Adds a new user with a hashed password."""
-        def _add_user(session, username, password):
-            user_repo = self._get_repository(self.user_repo_factory, session)
-            
+        with unit_of_work() as uow:
             if not username:
                 raise ValueError("Username cannot be empty.")
                 
             # Check if username already exists
-            existing_user = user_repo.get_by_username(username)
+            existing_user = uow.users.get_by_username(username)
             if existing_user:
                 self.logger.info(f"Username '{username}' already exists.")
                 raise ValueError(f"Username '{username}' already exists.")
@@ -58,17 +50,14 @@ class UserService(ServiceBase):
             # The repository's add method should handle the actual saving
             # and return the user with an assigned ID.
             self.logger.info(f"Creating new user: {username}")
-            return user_repo.add(new_user)
-            
-        return self._with_session(_add_user, username, password)
+            result = uow.users.add(new_user)
+            uow.commit()
+            return result
 
     def get_user_by_id(self, user_id: int) -> Optional[User]:
         """Gets a user by their ID."""
-        def _get_user_by_id(session, user_id):
-            user_repo = self._get_repository(self.user_repo_factory, session)
-            return user_repo.get_by_id(user_id)
-            
-        return self._with_session(_get_user_by_id, user_id)
+        with unit_of_work() as uow:
+            return uow.users.get_by_id(user_id)
 
     def get_user(self, user_id: int) -> Optional[User]:
         """Gets a user by their ID (alias for get_user_by_id)."""
@@ -76,20 +65,16 @@ class UserService(ServiceBase):
 
     def get_user_by_username(self, username: str) -> Optional[User]:
         """Gets a user by their username."""
-        def _get_user_by_username(session, username):
-            user_repo = self._get_repository(self.user_repo_factory, session)
-            return user_repo.get_by_username(username)
-            
-        return self._with_session(_get_user_by_username, username)
+        with unit_of_work() as uow:
+            return uow.users.get_by_username(username)
 
     def authenticate_user(self, username: str, password: str) -> Optional[User]:
         """Authenticates a user by username and password."""
-        def _authenticate_user(session, username, password):
+        with unit_of_work() as uow:
             if not username or not password:
                 return None
                 
-            user_repo = self._get_repository(self.user_repo_factory, session)
-            user = user_repo.get_by_username(username)
+            user = uow.users.get_by_username(username)
             
             if not user or not user.is_active:
                 self.logger.info(f"Authentication failed for username '{username}': user not found or inactive")
@@ -101,7 +86,5 @@ class UserService(ServiceBase):
             else:
                 self.logger.info(f"Authentication failed for username '{username}': incorrect password")
                 return None # Password incorrect
-                
-        return self._with_session(_authenticate_user, username, password)
 
     # Add update/delete methods later if needed, handling password changes carefully

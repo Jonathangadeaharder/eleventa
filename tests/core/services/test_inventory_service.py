@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch, call, ANY # Added ANY
 from datetime import datetime
 from decimal import Decimal # Added Decimal for numeric comparison
 from dataclasses import replace # Added replace
+from typing import Dict
 
 # Adjust imports based on project structure
 from core.services.inventory_service import InventoryService
@@ -36,24 +37,17 @@ def mock_session():
 
 @pytest.fixture
 def inventory_service(mock_inventory_repo, mock_product_repo):
-    """Fixture for the InventoryService with mocked repository factories."""
-    # Create factory functions that return the mocked repositories
-    def inventory_repo_factory(session):
-        return mock_inventory_repo
-
-    def product_repo_factory(session):
-        return mock_product_repo
-
-    service = InventoryService(inventory_repo_factory, product_repo_factory)
-    
-    # Patch _with_session to execute the function directly with our mock session
-    # This avoids the need to patch session_scope in every test
-    def mock_with_session(func, *args, **kwargs):
-        mock_session = MagicMock()
-        return func(mock_session, *args, **kwargs)
-    
-    service._with_session = mock_with_session
-    return service
+    """Fixture for the InventoryService with mocked repositories."""
+    with patch('core.services.inventory_service.unit_of_work') as mock_uow:
+        # Create a mock unit of work context manager
+        mock_uow_instance = MagicMock()
+        mock_uow_instance.products = mock_product_repo
+        mock_uow_instance.inventory = mock_inventory_repo
+        mock_uow.return_value.__enter__.return_value = mock_uow_instance
+        mock_uow.return_value.__exit__.return_value = None
+        
+        service = InventoryService()
+        yield service
 
 @pytest.fixture
 def sample_product():
@@ -320,7 +314,6 @@ def test_adjust_inventory_product_no_inventory_control(inventory_service, mock_p
 
 def test_decrease_stock_for_sale_success(inventory_service, mock_product_repo, mock_inventory_repo, sample_product):
     """Test successfully decreasing stock for a sale item."""
-    mock_session = MagicMock() # Create mock session
     product_id = sample_product.id
     quantity_sold = Decimal('3.0')
     sale_id = 101
@@ -339,8 +332,8 @@ def test_decrease_stock_for_sale_success(inventory_service, mock_product_repo, m
     )
     mock_product_repo.get_by_id.return_value = product_from_db
 
-    # Action - session is the first parameter now
-    inventory_service.decrease_stock_for_sale(product_id, quantity_sold, sale_id, user_id, mock_session)
+    # Action
+    inventory_service.decrease_stock_for_sale(product_id, quantity_sold, sale_id, user_id)
 
     # Assertions
     mock_product_repo.get_by_id.assert_called_once_with(product_id)
@@ -360,29 +353,23 @@ def test_decrease_stock_for_sale_success(inventory_service, mock_product_repo, m
 
 def test_decrease_stock_for_sale_product_not_found(inventory_service, mock_product_repo):
     """Test decreasing stock fails when product not found."""
-    # Create mock session since the service now expects it as a parameter
-    mock_session = MagicMock()
     mock_product_repo.get_by_id.return_value = None
     product_id = 999 # Non-existent ID
     with pytest.raises(ValueError, match=f"Product with ID {product_id} not found"):
-        inventory_service.decrease_stock_for_sale(product_id, Decimal('1.0'), 202, session=mock_session)
+        inventory_service.decrease_stock_for_sale(product_id, Decimal('1.0'), 202)
     mock_product_repo.get_by_id.assert_called_once_with(product_id)
 
 def test_decrease_stock_for_sale_product_no_inventory(inventory_service, mock_product_repo, sample_product_no_inventory):
     """Test decreasing stock fails for product not using inventory."""
-    # Create mock session since the service now expects it as a parameter
-    mock_session = MagicMock()
     mock_product_repo.get_by_id.return_value = sample_product_no_inventory
     product_id = sample_product_no_inventory.id
     sale_id = 201
     with pytest.raises(ValueError, match=f"Product {sample_product_no_inventory.code} does not use inventory control"):
-        inventory_service.decrease_stock_for_sale(product_id, Decimal('1.0'), sale_id, session=mock_session)
+        inventory_service.decrease_stock_for_sale(product_id, Decimal('1.0'), sale_id)
     mock_product_repo.get_by_id.assert_called_once_with(product_id)
 
 def test_decrease_stock_for_sale_insufficient_stock(inventory_service, mock_product_repo, mock_inventory_repo, sample_product):
     """Test decreasing stock fails when insufficient stock."""
-    # Create mock session since the service now expects it as a parameter
-    mock_session = MagicMock()
     # Create a copy of the product with low stock
     product_with_low_stock = Product(
         id=sample_product.id,
@@ -401,7 +388,7 @@ def test_decrease_stock_for_sale_insufficient_stock(inventory_service, mock_prod
     quantity_to_sell = Decimal('10.0') # Try to sell more than in stock
     
     with pytest.raises(ValueError, match="Insufficient stock for product"):
-        inventory_service.decrease_stock_for_sale(product_id, quantity_to_sell, sale_id, session=mock_session)
+        inventory_service.decrease_stock_for_sale(product_id, quantity_to_sell, sale_id)
     
     mock_product_repo.get_by_id.assert_called_once_with(product_id)
     mock_product_repo.update_stock.assert_not_called() # Stock should not be updated
@@ -409,15 +396,13 @@ def test_decrease_stock_for_sale_insufficient_stock(inventory_service, mock_prod
 
 def test_decrease_stock_for_sale_zero_quantity(inventory_service):
     """Test decreasing stock by zero quantity raises ValueError."""
-    mock_session = MagicMock()
     with pytest.raises(ValueError, match="Quantity for sale must be positive"):
-        inventory_service.decrease_stock_for_sale(product_id=1, quantity=0, sale_id=1, session=mock_session)
+        inventory_service.decrease_stock_for_sale(product_id=1, quantity=0, sale_id=1)
 
 def test_decrease_stock_for_sale_negative_quantity(inventory_service):
     """Test decreasing stock by negative quantity raises ValueError."""
-    mock_session = MagicMock()
     with pytest.raises(ValueError, match="Quantity for sale must be positive"):
-        inventory_service.decrease_stock_for_sale(product_id=1, quantity=-5, sale_id=1, session=mock_session)
+        inventory_service.decrease_stock_for_sale(product_id=1, quantity=-5, sale_id=1)
 
 # --- Tests for Reporting Methods ---
 
@@ -425,14 +410,14 @@ def test_get_inventory_report(inventory_service, mock_product_repo, sample_produ
     """Test retrieving the general inventory report."""
     # Arrange
     expected_products = [sample_product] # Assume repo returns a list
-    mock_product_repo.get_all.return_value = expected_products
+    mock_product_repo.get_inventory_report.return_value = expected_products
 
     # Act
     report = inventory_service.get_inventory_report()
 
     # Assert
     assert report == expected_products # Check it returns the products from the repo
-    mock_product_repo.get_all.assert_called_once() # Check the repo was queried
+    mock_product_repo.get_inventory_report.assert_called_once() # Check the repo was queried
 
 def test_get_low_stock_products(inventory_service, mock_product_repo, sample_product):
     """Test retrieving products with low stock."""
@@ -451,14 +436,14 @@ def test_get_low_stock_products(inventory_service, mock_product_repo, sample_pro
     )
 
     # Configure mock to return this product
-    mock_product_repo.get_low_stock.return_value = [low_stock_product]
+    mock_product_repo.get_low_stock_products.return_value = [low_stock_product]
 
     # Act
     low_stock_list = inventory_service.get_low_stock_products()
 
     # Assert
     assert low_stock_list == [low_stock_product] # Check it returns the products from the repo
-    mock_product_repo.get_low_stock.assert_called_once() # Check the repo method was called
+    mock_product_repo.get_low_stock_products.assert_called_once_with(Decimal('10')) # Check the repo method was called
 
 def test_get_inventory_movements_all(inventory_service, mock_inventory_repo):
     """Test retrieving all inventory movements."""
@@ -466,14 +451,14 @@ def test_get_inventory_movements_all(inventory_service, mock_inventory_repo):
     movement1 = InventoryMovement(id=1, product_id=1, quantity=10, movement_type='PURCHASE')
     movement2 = InventoryMovement(id=2, product_id=2, quantity=-5, movement_type='SALE')
     expected_movements = [movement1, movement2]
-    mock_inventory_repo.get_all_movements.return_value = expected_movements
+    mock_inventory_repo.get_movements.return_value = expected_movements
 
     # Act
     movements = inventory_service.get_inventory_movements()
 
     # Assert
     assert movements == expected_movements # Check it returns the movements from the repo
-    mock_inventory_repo.get_all_movements.assert_called_once() # Check repo method called
+    mock_inventory_repo.get_movements.assert_called_once_with(product_id=None, start_date=None, end_date=None, movement_type=None) # Check repo method called
 
 def test_get_inventory_movements_for_product(inventory_service, mock_inventory_repo, sample_product):
     """Test retrieving inventory movements for a specific product."""
@@ -482,15 +467,15 @@ def test_get_inventory_movements_for_product(inventory_service, mock_inventory_r
     movement1 = InventoryMovement(id=1, product_id=product_id_to_filter, quantity=10, movement_type='PURCHASE')
     movement2 = InventoryMovement(id=3, product_id=product_id_to_filter, quantity=-2, movement_type='ADJUSTMENT')
     expected_movements = [movement1, movement2]
-    mock_inventory_repo.get_movements_for_product.return_value = expected_movements
+    mock_inventory_repo.get_movements.return_value = expected_movements
 
     # Act
     movements = inventory_service.get_inventory_movements(product_id=product_id_to_filter)
 
     # Assert
     assert movements == expected_movements # Check it returns the movements from the repo
-    mock_inventory_repo.get_movements_for_product.assert_called_once_with(product_id_to_filter)
+    mock_inventory_repo.get_movements.assert_called_once_with(product_id=product_id_to_filter, start_date=None, end_date=None, movement_type=None)
 
 # Remove the old unittest runner if it exists
 # if __name__ == '__main__':
-#     pytest.main() 
+#     pytest.main()

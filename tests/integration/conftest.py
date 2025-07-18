@@ -50,95 +50,7 @@ except ImportError:
         return {"http": MagicMock(), "filesystem": MagicMock()}
 
 
-@pytest.fixture(scope="function")
-def clean_db():
-    """
-    Provides a clean in-memory SQLite database with tables created FOR EACH TEST.
-    Avoids module reloading by creating engine and session locally.
-    """
-    import os
-    import uuid
-    import sqlalchemy.pool
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-    # Import necessary ORM models
-    # We will get Base via the models_mapping module after it's imported
-    # from infrastructure.persistence.sqlite.database import Base 
-    from infrastructure.persistence.sqlite.models_mapping import UserOrm
-    from core.models.user import User
-
-    # Generate a unique identifier for this test's database
-    test_id = f"memdb_{uuid.uuid4().hex}"
-    test_db_url = f"sqlite:///file:{test_id}?mode=memory&cache=shared"
-    print(f"Creating in-memory DB for test: {test_db_url}")
-
-    # Create a test-specific engine
-    test_engine = create_engine(
-        test_db_url,
-        connect_args={"check_same_thread": False},
-        poolclass=sqlalchemy.pool.StaticPool # Essential for SQLite in-memory
-    )
-    
-    # Create tables using the test engine
-    try:
-        # Get the Base object that models were registered with via the mapping module
-        Base = infrastructure.persistence.sqlite.models_mapping.Base
-        
-        # Directly create tables using the correct Base's metadata and the test engine
-        print(f"Creating tables directly using models_mapping.Base.metadata ({len(Base.metadata.tables)} tables)...")
-        Base.metadata.create_all(bind=test_engine)
-        print("Tables created successfully.")
-    except Exception as e:
-        print(f"Error creating tables: {e}")
-        raise
-
-    # Create a test-specific session factory bound to the test engine
-    TestingSessionLocal = sessionmaker(autoflush=False, bind=test_engine)
-    
-    # Create a session
-    session = TestingSessionLocal()
-    
-    # --- Create Test User ---
-    test_user = User(
-        id=999,
-        username="testuser",
-        password_hash="$2b$12$test_hash_for_testing_only"
-    )
-    user_orm = UserOrm(
-        id=test_user.id,
-        username=test_user.username,
-        password_hash=test_user.password_hash,
-        is_active=True,
-        is_admin=False # Ensure is_admin is set if required by schema
-    )
-    
-    try:
-        print("Adding test user...")
-        session.add(user_orm)
-        session.commit()
-        print("Test user added and committed.")
-    except Exception as e:
-        print(f"Error adding test user: {e}")
-        session.rollback()
-        # It might be useful to inspect the DB state here if errors persist
-        raise
-    # --- End Test User ---
-    
-    try:
-        # Yield the session and the domain model user
-        yield session, test_user 
-    finally:
-        print("Closing session and dropping tables...")
-        session.close()
-        # Drop tables using the same test engine and the correct Base metadata
-        try:
-            # Ensure we use the same Base instance from models_mapping
-            Base = infrastructure.persistence.sqlite.models_mapping.Base
-            print(f"Dropping tables using models_mapping.Base metadata ({len(Base.metadata.tables)} tables)...")
-            Base.metadata.drop_all(bind=test_engine)
-            print("Tables dropped.")
-        except Exception as e:
-            print(f"Error dropping tables: {e}")
+# clean_db fixture removed - now using the centralized fixture from tests/conftest.py
 
 
 @pytest.fixture
@@ -151,7 +63,7 @@ def test_user():
     """
     return User(
         id=999,
-        username="testuser",
+        username="integration_testuser",
         password_hash="$2b$12$test_hash_for_testing_only"
     )
 
@@ -292,33 +204,18 @@ def test_app(clean_db, authenticated_user, mock_external_services):
     class TestInvoicingService(InvoicingService, TestServiceBase):
         pass
     
-    # Initialize services with our factories
-    product_service = TestProductService(
-        product_repo_factory=product_repo_factory, 
-        department_repo_factory=department_repo_factory
-    )
+    # Initialize services with Unit of Work pattern (no repository factories)
+    product_service = TestProductService()
     
-    customer_service = TestCustomerService(
-        customer_repo_factory=customer_repo_factory,
-        credit_payment_repo_factory=credit_payment_repo_factory
-    )
+    customer_service = TestCustomerService()
     
     # Mock inventory service for simplicity
     inventory_service = MagicMock()
     
-    sale_service = TestSaleService(
-        sale_repo_factory=sale_repo_factory,
-        product_repo_factory=product_repo_factory,
-        customer_repo_factory=customer_repo_factory,
-        inventory_service=inventory_service,
-        customer_service=customer_service
-    )
+    # SaleService still requires inventory_service and customer_service
+    sale_service = TestSaleService(inventory_service, customer_service)
     
-    invoicing_service = TestInvoicingService(
-        invoice_repo_factory=invoice_repo_factory,
-        sale_repo_factory=sale_repo_factory,
-        customer_repo_factory=customer_repo_factory
-    )
+    invoicing_service = TestInvoicingService()
     
     # Return all components needed for integration tests
     return {
@@ -423,7 +320,7 @@ def test_data_factory(clean_db):
         def create_user(self, **kwargs):
             """Create a test user with default or custom properties."""
             defaults = {
-                "username": "testuser",
+                "username": "integration_testuser",
                 "password_hash": "$2b$12$test_hash_for_testing_only",
                 "is_active": True
             }

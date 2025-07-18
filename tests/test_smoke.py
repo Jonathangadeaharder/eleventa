@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QApplication
 from ui.main_window import MainWindow
 from core.models.user import User
 from tests.ui.qt_test_utils import process_events
+from typing import Dict
 
 # Define mock services as in ui/main_window.py
 class MockProductService:

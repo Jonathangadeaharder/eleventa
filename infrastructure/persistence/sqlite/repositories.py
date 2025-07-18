@@ -395,6 +395,18 @@ class SqliteProductRepository(IProductRepository):
         results_orm = self.session.scalars(stmt).all()
         return [ModelMapper.product_orm_to_domain(prod) for prod in results_orm]
 
+    def get_low_stock_products(self, threshold: Optional[Decimal] = None) -> List[Product]:
+        """Alias for get_low_stock method to match interface."""
+        return self.get_low_stock(threshold)
+
+    def get_inventory_report(self) -> List[Product]:
+        """Returns all products with inventory information."""
+        stmt = select(ProductOrm).options(joinedload(ProductOrm.department))
+        stmt = stmt.where(ProductOrm.uses_inventory == True)
+        stmt = stmt.order_by(ProductOrm.description)
+        results_orm = self.session.scalars(stmt).all()
+        return [ModelMapper.product_orm_to_domain(prod) for prod in results_orm]
+
     def update_stock(self, product_id: int, quantity_change: Decimal, cost_price: Optional[Decimal] = None) -> Optional[Product]: # Changed types to Decimal
         """Updates the stock quantity and optionally the cost price of a specific product."""
         product_orm = self.session.get(ProductOrm, product_id)
@@ -468,6 +480,24 @@ class SqliteInventoryRepository(IInventoryRepository):
             stmt = stmt.where(InventoryMovementOrm.timestamp >= start_date)
         if end_date:
             stmt = stmt.where(InventoryMovementOrm.timestamp <= end_date)
+        stmt = stmt.order_by(InventoryMovementOrm.timestamp.desc())
+        results_orm = self.session.scalars(stmt).all()
+        return [ModelMapper.inventory_movement_orm_to_domain(move) for move in results_orm]
+
+    def get_movements(self, product_id: Optional[int] = None, start_date: Optional[datetime] = None, 
+                     end_date: Optional[datetime] = None, movement_type: Optional[str] = None) -> List[InventoryMovement]:
+        """Retrieves inventory movements with optional filters."""
+        stmt = select(InventoryMovementOrm)
+        
+        if product_id is not None:
+            stmt = stmt.where(InventoryMovementOrm.product_id == product_id)
+        if start_date:
+            stmt = stmt.where(InventoryMovementOrm.timestamp >= start_date)
+        if end_date:
+            stmt = stmt.where(InventoryMovementOrm.timestamp <= end_date)
+        if movement_type:
+            stmt = stmt.where(InventoryMovementOrm.movement_type == movement_type)
+            
         stmt = stmt.order_by(InventoryMovementOrm.timestamp.desc())
         results_orm = self.session.scalars(stmt).all()
         return [ModelMapper.inventory_movement_orm_to_domain(move) for move in results_orm]

@@ -24,7 +24,7 @@ sys.path.insert(0, str(project_root))
 
 # Import necessary modules from the project
 from infrastructure.persistence.sqlite.database import Base
-from infrastructure.persistence.sqlite.models_mapping import ensure_all_models_mapped
+from infrastructure.persistence.sqlite.models_mapping import ensure_all_models_mapped, UserOrm
 
 # Force use of in-memory database for tests
 TEST_DB_URL = "sqlite:///:memory:"
@@ -263,6 +263,68 @@ def set_qt_plugin_path(): # qtbot fixture might be needed to ensure Qt is initia
         print(f"Error in set_qt_plugin_path fixture: {e}")
     
     yield # Let the test session run
+
+@pytest.fixture(scope="function")
+def clean_db(request, test_engine):
+    """
+    Provides a clean transactional database session for each test with perfect isolation.
+    Uses nested transactions (savepoints) and patches the session_scope_provider to ensure
+    all services use the same test session throughout the test lifecycle.
+    """
+    from infrastructure.persistence.utils import session_scope_provider
+    from infrastructure.persistence.sqlite.models_mapping import UserOrm
+    from core.models.user import User
+    from sqlalchemy.orm import sessionmaker
+    from unittest.mock import patch
+    
+    # Create a single connection from the session-scoped engine
+    connection = test_engine.connect()
+    
+    # Begin a transaction on this connection
+    transaction = connection.begin()
+    
+    try:
+        # Create a sessionmaker bound to this specific connection
+        TestSessionFactory = sessionmaker(autoflush=False, bind=connection)
+        
+        # Create the test session
+        session = TestSessionFactory()
+        
+        # Start a nested transaction (savepoint) for true transactional testing
+        savepoint = session.begin_nested()
+        
+        # Patch the session_scope_provider's get_session method to return our test session
+        with patch.object(session_scope_provider, 'get_session', return_value=session):
+            # Add a default test user for convenience in other tests
+            # Let SQLite auto-assign the ID to avoid conflicts
+            test_user_orm = UserOrm(username="clean_db_testuser", password_hash="hash", is_active=True, is_admin=True)
+            session.add(test_user_orm)
+            session.flush()  # Flush to make the user available within the transaction and get the auto-assigned ID
+            
+            domain_user = User(
+                id=test_user_orm.id, 
+                username=test_user_orm.username, 
+                password_hash=test_user_orm.password_hash, 
+                is_active=test_user_orm.is_active, 
+                is_admin=test_user_orm.is_admin
+            )
+            
+            yield session, domain_user
+        
+        # Roll back the savepoint to revert all changes made during the test
+        if savepoint.is_active:
+            savepoint.rollback()
+        
+    finally:
+        # Close the session
+        session.close()
+        
+        # Roll back the main transaction to ensure perfect test isolation
+        if transaction.is_active:
+            transaction.rollback()
+        
+        # Close the connection
+        connection.close()
 
 # Import other fixtures
 from tests.fixtures.conftest import *

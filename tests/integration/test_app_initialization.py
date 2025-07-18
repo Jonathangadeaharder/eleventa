@@ -11,6 +11,7 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 import pytest
+from typing import Dict
 
 # Import from the tests.ui subpackage
 from tests.ui.qt_test_utils import process_events

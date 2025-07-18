@@ -112,6 +112,16 @@ class IProductRepository(ABC):
         """Updates only the stock quantity of a specific product."""
         pass  # pragma: no cover
 
+    @abstractmethod
+    def get_inventory_report(self) -> List[Dict[str, Any]]:
+        """Returns a comprehensive inventory report."""
+        pass  # pragma: no cover
+
+    @abstractmethod
+    def get_low_stock_products(self, threshold: Optional[Decimal] = None) -> List[Product]:
+        """Returns products with stock below the specified threshold."""
+        pass  # pragma: no cover
+
 # Define other repository interfaces here as needed (e.g., ISaleRepository, IUserRepository)
 
 class IInventoryRepository(ABC):
@@ -130,6 +140,17 @@ class IInventoryRepository(ABC):
     @abstractmethod
     def get_all_movements(self, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> List[InventoryMovement]:
         """Retrieves all inventory movements."""
+        pass  # pragma: no cover
+
+    @abstractmethod
+    def get_movements(
+        self,
+        product_id: Optional[int] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        movement_type: Optional[str] = None
+    ) -> List[InventoryMovement]:
+        """Returns inventory movements with optional filters."""
         pass  # pragma: no cover
 
 # --- Add Sale Repository Interface ---

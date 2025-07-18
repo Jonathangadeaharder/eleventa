@@ -33,6 +33,7 @@ from core.models.customer import Customer
 from core.models.sale import Sale, SaleItem
 from core.models.product import Product
 from core.models.user import User
+from core.interfaces.repository_interfaces import IInvoiceRepository
 
 from infrastructure.persistence.sqlite.repositories import (
     SqliteInvoiceRepository,
@@ -157,7 +158,7 @@ class TestInvoicingIntegration:
         )
 
         sale = sale_repo.add_sale(sale)
-        session.commit()  # Explicitly commit to make sure the sale is persisted
+        session.flush()  # Explicitly flush to make sure the sale is available within the transaction
         
         # Verify sale is in the database
         db_sale = sale_repo.get_by_id(sale.id)
@@ -183,6 +184,20 @@ class TestInvoicingIntegration:
         # Correctly unpack the tuple yielded by clean_db at the beginning
         session, _ = clean_db 
         
+        # Set the session factory to use the same engine as the test session
+        # This ensures the Unit of Work uses the same database connection
+        from infrastructure.persistence.utils import session_scope_provider
+        from sqlalchemy.orm import sessionmaker
+        
+        # Get the engine from the test session
+        test_engine = session.bind
+        
+        # Create a session factory that uses the same engine
+        test_session_factory = sessionmaker(bind=test_engine)
+        
+        # Set this as the session factory for the Unit of Work
+        session_scope_provider.set_session_factory(test_session_factory)
+        
         # If we have the direct_repo_services fixture available, use it
         if direct_repo_services:
             return direct_repo_services
@@ -194,53 +209,15 @@ class TestInvoicingIntegration:
         customer_repo = SqliteCustomerRepository(session)
         product_repo = SqliteProductRepository(session)
         
-        # Create services with repository FACTORIES
-        # Define factories that return the existing repo instances (now using correct session)
-        # Remove the redundant unpacking here: session_from_db, _ = clean_db
+        # Services now use Unit of Work pattern and don't need repository factories
+        invoicing_service = InvoicingService()
+        customer_service = CustomerService()
         
-        def customer_repo_factory(session=None):
-            # Factory now returns the repo instance which uses the correct session
-            return customer_repo 
-            
-        def credit_payment_repo_factory(session=None):
-            from infrastructure.persistence.sqlite.repositories import SqliteCreditPaymentRepository
-            # Create repo using the correct session from the start of the fixture
-            return SqliteCreditPaymentRepository(session or clean_db[0]) # Keep using clean_db[0] here for safety or pass session directly
-            
-        def invoice_repo_factory(session=None):
-            return invoice_repo
-            
-        def sale_repo_factory(session=None):
-            return sale_repo
-            
-        def product_repo_factory(session=None):
-            return product_repo
-
-        # Instantiate services using factories
-        invoicing_service = InvoicingService(
-            invoice_repo_factory=invoice_repo_factory, # Use factory
-            sale_repo_factory=sale_repo_factory,         # Use factory
-            customer_repo_factory=customer_repo_factory  # Use factory
-        )
-
-        # Create customer service using factories
-        customer_service = CustomerService(
-            customer_repo_factory=customer_repo_factory,       # Use factory
-            credit_payment_repo_factory=credit_payment_repo_factory # Use factory
-        )
-        
-        # Create SaleService using factories
-        # Mock inventory service for simplicity
+        # Create SaleService - mock inventory service for simplicity
         from unittest.mock import MagicMock
         inventory_service = MagicMock()
         
-        sale_service = SaleService(
-            sale_repo_factory=sale_repo_factory,
-            product_repo_factory=product_repo_factory,
-            customer_repo_factory=customer_repo_factory,
-            inventory_service=inventory_service,
-            customer_service=customer_service
-        )
+        sale_service = SaleService(inventory_service, customer_service)
 
         return {
             "invoicing_service": invoicing_service,
@@ -263,19 +240,20 @@ class TestInvoicingIntegration:
         session = services["session"]
         
         # Debug: Check if the sale exists in the database
-        sale_repo = invoicing_service.sale_repo_factory(session)
+        from infrastructure.persistence.sqlite.repositories import SqliteSaleRepository, SqliteInvoiceRepository, SqliteCustomerRepository
+        sale_repo = SqliteSaleRepository(session)
         db_sale = sale_repo.get_by_id(sale.id)
         print(f"Debug - sale in test: id={sale.id}, sale from DB: {db_sale}")
         if not db_sale:
             print(f"Debug - Sale {sale.id} is not in the database, adding it now")
             sale_repo.add_sale(sale)
-            session.commit()
+            session.flush()
             db_sale = sale_repo.get_by_id(sale.id)
             print(f"Debug - After commit: sale from DB: {db_sale}")
         
         # A direct approach without using session_scope
-        invoice_repo = invoicing_service.invoice_repo_factory(session)
-        customer_repo = invoicing_service.customer_repo_factory(session)
+        invoice_repo = SqliteInvoiceRepository(session)
+        customer_repo = SqliteCustomerRepository(session)
         
         # Manually perform the steps that would be inside the create_invoice_from_sale method
         # Check if sale exists - we already verified above
@@ -349,7 +327,7 @@ class TestInvoicingIntegration:
         
         # Add invoice to repository
         invoice = invoice_repo.add(invoice)
-        session.commit()
+        session.flush()
         
         # Assert the invoice was created properly
         assert invoice.id is not None
@@ -386,7 +364,6 @@ class TestInvoicingIntegration:
         
         # Create first invoice from the fixture sale
         invoice1 = invoicing_service.create_invoice_from_sale(sale.id)
-        session.flush()
 
         # All invoices should contain at least the one we just created
         invoices = invoicing_service.get_all_invoices()
@@ -415,7 +392,6 @@ class TestInvoicingIntegration:
         
         # Create invoice from sale
         invoice = invoicing_service.create_invoice_from_sale(sale.id)
-        session.flush()
         
         # Use a temporary file for PDF generation
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:

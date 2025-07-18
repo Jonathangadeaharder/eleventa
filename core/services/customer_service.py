@@ -1,14 +1,12 @@
 import re
 from decimal import Decimal
-from typing import Optional, List, Callable, Any
-from sqlalchemy.orm import Session
+from typing import Optional, List, Any
 import uuid
 
 from core.models.customer import Customer
 from core.models.credit_payment import CreditPayment
-from core.interfaces.repository_interfaces import ICustomerRepository, ICreditPaymentRepository
 from core.services.service_base import ServiceBase
-from infrastructure.persistence.utils import session_scope
+from infrastructure.persistence.unit_of_work import UnitOfWork, unit_of_work
 import logging
 
 logger = logging.getLogger(__name__)
@@ -17,18 +15,11 @@ logger = logging.getLogger(__name__)
 EMAIL_REGEX = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 
 class CustomerService(ServiceBase):
-    def __init__(self, customer_repo_factory: Callable[[Session], ICustomerRepository],
-                 credit_payment_repo_factory: Callable[[Session], ICreditPaymentRepository]):
+    def __init__(self):
         """
-        Initialize with repository factories.
-        
-        Args:
-            customer_repo_factory: Factory function to create customer repository
-            credit_payment_repo_factory: Factory function to create credit payment repository
+        Initialize the customer service.
         """
         super().__init__()  # Initialize base class with default logger
-        self._customer_repo_factory = customer_repo_factory
-        self._credit_payment_repo_factory = credit_payment_repo_factory
 
     def _validate_customer_data(self, name: str, email: str | None):
         """Validate customer data."""
@@ -42,9 +33,8 @@ class CustomerService(ServiceBase):
                     address: str | None = None, credit_limit: Decimal = Decimal('0.00'), 
                     credit_balance: Decimal = Decimal('0.00')) -> Customer:
         """Add a new customer."""
-        def _add_customer(session, name, phone, email, address, credit_limit, credit_balance):
+        with unit_of_work() as uow:
             self._validate_customer_data(name, email)
-            repo = self._get_repository(self._customer_repo_factory, session)
             
             # Potential duplicate checks here using repo
             new_customer = Customer(
@@ -56,21 +46,18 @@ class CustomerService(ServiceBase):
                 credit_limit=credit_limit,
                 credit_balance=credit_balance
             )
-            added = repo.add(new_customer)
+            added = uow.customers.add(new_customer)
             self.logger.info(f"Added customer: {added.name} (ID: {added.id})")
             return added
-            
-        return self._with_session(_add_customer, name, phone, email, address, credit_limit, credit_balance)
 
     def update_customer(self, customer_id: int, name: str, phone: str | None = None, 
                         email: str | None = None, address: str | None = None, 
                         credit_limit: Decimal = Decimal('0.00')) -> Customer:
         """Update an existing customer."""
-        def _update_customer(session, customer_id, name, phone, email, address, credit_limit):
+        with unit_of_work() as uow:
             self._validate_customer_data(name, email)
-            repo = self._get_repository(self._customer_repo_factory, session)
             
-            customer_to_update = repo.get_by_id(customer_id)
+            customer_to_update = uow.customers.get_by_id(customer_id)
             if not customer_to_update:
                 raise ValueError(f"Customer with ID {customer_id} not found")
 
@@ -84,7 +71,7 @@ class CustomerService(ServiceBase):
             customer_to_update.address = address
             customer_to_update.credit_limit = credit_limit
 
-            updated_customer_obj = repo.update(customer_to_update)
+            updated_customer_obj = uow.customers.update(customer_to_update)
 
             # Restore original balance in the returned object as repo.update might overwrite it
             # The actual balance in DB should be unchanged if repo.update doesn't touch it
@@ -99,17 +86,11 @@ class CustomerService(ServiceBase):
                 # For now, return the object we tried to update, with original balance restored
                 customer_to_update.credit_balance = original_balance
                 return customer_to_update
-                
-        return self._with_session(_update_customer, customer_id, name, phone, email, address, credit_limit)
 
     def delete_customer(self, customer_id: int) -> bool:
         """Delete a customer."""
-        def _delete_customer(session, customer_id):
-            # Get repos within session
-            cust_repo = self._get_repository(self._customer_repo_factory, session)
-            pay_repo = self._get_repository(self._credit_payment_repo_factory, session)
-            
-            customer_to_delete = cust_repo.get_by_id(customer_id)
+        with unit_of_work() as uow:
+            customer_to_delete = uow.customers.get_by_id(customer_id)
             if not customer_to_delete:
                 # Or just return False silently?
                 self.logger.warning(f"Attempted to delete non-existent customer ID: {customer_id}")
@@ -121,28 +102,23 @@ class CustomerService(ServiceBase):
                 raise ValueError(f"Cannot delete customer {customer_to_delete.name} with an outstanding balance ({balance:.2f})")
 
             # Check for any payment records and delete them first
-            payments = pay_repo.get_for_customer(customer_id)
+            payments = uow.credit_payments.get_for_customer(customer_id)
             if payments:
                 # Delete all payment records for this customer
                 self.logger.info(f"Deleting {len(payments)} payment records for customer {customer_id}")
                 for payment in payments:
-                    pay_repo.delete(payment.id)
+                    uow.credit_payments.delete(payment.id)
                 
             # Now safe to delete the customer
-            deleted = cust_repo.delete(customer_id)
+            deleted = uow.customers.delete(customer_id)
             if deleted:
                 self.logger.info(f"Deleted customer ID: {customer_id}")
             return deleted
-            
-        return self._with_session(_delete_customer, customer_id)
 
     def find_customer(self, search_term: str, limit: Optional[int] = None, offset: Optional[int] = None) -> list[Customer]:
         """Find customers matching the search term, with optional pagination."""
-        def _find_customer(session, search_term, limit, offset):
-            repo = self._get_repository(self._customer_repo_factory, session)
-            return repo.search(search_term, limit=limit, offset=offset)
-            
-        return self._with_session(_find_customer, search_term, limit, offset)
+        with unit_of_work() as uow:
+            return uow.customers.search(search_term, limit=limit, offset=offset)
 
     def get_customer_by_id(self, customer_id: Any) -> Customer | None:
         """
@@ -154,39 +130,29 @@ class CustomerService(ServiceBase):
         Returns:
             Customer object if found, None otherwise
         """
-        def _get_customer_by_id(session, customer_id):
-            repo = self._get_repository(self._customer_repo_factory, session)
-            customer = repo.get_by_id(customer_id)
+        with unit_of_work() as uow:
+            customer = uow.customers.get_by_id(customer_id)
             if customer:
                 return customer
                 
             # Log the failure for debugging
             self.logger.debug(f"Customer with ID {customer_id} (type={type(customer_id)}) not found")
             return None
-            
-        return self._with_session(_get_customer_by_id, customer_id)
 
     def get_all_customers(self, limit: Optional[int] = None, offset: Optional[int] = None) -> list[Customer]:
         """Get all customers, with optional pagination."""
-        def _get_all_customers(session, limit, offset):
-            repo = self._get_repository(self._customer_repo_factory, session)
-            return repo.get_all(limit=limit, offset=offset)
-            
-        return self._with_session(_get_all_customers, limit, offset)
+        with unit_of_work() as uow:
+            return uow.customers.get_all(limit=limit, offset=offset)
 
     # --- Methods related to Credit (Implementation for TASK-027) ---
 
     def apply_payment(self, customer_id: uuid.UUID, amount: Decimal, notes: str | None = None, user_id: Optional[int] = None) -> CreditPayment:
         """Apply a payment to a customer's account."""
-        def _apply_payment(session, customer_id: uuid.UUID, amount, notes, user_id):
+        with unit_of_work() as uow:
             if amount <= 0:
                 raise ValueError("Payment amount must be positive.")
 
-            # Get repos within session
-            cust_repo = self._get_repository(self._customer_repo_factory, session)
-            pay_repo = self._get_repository(self._credit_payment_repo_factory, session)
-
-            customer = cust_repo.get_by_id(customer_id)
+            customer = uow.customers.get_by_id(customer_id)
             if not customer:
                 raise ValueError(f"Customer with ID {customer_id} not found.")
 
@@ -195,7 +161,7 @@ class CustomerService(ServiceBase):
 
             # Update balance using the repo (assuming repo method accepts Decimal or converts)
             # If repo.update_balance expects float, conversion needed here
-            updated = cust_repo.update_balance(customer_id, new_balance)
+            updated = uow.customers.update_balance(customer_id, new_balance)
             if not updated:
                 raise Exception(f"Failed to update balance for customer ID {customer_id}")
             
@@ -206,30 +172,24 @@ class CustomerService(ServiceBase):
                 notes=notes,
                 user_id=user_id
             )
-            created_payment = pay_repo.add(payment_log)
+            created_payment = uow.credit_payments.add(payment_log)
             self.logger.info(f"Applied payment {created_payment.id} of {amount} to customer {customer_id}. New balance: {new_balance:.2f}. User ID for CreditPayment: {user_id} (type: {type(user_id)})")
             return created_payment
-            
-        return self._with_session(_apply_payment, customer_id, amount, notes, user_id)
 
-    def increase_customer_debt(self, customer_id: int, amount: Decimal, session: Optional[Session] = None) -> None:
+    def increase_customer_debt(self, customer_id: int, amount: Decimal) -> None:
         """
         Increase a customer's debt.
         
         Args:
             customer_id: The ID of the customer
             amount: The amount to increase debt by (must be positive)
-            session: Optional session to use (for transaction sharing)
         """
-        def _increase_customer_debt(session, customer_id, amount):
+        with unit_of_work() as uow:
             if amount <= 0:
                 # Should be positive amount representing the value of goods/services
                 raise ValueError("Amount to increase debt must be positive.")
 
-            # Get repository from factory
-            cust_repo = self._get_repository(self._customer_repo_factory, session)
-
-            customer = cust_repo.get_by_id(customer_id)
+            customer = uow.customers.get_by_id(customer_id)
             if not customer:
                 raise ValueError(f"Customer with ID {customer_id} not found within transaction.")
 
@@ -237,25 +197,16 @@ class CustomerService(ServiceBase):
             new_balance = current_balance - amount # Debt increases, balance decreases
 
             # Update balance using the repo (assuming repo method accepts Decimal or converts)
-            updated = cust_repo.update_balance(customer_id, new_balance)
+            updated = uow.customers.update_balance(customer_id, new_balance)
             if not updated:
                 raise Exception(f"Failed to update balance for customer ID {customer_id} within transaction.")
                 
             self.logger.info(f"Increased debt for customer {customer_id} by {amount}. New balance: {new_balance:.2f}")
-            
-        # If session is provided, use it directly; otherwise use _with_session
-        if session:
-            return _increase_customer_debt(session, customer_id, amount)
-        else:
-            return self._with_session(_increase_customer_debt, customer_id, amount)
 
     def get_customer_payments(self, customer_id: int) -> List[CreditPayment]:
         """Get all payments for a customer."""
-        def _get_customer_payments(session, customer_id):
-            repo = self._get_repository(self._credit_payment_repo_factory, session)
-            return repo.get_for_customer(customer_id)
-            
-        return self._with_session(_get_customer_payments, customer_id)
+        with unit_of_work() as uow:
+            return uow.credit_payments.get_for_customer(customer_id)
 
     # Optional: Credit Limit Check
     # def check_credit_limit(self, customer_id: int, proposed_increase: Decimal) -> bool:
@@ -318,18 +269,14 @@ class CustomerService(ServiceBase):
         Returns:
             The created CreditPayment entry logging this adjustment
         """
-        def _adjust_balance(session, customer_id: uuid.UUID, amount, is_increase, notes, user_id):
+        with unit_of_work() as uow:
             if amount <= 0:
                 raise ValueError("Adjustment amount must be positive.")
                 
             if not notes:
                 raise ValueError("Notes are required for balance adjustments.")
                 
-            # Get repos within session
-            cust_repo = self._get_repository(self._customer_repo_factory, session)
-            pay_repo = self._get_repository(self._credit_payment_repo_factory, session)
-            
-            customer = cust_repo.get_by_id(customer_id)
+            customer = uow.customers.get_by_id(customer_id)
             if not customer:
                 raise ValueError(f"Customer with ID {customer_id} not found.")
                 
@@ -351,7 +298,7 @@ class CustomerService(ServiceBase):
                 adjustment_type = "decrease"
                 
             # Update balance
-            updated = cust_repo.update_balance(customer_id, new_balance)
+            updated = uow.customers.update_balance(customer_id, new_balance)
             if not updated:
                 raise Exception(f"Failed to update balance for customer ID {customer_id}")
                 
@@ -366,12 +313,10 @@ class CustomerService(ServiceBase):
                 notes=f"[BALANCE ADJUSTMENT - {adjustment_type.upper()}] {notes}",
                 user_id=user_id
             )
-            created_record = pay_repo.add(payment_log)
+            created_record = uow.credit_payments.add(payment_log)
             self.logger.info(
                 f"Balance adjustment ({adjustment_type}) of {amount} applied to customer {customer_id}. "
                 f"Old balance: {current_balance:.2f}, New balance: {new_balance:.2f}. "
                 f"User ID for CreditPayment: {user_id} (type: {type(user_id)})"
             )
             return created_record
-            
-        return self._with_session(_adjust_balance, customer_id, amount, is_increase, notes, user_id)

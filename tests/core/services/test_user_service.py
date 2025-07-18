@@ -44,21 +44,13 @@ def mock_user_repo():
 @pytest.fixture
 def user_service(mock_user_repo):
     """Create a UserService with a mock repository."""
-    service = UserService(lambda session: mock_user_repo)
-    
-    # Patch the internal service methods to use the test versions
-    # This avoids the MagicMock conversion issues
-    def mock_with_session(func, *args, **kwargs):
-        session = MagicMock()
-        return func(session, *args, **kwargs)
-    
-    service._with_session = mock_with_session
-    
+    service = UserService()
     return service
 
+@patch('core.services.user_service.unit_of_work')
 @patch('core.services.user_service.UserService._hash_password')
 @patch('core.services.user_service.UserService._verify_password')
-def test_add_user_with_valid_data_succeeds(mock_verify_password, mock_hash_password, user_service, mock_user_repo):
+def test_add_user_with_valid_data_succeeds(mock_verify_password, mock_hash_password, mock_unit_of_work, user_service, mock_user_repo):
     """
     Test that adding a user with valid data succeeds.
     
@@ -74,24 +66,27 @@ def test_add_user_with_valid_data_succeeds(mock_verify_password, mock_hash_passw
     # Mock password hashing
     mock_hash_password.return_value = "hashed_password123"
     
-    # Mock repo behavior
-    mock_user_repo.get_by_username.return_value = None # No existing user
+    # Setup Unit of Work mock
+    mock_uow = MagicMock()
+    mock_uow.users.get_by_username.return_value = None  # No existing user
     # Mock the add method to return a user with an ID
     def mock_add(user):
-        user.id = 1 # Simulate ID assignment
+        user.id = 1  # Simulate ID assignment
         return user
-    mock_user_repo.add.side_effect = mock_add
+    mock_uow.users.add.side_effect = mock_add
+    mock_unit_of_work.return_value.__enter__.return_value = mock_uow
 
     created_user = user_service.add_user(username, password)
 
-    mock_user_repo.get_by_username.assert_called_once_with(username)
-    mock_user_repo.add.assert_called_once()
+    mock_uow.users.get_by_username.assert_called_once_with(username)
+    mock_uow.users.add.assert_called_once()
+    mock_uow.commit.assert_called_once()
     
     # Verify password hashing was called
     mock_hash_password.assert_called_once_with(password)
     
     # Get the user object passed to repo.add
-    added_user_arg = mock_user_repo.add.call_args[0][0]
+    added_user_arg = mock_uow.users.add.call_args[0][0]
     
     assert added_user_arg.username == username
     assert added_user_arg.password_hash == "hashed_password123"
@@ -101,8 +96,9 @@ def test_add_user_with_valid_data_succeeds(mock_verify_password, mock_hash_passw
     assert created_user.id == 1
     assert created_user.username == username
 
+@patch('core.services.user_service.unit_of_work')
 @patch('core.services.user_service.UserService._verify_password')
-def test_add_user_with_existing_username_raises_error(mock_verify_password, user_service, mock_user_repo):
+def test_add_user_with_existing_username_raises_error(mock_verify_password, mock_unit_of_work, user_service, mock_user_repo):
     """
     Test that adding a user with an existing username raises an error.
     
@@ -114,43 +110,56 @@ def test_add_user_with_existing_username_raises_error(mock_verify_password, user
     username = "existinguser"
     password = "password123"
     
-    # Mock repo to return an existing user
+    # Setup Unit of Work mock
+    mock_uow = MagicMock()
     existing_user = User(id=1, username=username, password_hash="some_hash")
-    mock_user_repo.get_by_username.return_value = existing_user
+    mock_uow.users.get_by_username.return_value = existing_user
+    mock_unit_of_work.return_value.__enter__.return_value = mock_uow
 
     with pytest.raises(ValueError, match=f"Username '{username}' already exists."):
         user_service.add_user(username, password)
         
-    mock_user_repo.get_by_username.assert_called_once_with(username)
-    mock_user_repo.add.assert_not_called()
+    mock_uow.users.get_by_username.assert_called_once_with(username)
+    mock_uow.users.add.assert_not_called()
 
+@patch('core.services.user_service.unit_of_work')
 @patch('core.services.user_service.UserService._verify_password')
-def test_add_user_with_empty_username_raises_error(mock_verify_password, user_service, mock_user_repo):
+def test_add_user_with_empty_username_raises_error(mock_verify_password, mock_unit_of_work, user_service, mock_user_repo):
     """
     Test that adding a user with an empty username raises an error.
     
     This is a validation test that ensures users must have valid usernames.
     The repository should not be called to add a user in this case.
     """
+    # Setup Unit of Work mock
+    mock_uow = MagicMock()
+    mock_unit_of_work.return_value.__enter__.return_value = mock_uow
+    
     with pytest.raises(ValueError, match="Username cannot be empty."):
         user_service.add_user("", "password123")
-    mock_user_repo.add.assert_not_called()
+    mock_uow.users.add.assert_not_called()
 
+@patch('core.services.user_service.unit_of_work')
 @patch('core.services.user_service.UserService._verify_password')
-def test_add_user_with_empty_password_raises_error(mock_verify_password, user_service, mock_user_repo):
+def test_add_user_with_empty_password_raises_error(mock_verify_password, mock_unit_of_work, user_service, mock_user_repo):
     """
     Test that adding a user with an empty password raises an error.
     
     This test verifies password validation logic and ensures that
     empty passwords are rejected before any repository calls.
     """
-    mock_user_repo.get_by_username.return_value = None
+    # Setup Unit of Work mock
+    mock_uow = MagicMock()
+    mock_uow.users.get_by_username.return_value = None
+    mock_unit_of_work.return_value.__enter__.return_value = mock_uow
+    
     with pytest.raises(ValueError, match="Password cannot be empty."):
         user_service.add_user("testuser", "")
-    mock_user_repo.add.assert_not_called()
+    mock_uow.users.add.assert_not_called()
 
+@patch('core.services.user_service.unit_of_work')
 @patch('core.services.user_service.UserService._verify_password')
-def test_authenticate_with_valid_credentials_succeeds(mock_verify_password, user_service, mock_user_repo):
+def test_authenticate_with_valid_credentials_succeeds(mock_verify_password, mock_unit_of_work, user_service, mock_user_repo):
     """
     Test that authentication succeeds with valid credentials.
     
@@ -164,106 +173,131 @@ def test_authenticate_with_valid_credentials_succeeds(mock_verify_password, user
     
     # Configure mock user
     mock_user = User(id=5, username=username, password_hash="hashed_password", is_active=True)
-    mock_user_repo.get_by_username.return_value = mock_user
+    
+    # Setup Unit of Work mock
+    mock_uow = MagicMock()
+    mock_uow.users.get_by_username.return_value = mock_user
+    mock_unit_of_work.return_value.__enter__.return_value = mock_uow
     
     # Mock password verification to return True
     mock_verify_password.return_value = True
 
     authenticated_user = user_service.authenticate_user(username, password)
 
-    mock_user_repo.get_by_username.assert_called_once_with(username)
+    mock_uow.users.get_by_username.assert_called_once_with(username)
     mock_verify_password.assert_called_once_with(password, mock_user.password_hash)
     
     assert authenticated_user is not None
     assert authenticated_user.id == 5
     assert authenticated_user.username == username
 
+@patch('core.services.user_service.unit_of_work')
 @patch('core.services.user_service.UserService._verify_password')
-def test_authenticate_with_incorrect_password_returns_none(mock_verify_password, user_service, mock_user_repo):
+def test_authenticate_with_incorrect_password_returns_none(mock_verify_password, mock_unit_of_work, user_service, mock_user_repo):
     """Test that authentication with incorrect password returns None."""
     username = "authuser"
     incorrect_password = "wrongpassword"
     
     # Configure mock user
     mock_user = User(id=5, username=username, password_hash="hashed_password", is_active=True)
-    mock_user_repo.get_by_username.return_value = mock_user
+    
+    # Setup Unit of Work mock
+    mock_uow = MagicMock()
+    mock_uow.users.get_by_username.return_value = mock_user
+    mock_unit_of_work.return_value.__enter__.return_value = mock_uow
     
     # Mock password verification to return False (incorrect password)
     mock_verify_password.return_value = False
 
     authenticated_user = user_service.authenticate_user(username, incorrect_password)
 
-    mock_user_repo.get_by_username.assert_called_once_with(username)
+    mock_uow.users.get_by_username.assert_called_once_with(username)
     mock_verify_password.assert_called_once_with(incorrect_password, mock_user.password_hash)
     assert authenticated_user is None
 
+@patch('core.services.user_service.unit_of_work')
 @patch('core.services.user_service.UserService._verify_password')
-def test_authenticate_with_nonexistent_user_returns_none(mock_verify_password, user_service, mock_user_repo):
+def test_authenticate_with_nonexistent_user_returns_none(mock_verify_password, mock_unit_of_work, user_service, mock_user_repo):
     """Test that authentication with nonexistent user returns None."""
     username = "nosuchuser"
     password = "password123"
     
-    mock_user_repo.get_by_username.return_value = None
+    # Setup Unit of Work mock
+    mock_uow = MagicMock()
+    mock_uow.users.get_by_username.return_value = None
+    mock_unit_of_work.return_value.__enter__.return_value = mock_uow
 
     authenticated_user = user_service.authenticate_user(username, password)
 
-    mock_user_repo.get_by_username.assert_called_once_with(username)
+    mock_uow.users.get_by_username.assert_called_once_with(username)
     mock_verify_password.assert_not_called()  # Should not check password
     assert authenticated_user is None
 
+@patch('core.services.user_service.unit_of_work')
 @patch('core.services.user_service.UserService._verify_password')
-def test_authenticate_with_inactive_user_returns_none(mock_verify_password, user_service, mock_user_repo):
+def test_authenticate_with_inactive_user_returns_none(mock_verify_password, mock_unit_of_work, user_service, mock_user_repo):
     """Test that authentication with inactive user returns None."""
     username = "inactiveuser"
     password = "password123"
     
     # Configure mock user that is inactive
     mock_user = User(id=6, username=username, password_hash="hashed_password", is_active=False)
-    mock_user_repo.get_by_username.return_value = mock_user
+    
+    # Setup Unit of Work mock
+    mock_uow = MagicMock()
+    mock_uow.users.get_by_username.return_value = mock_user
+    mock_unit_of_work.return_value.__enter__.return_value = mock_uow
     
     # Even if password is correct, inactive users are rejected
     mock_verify_password.return_value = True
 
     authenticated_user = user_service.authenticate_user(username, password)
 
-    mock_user_repo.get_by_username.assert_called_once_with(username)
+    mock_uow.users.get_by_username.assert_called_once_with(username)
     # Password should not even be checked for inactive users
     mock_verify_password.assert_not_called()
     assert authenticated_user is None
 
-def test_authenticate_with_empty_credentials_returns_none(user_service, mock_user_repo):
+@patch('core.services.user_service.unit_of_work')
+def test_authenticate_with_empty_credentials_returns_none(mock_unit_of_work, user_service, mock_user_repo):
     """Test that authentication with empty credentials returns None."""
+    # Setup Unit of Work mock
+    mock_uow = MagicMock()
+    mock_unit_of_work.return_value.__enter__.return_value = mock_uow
+    
     assert user_service.authenticate_user("", "password") is None
     assert user_service.authenticate_user("user", "") is None
     assert user_service.authenticate_user("", "") is None
-    mock_user_repo.get_by_username.assert_not_called()
+    mock_uow.users.get_by_username.assert_not_called()
 
-def test_get_user_by_id_returns_user_when_exists(user_service, mock_user_repo):
+@patch('core.services.user_service.unit_of_work')
+def test_get_user_by_id_returns_user_when_exists(mock_unit_of_work, user_service, mock_user_repo):
     """Test that getting a user by ID returns the user when it exists."""
     user_id = 10
     mock_user = User(id=user_id, username="test", password_hash="hash")
-    mock_user_repo.get_by_id.return_value = mock_user
-
-    # Patch _with_session to directly access the repository
-    def direct_get_by_id(user_id):
-        return mock_user_repo.get_by_id(user_id)
     
-    with patch.object(user_service, 'get_user', side_effect=direct_get_by_id):
-        user = user_service.get_user(user_id)
-        mock_user_repo.get_by_id.assert_called_once_with(user_id)
-        assert user == mock_user
+    # Setup Unit of Work mock
+    mock_uow = MagicMock()
+    mock_uow.users.get_by_id.return_value = mock_user
+    mock_unit_of_work.return_value.__enter__.return_value = mock_uow
 
-def test_get_user_by_username_returns_user_when_exists(user_service, mock_user_repo):
+    user = user_service.get_user_by_id(user_id)
+    
+    mock_uow.users.get_by_id.assert_called_once_with(user_id)
+    assert user == mock_user
+
+@patch('core.services.user_service.unit_of_work')
+def test_get_user_by_username_returns_user_when_exists(mock_unit_of_work, user_service, mock_user_repo):
     """Test that getting a user by username returns the user when it exists."""
     username = "testuser"
     mock_user = User(id=11, username=username, password_hash="hash")
-    mock_user_repo.get_by_username.return_value = mock_user
-
-    # Patch _with_session to directly access the repository
-    def direct_get_by_username(username):
-        return mock_user_repo.get_by_username(username)
     
-    with patch.object(user_service, 'get_user_by_username', side_effect=direct_get_by_username):
-        user = user_service.get_user_by_username(username)
-        mock_user_repo.get_by_username.assert_called_once_with(username)
-        assert user == mock_user
+    # Setup Unit of Work mock
+    mock_uow = MagicMock()
+    mock_uow.users.get_by_username.return_value = mock_user
+    mock_unit_of_work.return_value.__enter__.return_value = mock_uow
+
+    user = user_service.get_user_by_username(username)
+    
+    mock_uow.users.get_by_username.assert_called_once_with(username)
+    assert user == mock_user

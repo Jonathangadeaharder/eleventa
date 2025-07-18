@@ -6,17 +6,17 @@ from core.services.product_service import ProductService
 from core.models.product import Department
 from core.interfaces.repository_interfaces import IDepartmentRepository, IProductRepository
 
-# Patch session_scope to return a mock session
+# Mock unit_of_work for testing
 @pytest.fixture(autouse=True)
-def patch_session_scope(monkeypatch):
-    mock_session = MagicMock()
+def patch_unit_of_work(monkeypatch):
+    mock_uow = MagicMock()
     
     @contextmanager
-    def mock_session_scope():
-        yield mock_session
+    def mock_unit_of_work():
+        yield mock_uow
         
-    monkeypatch.setattr('core.services.product_service.session_scope', mock_session_scope)
-    return mock_session
+    monkeypatch.setattr('core.services.product_service.unit_of_work', mock_unit_of_work)
+    return mock_uow
 
 @pytest.fixture
 def prod_repo():
@@ -27,19 +27,16 @@ def dept_repo():
     return MagicMock(spec=IDepartmentRepository)
 
 @pytest.fixture
-def svc(prod_repo, dept_repo):
-    # Create factory functions that return the mock repositories
-    def product_repo_factory(session):
-        return prod_repo
-        
-    def department_repo_factory(session):
-        return dept_repo
-        
-    # Pass the factory functions to the service
-    return ProductService(
-        product_repo_factory=product_repo_factory,
-        department_repo_factory=department_repo_factory
-    )
+def svc(prod_repo, dept_repo, patch_unit_of_work):
+    # Create service using Unit of Work pattern
+    service = ProductService()
+    
+    # Configure the mock unit of work to return our mock repositories
+    mock_uow = patch_unit_of_work
+    mock_uow.products = prod_repo
+    mock_uow.departments = dept_repo
+    
+    return service
 
 # Tests for department operations
 

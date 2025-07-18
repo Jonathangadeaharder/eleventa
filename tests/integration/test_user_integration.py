@@ -20,15 +20,11 @@ def user_service(clean_db):
     # Extract session from the clean_db tuple (session, test_user)
     session, _ = clean_db
     
-    # Make sure to clean any users that might have been added by other tests
-    session.execute(text("DELETE FROM users WHERE username IN ('johndoe', 'dupuser', 'authuser', 'authfail')"))
-    session.commit()
+    # No manual cleanup needed - the clean_db fixture provides perfect isolation
+    # through transactional testing with savepoints
     
-    # Create a factory function instead of passing the repo instance directly
-    def user_repo_factory(session):
-        return SqliteUserRepository(session)
-    
-    service = UserService(user_repo_factory)
+    # UserService now uses Unit of Work pattern and doesn't need repository factories
+    service = UserService()
     return service
 
 @pytest.mark.integration

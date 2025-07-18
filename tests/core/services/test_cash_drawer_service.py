@@ -25,17 +25,9 @@ def cash_drawer_repo_factory(cash_drawer_repo_mock):
 
 
 @pytest.fixture
-def cash_drawer_service(cash_drawer_repo_factory):
-    """Create a service with the mock factory."""
-    service = CashDrawerService(cash_drawer_repo_factory)
-    
-    # Mock _with_session to avoid SQLAlchemy session handling in tests
-    def mock_with_session(func, *args, **kwargs):
-        session = MagicMock()  # Create a mock session
-        return func(session, *args, **kwargs)
-    
-    service._with_session = mock_with_session
-    return service
+def cash_drawer_service():
+    """Create a service instance."""
+    return CashDrawerService()
 
 
 def test_open_drawer(cash_drawer_service, cash_drawer_repo_mock):
@@ -48,7 +40,12 @@ def test_open_drawer(cash_drawer_service, cash_drawer_repo_mock):
     cash_drawer_repo_mock.is_drawer_open.return_value = False
     
     # Act
-    cash_drawer_service.open_drawer(initial_amount, description, user_id)
+    with patch('core.services.cash_drawer_service.unit_of_work') as mock_uow:
+        mock_context = MagicMock()
+        mock_context.cash_drawer = cash_drawer_repo_mock
+        mock_uow.return_value.__enter__.return_value = mock_context
+        
+        cash_drawer_service.open_drawer(initial_amount, description, user_id)
     
     # Assert
     cash_drawer_repo_mock.add_entry.assert_called_once()
@@ -69,8 +66,13 @@ def test_open_drawer_already_open(cash_drawer_service, cash_drawer_repo_mock):
     cash_drawer_repo_mock.is_drawer_open.return_value = True
     
     # Act & Assert
-    with pytest.raises(ValueError, match="Cash drawer is already open"):
-        cash_drawer_service.open_drawer(initial_amount, description, user_id)
+    with patch('core.services.cash_drawer_service.unit_of_work') as mock_uow:
+        mock_context = MagicMock()
+        mock_context.cash_drawer = cash_drawer_repo_mock
+        mock_uow.return_value.__enter__.return_value = mock_context
+        
+        with pytest.raises(ValueError, match="Cash drawer is already open"):
+            cash_drawer_service.open_drawer(initial_amount, description, user_id)
 
 
 def test_open_drawer_negative_amount(cash_drawer_service, cash_drawer_repo_mock):
@@ -83,8 +85,13 @@ def test_open_drawer_negative_amount(cash_drawer_service, cash_drawer_repo_mock)
     cash_drawer_repo_mock.is_drawer_open.return_value = False
     
     # Act & Assert
-    with pytest.raises(ValueError, match="Initial amount cannot be negative"):
-        cash_drawer_service.open_drawer(initial_amount, description, user_id)
+    with patch('core.services.cash_drawer_service.unit_of_work') as mock_uow:
+        mock_context = MagicMock()
+        mock_context.cash_drawer = cash_drawer_repo_mock
+        mock_uow.return_value.__enter__.return_value = mock_context
+        
+        with pytest.raises(ValueError, match="Initial amount cannot be negative"):
+            cash_drawer_service.open_drawer(initial_amount, description, user_id)
 
 
 def test_add_cash(cash_drawer_service, cash_drawer_repo_mock):
@@ -97,7 +104,12 @@ def test_add_cash(cash_drawer_service, cash_drawer_repo_mock):
     cash_drawer_repo_mock.is_drawer_open.return_value = True
     
     # Act
-    cash_drawer_service.add_cash(amount, description, user_id)
+    with patch('core.services.cash_drawer_service.unit_of_work') as mock_uow:
+        mock_context = MagicMock()
+        mock_context.cash_drawer = cash_drawer_repo_mock
+        mock_uow.return_value.__enter__.return_value = mock_context
+        
+        cash_drawer_service.add_cash(amount, description, user_id)
     
     # Assert
     cash_drawer_repo_mock.add_entry.assert_called_once()
@@ -118,8 +130,13 @@ def test_add_cash_drawer_not_open(cash_drawer_service, cash_drawer_repo_mock):
     cash_drawer_repo_mock.is_drawer_open.return_value = False
     
     # Act & Assert
-    with pytest.raises(ValueError, match="Cash drawer is not open"):
-        cash_drawer_service.add_cash(amount, description, user_id)
+    with patch('core.services.cash_drawer_service.unit_of_work') as mock_uow:
+        mock_context = MagicMock()
+        mock_context.cash_drawer = cash_drawer_repo_mock
+        mock_uow.return_value.__enter__.return_value = mock_context
+        
+        with pytest.raises(ValueError, match="Cash drawer is not open"):
+            cash_drawer_service.add_cash(amount, description, user_id)
 
 
 def test_add_cash_negative_amount(cash_drawer_service, cash_drawer_repo_mock):
@@ -132,8 +149,13 @@ def test_add_cash_negative_amount(cash_drawer_service, cash_drawer_repo_mock):
     cash_drawer_repo_mock.is_drawer_open.return_value = True
     
     # Act & Assert
-    with pytest.raises(ValueError, match="Amount must be positive"):
-        cash_drawer_service.add_cash(amount, description, user_id)
+    with patch('core.services.cash_drawer_service.unit_of_work') as mock_uow:
+        mock_context = MagicMock()
+        mock_context.cash_drawer = cash_drawer_repo_mock
+        mock_uow.return_value.__enter__.return_value = mock_context
+        
+        with pytest.raises(ValueError, match="Amount must be positive"):
+            cash_drawer_service.add_cash(amount, description, user_id)
 
 
 def test_remove_cash(cash_drawer_service, cash_drawer_repo_mock):
@@ -147,7 +169,12 @@ def test_remove_cash(cash_drawer_service, cash_drawer_repo_mock):
     cash_drawer_repo_mock.get_current_balance.return_value = Decimal('500.0')
     
     # Act
-    cash_drawer_service.remove_cash(amount, description, user_id)
+    with patch('core.services.cash_drawer_service.unit_of_work') as mock_uow:
+        mock_context = MagicMock()
+        mock_context.cash_drawer = cash_drawer_repo_mock
+        mock_uow.return_value.__enter__.return_value = mock_context
+        
+        cash_drawer_service.remove_cash(amount, description, user_id)
     
     # Assert
     cash_drawer_repo_mock.add_entry.assert_called_once()
@@ -168,8 +195,13 @@ def test_remove_cash_drawer_not_open(cash_drawer_service, cash_drawer_repo_mock)
     cash_drawer_repo_mock.is_drawer_open.return_value = False
     
     # Act & Assert
-    with pytest.raises(ValueError, match="Cash drawer is not open"):
-        cash_drawer_service.remove_cash(amount, description, user_id)
+    with patch('core.services.cash_drawer_service.unit_of_work') as mock_uow:
+        mock_context = MagicMock()
+        mock_context.cash_drawer = cash_drawer_repo_mock
+        mock_uow.return_value.__enter__.return_value = mock_context
+        
+        with pytest.raises(ValueError, match="Cash drawer is not open"):
+            cash_drawer_service.remove_cash(amount, description, user_id)
 
 
 def test_remove_cash_negative_amount(cash_drawer_service, cash_drawer_repo_mock):
@@ -182,8 +214,13 @@ def test_remove_cash_negative_amount(cash_drawer_service, cash_drawer_repo_mock)
     cash_drawer_repo_mock.is_drawer_open.return_value = True
     
     # Act & Assert
-    with pytest.raises(ValueError, match="Amount must be positive"):
-        cash_drawer_service.remove_cash(amount, description, user_id)
+    with patch('core.services.cash_drawer_service.unit_of_work') as mock_uow:
+        mock_context = MagicMock()
+        mock_context.cash_drawer = cash_drawer_repo_mock
+        mock_uow.return_value.__enter__.return_value = mock_context
+        
+        with pytest.raises(ValueError, match="Amount must be positive"):
+            cash_drawer_service.remove_cash(amount, description, user_id)
 
 
 def test_remove_cash_insufficient_funds(cash_drawer_service, cash_drawer_repo_mock):
@@ -197,8 +234,13 @@ def test_remove_cash_insufficient_funds(cash_drawer_service, cash_drawer_repo_mo
     cash_drawer_repo_mock.get_current_balance.return_value = Decimal('500.0')
     
     # Act & Assert
-    with pytest.raises(ValueError, match="Insufficient cash in drawer"):
-        cash_drawer_service.remove_cash(amount, description, user_id)
+    with patch('core.services.cash_drawer_service.unit_of_work') as mock_uow:
+        mock_context = MagicMock()
+        mock_context.cash_drawer = cash_drawer_repo_mock
+        mock_uow.return_value.__enter__.return_value = mock_context
+        
+        with pytest.raises(ValueError, match="Insufficient cash in drawer"):
+            cash_drawer_service.remove_cash(amount, description, user_id)
 
 
 def test_get_drawer_summary(cash_drawer_service, cash_drawer_repo_mock):
@@ -237,7 +279,12 @@ def test_get_drawer_summary(cash_drawer_service, cash_drawer_repo_mock):
     cash_drawer_repo_mock.get_current_balance.return_value = Decimal('1100.0')
     
     # Act
-    summary = cash_drawer_service.get_drawer_summary()
+    with patch('core.services.cash_drawer_service.unit_of_work') as mock_uow:
+        mock_context = MagicMock()
+        mock_context.cash_drawer = cash_drawer_repo_mock
+        mock_uow.return_value.__enter__.return_value = mock_context
+        
+        summary = cash_drawer_service.get_drawer_summary()
     
     # Assert
     # Check the repository methods were called
@@ -250,4 +297,4 @@ def test_get_drawer_summary(cash_drawer_service, cash_drawer_repo_mock):
     assert summary['current_balance'] == Decimal('1100.0')
     assert summary['initial_amount'] == Decimal('1000.0')
     assert summary['total_in'] == Decimal('200.0')
-    assert summary['total_out'] == Decimal('100.0')  # Absolute value of -100 
+    assert summary['total_out'] == Decimal('100.0')  # Absolute value of -100

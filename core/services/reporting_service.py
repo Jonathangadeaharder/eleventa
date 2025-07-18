@@ -1,13 +1,11 @@
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from decimal import Decimal
 import os
-from sqlalchemy.orm import Session
 
-from core.interfaces.repository_interfaces import ISaleRepository
 from core.models.sale import Sale
 from core.services.service_base import ServiceBase
-from infrastructure.persistence.utils import session_scope
+from infrastructure.persistence.unit_of_work import UnitOfWork, unit_of_work
 
 class ReportingService(ServiceBase):
     """
@@ -15,15 +13,11 @@ class ReportingService(ServiceBase):
     Provides methods to retrieve aggregated data by time periods, departments, customers, etc.
     """
     
-    def __init__(self, sale_repo_factory: Callable[[Session], ISaleRepository]):
+    def __init__(self):
         """
-        Initialize with repository factory.
-        
-        Args:
-            sale_repo_factory: Factory function that returns an ISaleRepository instance
+        Initialize the service.
         """
         super().__init__()  # Initialize base class with default logger
-        self.sale_repo_factory = sale_repo_factory
     
     def get_sales_summary_by_period(
         self, 
@@ -42,11 +36,8 @@ class ReportingService(ServiceBase):
         Returns:
             List of dictionaries with date and aggregated sales data
         """
-        def _get_sales_summary_by_period(session, start_time, end_time, group_by):
-            sale_repo = self._get_repository(self.sale_repo_factory, session)
-            return sale_repo.get_sales_summary_by_period(start_time, end_time, group_by)
-            
-        return self._with_session(_get_sales_summary_by_period, start_time, end_time, group_by)
+        with unit_of_work() as uow:
+            return uow.sales.get_sales_summary_by_period(start_time, end_time, group_by)
     
     def get_sales_by_payment_type(
         self, 
@@ -63,11 +54,8 @@ class ReportingService(ServiceBase):
         Returns:
             List of dictionaries with payment type, total amount, and number of sales
         """
-        def _get_sales_by_payment_type(session, start_time, end_time):
-            sale_repo = self._get_repository(self.sale_repo_factory, session)
-            return sale_repo.get_sales_by_payment_type(start_time, end_time)
-            
-        return self._with_session(_get_sales_by_payment_type, start_time, end_time)
+        with unit_of_work() as uow:
+            return uow.sales.get_sales_by_payment_type(start_time, end_time)
     
     def get_sales_by_department(
         self, 
@@ -84,11 +72,8 @@ class ReportingService(ServiceBase):
         Returns:
             List of dictionaries with department_id, department_name, total_amount, and num_items
         """
-        def _get_sales_by_department(session, start_time, end_time):
-            sale_repo = self._get_repository(self.sale_repo_factory, session)
-            return sale_repo.get_sales_by_department(start_time, end_time)
-            
-        return self._with_session(_get_sales_by_department, start_time, end_time)
+        with unit_of_work() as uow:
+            return uow.sales.get_sales_by_department(start_time, end_time)
     
     def get_sales_by_customer(
         self, 
@@ -107,11 +92,8 @@ class ReportingService(ServiceBase):
         Returns:
             List of dictionaries with customer_id, customer_name, total_amount, and num_sales
         """
-        def _get_sales_by_customer(session, start_time, end_time, limit):
-            sale_repo = self._get_repository(self.sale_repo_factory, session)
-            return sale_repo.get_sales_by_customer(start_time, end_time, limit)
-            
-        return self._with_session(_get_sales_by_customer, start_time, end_time, limit)
+        with unit_of_work() as uow:
+            return uow.sales.get_sales_by_customer(start_time, end_time, limit)
     
     def get_top_selling_products(
         self, 
@@ -131,11 +113,8 @@ class ReportingService(ServiceBase):
             List of dictionaries with product_id, product_code, product_description,
             quantity_sold, and total_amount
         """
-        def _get_top_selling_products(session, start_time, end_time, limit):
-            sale_repo = self._get_repository(self.sale_repo_factory, session)
-            return sale_repo.get_top_selling_products(start_time, end_time, limit)
-            
-        return self._with_session(_get_top_selling_products, start_time, end_time, limit)
+        with unit_of_work() as uow:
+            return uow.sales.get_top_selling_products(start_time, end_time, limit)
     
     def calculate_profit_for_period(
         self, 
@@ -152,11 +131,8 @@ class ReportingService(ServiceBase):
         Returns:
             Dictionary with total_revenue, total_cost, total_profit, and profit_margin
         """
-        def _calculate_profit_for_period(session, start_time, end_time):
-            sale_repo = self._get_repository(self.sale_repo_factory, session)
-            return sale_repo.calculate_profit_for_period(start_time, end_time)
-            
-        return self._with_session(_calculate_profit_for_period, start_time, end_time)
+        with unit_of_work() as uow:
+            return uow.sales.calculate_profit_for_period(start_time, end_time)
     
     def get_daily_sales_report(self, date: datetime) -> Dict[str, Any]:
         """
@@ -168,19 +144,16 @@ class ReportingService(ServiceBase):
         Returns:
             Dictionary with various sales metrics for the day
         """
-        def _get_daily_sales_report(session, date):
+        with unit_of_work() as uow:
             # Set time to start and end of the specified date
             start_time = datetime.combine(date, datetime.min.time())
             end_time = datetime.combine(date, datetime.max.time())
             
-            # Get repository
-            sale_repo = self._get_repository(self.sale_repo_factory, session)
-            
             # Gather data for the report
-            profit_data = sale_repo.calculate_profit_for_period(start_time, end_time)
-            payment_data = sale_repo.get_sales_by_payment_type(start_time, end_time)
-            top_products = sale_repo.get_top_selling_products(start_time, end_time, 5)
-            department_data = sale_repo.get_sales_by_department(start_time, end_time)
+            profit_data = uow.sales.calculate_profit_for_period(start_time, end_time)
+            payment_data = uow.sales.get_sales_by_payment_type(start_time, end_time)
+            top_products = uow.sales.get_top_selling_products(start_time, end_time, 5)
+            department_data = uow.sales.get_sales_by_department(start_time, end_time)
             
             # Count total sales
             sales_count = sum(p['num_sales'] for p in payment_data) if payment_data else 0
@@ -196,8 +169,6 @@ class ReportingService(ServiceBase):
                 'top_products': top_products,
                 'sales_by_department': department_data
             }
-            
-        return self._with_session(_get_daily_sales_report, date)
     
     def get_sales_trend(
         self, 
@@ -216,7 +187,7 @@ class ReportingService(ServiceBase):
         Returns:
             List of dictionaries with date and sales data points
         """
-        def _get_sales_trend(session, start_time, end_time, trend_type):
+        with unit_of_work() as uow:
             # Map trend_type to appropriate group_by parameter
             group_by_mapping = {
                 'daily': 'day',
@@ -225,8 +196,7 @@ class ReportingService(ServiceBase):
             }
             group_by = group_by_mapping.get(trend_type, 'day')
             
-            sale_repo = self._get_repository(self.sale_repo_factory, session)
-            trend_data = sale_repo.get_sales_summary_by_period(start_time, end_time, group_by)
+            trend_data = uow.sales.get_sales_summary_by_period(start_time, end_time, group_by)
             
             # Ensure complete date range (fill in missing dates with zero values)
             if trend_type == 'daily' and trend_data:
@@ -252,8 +222,6 @@ class ReportingService(ServiceBase):
                 return complete_data
             
             return trend_data
-            
-        return self._with_session(_get_sales_trend, start_time, end_time, trend_type)
     
     def get_comparative_report(
         self, 
@@ -274,13 +242,11 @@ class ReportingService(ServiceBase):
         Returns:
             Dictionary with comparative metrics and percentage changes
         """
-        def _get_comparative_report(session, current_period_start, current_period_end, previous_period_start, previous_period_end):
-            sale_repo = self._get_repository(self.sale_repo_factory, session)
-            
-            current_profit = sale_repo.calculate_profit_for_period(
+        with unit_of_work() as uow:
+            current_profit = uow.sales.calculate_profit_for_period(
                 current_period_start, current_period_end
             )
-            previous_profit = sale_repo.calculate_profit_for_period(
+            previous_profit = uow.sales.calculate_profit_for_period(
                 previous_period_start, previous_period_end
             )
             
@@ -294,18 +260,18 @@ class ReportingService(ServiceBase):
             profit_change = self._calculate_percent_change(previous_profit_val, current_profit_val)
             
             # Get top products from both periods for comparison
-            current_top_products = sale_repo.get_top_selling_products(
+            current_top_products = uow.sales.get_top_selling_products(
                 current_period_start, current_period_end, 10
             )
-            previous_top_products = sale_repo.get_top_selling_products(
+            previous_top_products = uow.sales.get_top_selling_products(
                 previous_period_start, previous_period_end, 10
             )
             
             # Get current and previous sales by payment type
-            current_payment_types = sale_repo.get_sales_by_payment_type(
+            current_payment_types = uow.sales.get_sales_by_payment_type(
                 current_period_start, current_period_end
             )
-            previous_payment_types = sale_repo.get_sales_by_payment_type(
+            previous_payment_types = uow.sales.get_sales_by_payment_type(
                 previous_period_start, previous_period_end
             )
             
@@ -324,8 +290,6 @@ class ReportingService(ServiceBase):
                 'current_payment_types': current_payment_types,
                 'previous_payment_types': previous_payment_types
             }
-            
-        return self._with_session(_get_comparative_report, current_period_start, current_period_end, previous_period_start, previous_period_end)
     
     def _calculate_percent_change(self, old_value: float, new_value: float) -> float:
         """

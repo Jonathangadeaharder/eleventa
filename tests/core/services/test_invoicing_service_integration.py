@@ -2,6 +2,7 @@ import threading
 import pytest
 import os
 import tempfile
+from unittest.mock import patch, MagicMock
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -17,6 +18,7 @@ from core.models.sale import Sale, SaleItem
 from core.models.product import Product
 from infrastructure.persistence.sqlite.models_mapping import ProductOrm
 from decimal import Decimal
+from core.interfaces.repository_interfaces import IInvoiceRepository
 
 @pytest.fixture(scope="function")
 def db_session():
@@ -62,12 +64,8 @@ def repositories(db_session):
     }
 
 @pytest.fixture
-def invoicing_service(repositories):
-    return InvoicingService(
-        invoice_repo_factory=lambda session=None: repositories["invoice_repo"],
-        sale_repo_factory=lambda session=None: repositories["sale_repo"],
-        customer_repo_factory=lambda session=None: repositories["customer_repo"],
-    )
+def invoicing_service():
+    return InvoicingService()
 
 def create_customer_and_sale(db_session, sale_repo, customer_repo):
     # Create a customer
@@ -111,7 +109,16 @@ def create_customer_and_sale(db_session, sale_repo, customer_repo):
     sale = sale_repo.add_sale(sale)
     return customer, sale
 
-def test_create_invoice_integration(db_session, repositories, invoicing_service):
+@patch('core.services.invoicing_service.unit_of_work')
+def test_create_invoice_integration(mock_uow, db_session, repositories, invoicing_service):
+    # Set up the Unit of Work to use the real repositories
+    mock_context = MagicMock()
+    mock_uow.return_value.__enter__.return_value = mock_context
+    mock_context.sales = repositories["sale_repo"]
+    mock_context.customers = repositories["customer_repo"]
+    mock_context.invoices = repositories["invoice_repo"]
+    mock_context.commit = MagicMock()
+    
     customer, sale = create_customer_and_sale(
         db_session, repositories["sale_repo"], repositories["customer_repo"]
     )
@@ -122,7 +129,8 @@ def test_create_invoice_integration(db_session, repositories, invoicing_service)
     persisted = repositories["invoice_repo"].get_by_id(invoice.id)
     assert persisted is not None
 
-def test_concurrent_invoice_creation(db_session, repositories):
+@patch('core.services.invoicing_service.unit_of_work')
+def test_concurrent_invoice_creation(mock_uow, db_session, repositories):
     # Create a customer and sale
     customer, sale = create_customer_and_sale(
         db_session, repositories["sale_repo"], repositories["customer_repo"]
@@ -146,18 +154,22 @@ def test_concurrent_invoice_creation(db_session, repositories):
                 "customer_repo": SqliteCustomerRepository(thread_session)
             }
             
-            # Create a service with thread-safe repositories
-            thread_service = InvoicingService(
-                invoice_repo_factory=lambda session=None: thread_repos["invoice_repo"],
-                sale_repo_factory=lambda session=None: thread_repos["sale_repo"],
-                customer_repo_factory=lambda session=None: thread_repos["customer_repo"]
-            )
-            
-            # Try to create an invoice
-            inv = thread_service.create_invoice_from_sale(sale.id)
-            if inv:
-                thread_session.commit()  # Important: commit the successful creation
-                results.append(inv)
+            # Mock the Unit of Work for this thread
+            with patch('core.services.invoicing_service.unit_of_work') as thread_mock_uow:
+                thread_mock_context = MagicMock()
+                thread_mock_uow.return_value.__enter__.return_value = thread_mock_context
+                thread_mock_context.sales = thread_repos["sale_repo"]
+                thread_mock_context.customers = thread_repos["customer_repo"]
+                thread_mock_context.invoices = thread_repos["invoice_repo"]
+                thread_mock_context.commit = lambda: thread_session.commit()
+                
+                # Create a service with Unit of Work pattern
+                thread_service = InvoicingService()
+                
+                # Try to create an invoice
+                inv = thread_service.create_invoice_from_sale(sale.id)
+                if inv:
+                    results.append(inv)
         except Exception as e:
             thread_session.rollback()  # Important: rollback on error
             errors.append(str(e))

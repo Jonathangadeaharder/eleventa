@@ -12,6 +12,7 @@ from unittest.mock import patch, MagicMock, Mock
 # Import necessary modules for testing initialization
 from infrastructure.persistence.sqlite.repositories import SqliteInvoiceRepository
 from core.services.invoicing_service import InvoicingService
+from core.interfaces.repository_interfaces import IInvoiceRepository
 
 
 class TestInvoicingServiceFixInMain:
@@ -39,19 +40,16 @@ class TestInvoicingServiceFixInMain:
         def customer_repo_factory(session=None):
             return MagicMock()
         
-        # Create service with the factory approach
-        service = InvoicingService(
-            invoice_repo_factory=invoice_repo_factory,
-            sale_repo_factory=sale_repo_factory,
-            customer_repo_factory=customer_repo_factory
-        )
+        # Create service with Unit of Work pattern
+        service = InvoicingService()
         
-        # This should work correctly with session_scope in the service
-        with patch('core.services.invoicing_service.session_scope') as mock_session_scope:
-            # Configure the mock session_scope context manager
+        # This should work correctly with unit_of_work in the service
+        with patch('core.services.invoicing_service.unit_of_work') as mock_unit_of_work:
+            # Configure the mock unit_of_work context manager
             mock_context = MagicMock()
-            mock_context.__enter__.return_value = mock_session
-            mock_session_scope.return_value = mock_context
+            mock_context.__enter__.return_value = mock_context
+            mock_context.invoices = mock_repo
+            mock_unit_of_work.return_value = mock_context
             
             # Call the service method
             result = service.get_all_invoices()
@@ -76,25 +74,23 @@ class TestInvoicingServiceFixInMain:
         def customer_repo_factory(session=None):
             return MagicMock()
         
-        # Create service with the factory functions
-        service = InvoicingService(
-            invoice_repo_factory=invoice_repo_factory,
-            sale_repo_factory=sale_repo_factory,
-            customer_repo_factory=customer_repo_factory
-        )
+        # Create service with Unit of Work pattern
+        service = InvoicingService()
         
         # For testing, we'll patch the real repository's get_all method
         with patch.object(SqliteInvoiceRepository, 'get_all', return_value=[]) as mock_get_all:
-            # We also need to patch session_scope since we're not in a real session
-            with patch('core.services.invoicing_service.session_scope') as mock_session_scope:
-                # Configure the mock session_scope context manager
+            # We also need to patch unit_of_work since we're not in a real session
+            with patch('core.services.invoicing_service.unit_of_work') as mock_unit_of_work:
+                # Configure the mock unit_of_work context manager
                 mock_context = MagicMock()
-                mock_context.__enter__.return_value = mock_session
-                mock_session_scope.return_value = mock_context
+                mock_context.__enter__.return_value = mock_context
+                mock_repo = SqliteInvoiceRepository(mock_session)
+                mock_context.invoices = mock_repo
+                mock_unit_of_work.return_value = mock_context
                 
                 # Call the service method
                 result = service.get_all_invoices()
             
         # Verify our mock was called
         mock_get_all.assert_called_once()
-        assert result == [], "get_all_invoices should return empty list in our test" 
+        assert result == [], "get_all_invoices should return empty list in our test"

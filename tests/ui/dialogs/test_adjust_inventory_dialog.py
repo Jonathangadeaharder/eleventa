@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from decimal import Decimal
+from typing import Dict
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDialogButtonBox
@@ -234,4 +235,4 @@ def test_service_error_handling(qtbot, sample_product, mock_inventory_service, m
     
     # Verify warning was shown with correct error message
     mock_warning.assert_called_once()
-    assert error_message in mock_warning.call_args[0][2] 
+    assert error_message in mock_warning.call_args[0][2]

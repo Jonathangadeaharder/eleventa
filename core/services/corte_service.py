@@ -1,12 +1,10 @@
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Dict, List, Optional, Any, Callable
-from sqlalchemy.orm import Session
+from typing import Dict, List, Optional, Any
 
-from core.interfaces.repository_interfaces import ISaleRepository, ICashDrawerRepository
 from core.models.cash_drawer import CashDrawerEntryType, CashDrawerEntry
 from core.services.service_base import ServiceBase
-from infrastructure.persistence.utils import session_scope
+from infrastructure.persistence.unit_of_work import UnitOfWork, unit_of_work
 
 
 class CorteService(ServiceBase):
@@ -15,18 +13,11 @@ class CorteService(ServiceBase):
     Calculates financial summaries based on sales and cash drawer entries.
     """
 
-    def __init__(self, sale_repo_factory: Callable[[Session], ISaleRepository], 
-                 cash_drawer_repo_factory: Callable[[Session], ICashDrawerRepository]):
+    def __init__(self):
         """
-        Initialize the CorteService with required repository factories.
-        
-        Args:
-            sale_repo_factory: Factory function to create sale repository
-            cash_drawer_repo_factory: Factory function to create cash drawer repository
+        Initialize the CorteService.
         """
         super().__init__()  # Initialize base class with default logger
-        self.sale_repo_factory = sale_repo_factory
-        self.cash_drawer_repo_factory = cash_drawer_repo_factory
 
     def calculate_corte_data(self, start_time: datetime, end_time: datetime, drawer_id: Optional[int] = None) -> Dict[str, Any]:
         """
@@ -40,25 +31,21 @@ class CorteService(ServiceBase):
         Returns:
             Dictionary containing all the calculated data for the Corte report
         """
-        def _calculate_corte_data(session, start_time, end_time, drawer_id):
+        with unit_of_work() as uow:
             if end_time < start_time:
                 raise ValueError("End time must not be before start time")
                 
-            # Get repositories from factories
-            sale_repo = self._get_repository(self.sale_repo_factory, session)
-            cash_drawer_repo = self._get_repository(self.cash_drawer_repo_factory, session)
-                
             # Get the starting balance (from last START entry before start_time)
-            starting_balance = self._calculate_starting_balance(session, start_time, drawer_id)
+            starting_balance = self._calculate_starting_balance(uow, start_time, drawer_id)
             
             # Get all sales within the period
-            sales = sale_repo.get_sales_by_period(start_time, end_time)
+            sales = uow.sales.get_sales_by_period(start_time, end_time)
             
             # Calculate sales totals by payment type
             sales_by_payment_type = self._calculate_sales_by_payment_type(sales)
             
             # Get cash drawer entries within the period
-            cash_entries = cash_drawer_repo.get_entries_by_date_range(start_time, end_time, drawer_id)
+            cash_entries = uow.cash_drawer.get_entries_by_date_range(start_time, end_time, drawer_id)
             
             # Split entries by type
             cash_in_entries = [entry for entry in cash_entries if entry.entry_type == CashDrawerEntryType.IN]
@@ -89,24 +76,21 @@ class CorteService(ServiceBase):
                 "expected_cash_in_drawer": expected_cash,
                 "sale_count": len(sales)
             }
-            
-        return self._with_session(_calculate_corte_data, start_time, end_time, drawer_id)
 
-    def _calculate_starting_balance(self, session: Session, start_time: datetime, drawer_id: Optional[int] = None) -> Decimal:
+    def _calculate_starting_balance(self, uow: UnitOfWork, start_time: datetime, drawer_id: Optional[int] = None) -> Decimal:
         """
         Calculate the starting balance for the period by finding the most recent START entry
         before the period start time.
         
         Args:
-            session: Database session
+            uow: Unit of Work instance
             start_time: The start time of the period
             drawer_id: Optional drawer ID to filter by specific cash drawer
             
         Returns:
             The starting balance as a Decimal
         """
-        cash_drawer_repo = self._get_repository(self.cash_drawer_repo_factory, session)
-        last_start_entry = cash_drawer_repo.get_last_start_entry(drawer_id)
+        last_start_entry = uow.cash_drawer.get_last_start_entry(drawer_id)
         
         if last_start_entry and last_start_entry.timestamp < start_time:
             return last_start_entry.amount
@@ -148,11 +132,9 @@ class CorteService(ServiceBase):
         Returns:
             The created CashDrawerEntry
         """
-        def _register_closing_balance(session, drawer_id, actual_amount, description, user_id):
-            cash_drawer_repo = self._get_repository(self.cash_drawer_repo_factory, session)
-            
+        with unit_of_work() as uow:
             # Check if drawer is open
-            if not cash_drawer_repo.is_drawer_open(drawer_id):
+            if not uow.cash_drawer.is_drawer_open(drawer_id):
                 raise ValueError("Cash drawer is not open, cannot register closing balance")
                 
             # Round actual_amount to 2 decimal places
@@ -167,6 +149,4 @@ class CorteService(ServiceBase):
                 drawer_id=drawer_id
             )
             
-            return cash_drawer_repo.add_entry(closing_entry)
-            
-        return self._with_session(_register_closing_balance, drawer_id, actual_amount, description, user_id)
+            return uow.cash_drawer.add_entry(closing_entry)

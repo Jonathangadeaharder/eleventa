@@ -8,28 +8,15 @@ from decimal import Decimal
 @pytest.fixture
 def mock_sale_service(product1):
     """Create a mocked sale service for testing."""
-    sale_repo_factory = MagicMock()
-    product_repo_factory = MagicMock()
-    customer_repo_factory = MagicMock()
     inventory_service = MagicMock()
     customer_service = MagicMock()
     
-    # Configure product_repo_factory to return product1 when get_by_id is called
-    mock_product_repo = MagicMock()
-    mock_product_repo.get_by_id.return_value = product1
-    product_repo_factory.return_value = mock_product_repo
-    
-    # Configure the repository
-    mock_repo = MagicMock()
-    sale_repo_factory.return_value = mock_repo
-    
-    return SaleService(
-        sale_repo_factory=sale_repo_factory,
-        product_repo_factory=product_repo_factory,
-        customer_repo_factory=customer_repo_factory,
+    service = SaleService(
         inventory_service=inventory_service,
         customer_service=customer_service
     )
+    
+    return service
 
 @pytest.fixture
 def product1():
@@ -52,7 +39,8 @@ def sample_customer():
         cuit="12345"
     )
 
-def test_create_sale_success(mock_sale_service, product1, sample_customer):
+@patch('core.services.sale_service.unit_of_work')
+def test_create_sale_success(mock_unit_of_work, mock_sale_service, product1, sample_customer):
     """Test successful sale creation with valid data."""
     # Arrange
     items_data = [{'product_id': 1, 'quantity': '2'}]
@@ -65,15 +53,17 @@ def test_create_sale_success(mock_sale_service, product1, sample_customer):
     mock_sale.user_id = user_id
     mock_sale.is_credit_sale = False
 
-    # Configure the repository to return the mock sale after add_sale is called
-    mock_sale_service.sale_repo_factory().add_sale.return_value = mock_sale
+    # Setup Unit of Work mock
+    mock_uow = MagicMock()
+    mock_uow.sales.add_sale.return_value = mock_sale
+    mock_uow.products.get_by_id.return_value = product1
+    mock_unit_of_work.return_value.__enter__.return_value = mock_uow
 
     # Act
     sale = mock_sale_service.create_sale(
         items_data=items_data,
         user_id=user_id,
-        payment_type=payment_type,
-        session=MagicMock()
+        payment_type=payment_type
     )
 
     # Assert
@@ -82,13 +72,12 @@ def test_create_sale_success(mock_sale_service, product1, sample_customer):
     assert sale.user_id == user_id
     assert sale.is_credit_sale == False
 
-    # Verify the repo factory was called
-    mock_sale_service.sale_repo_factory().add_sale.assert_called_once()
-    
-    # Verify product repository was called to get product details
-    mock_sale_service.product_repo_factory().get_by_id.assert_called_with(1)
+    # Verify the unit of work was used
+    mock_unit_of_work.assert_called_once()
+    mock_uow.sales.add_sale.assert_called_once()
 
-def test_create_sale_with_credit(mock_sale_service, product1, sample_customer):
+@patch('core.services.sale_service.unit_of_work')
+def test_create_sale_with_credit(mock_unit_of_work, mock_sale_service, product1, sample_customer):
     """Test credit sale creation with valid customer."""
     # Arrange
     items_data = [{'product_id': 1, 'quantity': '1'}]
@@ -101,8 +90,11 @@ def test_create_sale_with_credit(mock_sale_service, product1, sample_customer):
     mock_sale.user_id = user_id
     mock_sale.is_credit_sale = True
 
-    # Configure the repository to return the mock sale when add_sale is called
-    mock_sale_service.sale_repo_factory().add_sale.return_value = mock_sale
+    # Setup Unit of Work mock
+    mock_uow = MagicMock()
+    mock_uow.sales.add_sale.return_value = mock_sale
+    mock_uow.products.get_by_id.return_value = product1
+    mock_unit_of_work.return_value.__enter__.return_value = mock_uow
 
     # Act
     sale = mock_sale_service.create_sale(
@@ -110,8 +102,7 @@ def test_create_sale_with_credit(mock_sale_service, product1, sample_customer):
         user_id=user_id,
         payment_type=None,  # Payment type not needed for credit sales
         customer_id=customer_id,
-        is_credit_sale=True,
-        session=MagicMock()
+        is_credit_sale=True
     )
 
     # Assert
@@ -120,20 +111,22 @@ def test_create_sale_with_credit(mock_sale_service, product1, sample_customer):
     assert sale.user_id == user_id
     assert sale.is_credit_sale is True
 
-    # Verify the call was made
-    mock_sale_service.sale_repo_factory().add_sale.assert_called_once()
-    
-    # Verify product repository was called to get product details
-    mock_sale_service.product_repo_factory().get_by_id.assert_called_with(1)
+    # Verify the unit of work was used
+    mock_unit_of_work.assert_called_once()
+    mock_uow.sales.add_sale.assert_called_once()
 
-def test_get_sale_by_id(mock_sale_service):
+@patch('core.services.sale_service.unit_of_work')
+def test_get_sale_by_id(mock_unit_of_work, mock_sale_service):
     """Test retrieving a sale by ID."""
     # Arrange
     sale_id = 1
     mock_sale = MagicMock(spec=Sale)
     mock_sale.id = sale_id
     
-    mock_sale_service.sale_repo_factory().get_by_id.return_value = mock_sale
+    # Setup Unit of Work mock
+    mock_uow = MagicMock()
+    mock_uow.sales.get_by_id.return_value = mock_sale
+    mock_unit_of_work.return_value.__enter__.return_value = mock_uow
 
     # Act
     sale = mock_sale_service.get_sale_by_id(sale_id)
@@ -141,14 +134,28 @@ def test_get_sale_by_id(mock_sale_service):
     # Assert
     assert sale is not None
     assert sale.id == sale_id
+    
+    # Verify the unit of work was used
+    mock_unit_of_work.assert_called_once()
+    mock_uow.sales.get_by_id.assert_called_once_with(sale_id)
 
 @patch('core.services.sale_service.create_receipt_pdf')
-def test_generate_receipt_pdf(mock_create_receipt, mock_sale_service):
+@patch('core.services.sale_service.unit_of_work')
+def test_generate_receipt_pdf(mock_unit_of_work, mock_create_receipt, mock_sale_service):
     """Test PDF receipt generation."""
     # Arrange
     sale_id = 1
     output_dir = "test_receipts"
     expected_path = os.path.join(output_dir, f"receipt_{sale_id}.pdf")
+    
+    # Create a mock sale object
+    mock_sale = MagicMock(spec=Sale)
+    mock_sale.id = sale_id
+    
+    # Setup Unit of Work mock
+    mock_uow = MagicMock()
+    mock_uow.sales.get_by_id.return_value = mock_sale
+    mock_unit_of_work.return_value.__enter__.return_value = mock_uow
     
     # Configure the mock to return the expected path
     mock_create_receipt.return_value = expected_path
@@ -158,4 +165,8 @@ def test_generate_receipt_pdf(mock_create_receipt, mock_sale_service):
 
     # Assert
     assert result == expected_path
-    mock_create_receipt.assert_called_once()
+    mock_create_receipt.assert_called_once_with(mock_sale, expected_path)
+    
+    # Verify the unit of work was used
+    mock_unit_of_work.assert_called_once()
+    mock_uow.sales.get_by_id.assert_called_once_with(sale_id)

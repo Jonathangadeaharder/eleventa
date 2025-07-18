@@ -20,6 +20,7 @@ from core.models.sale import Sale, SaleItem
 from core.models.product import Product
 from infrastructure.persistence.sqlite.models_mapping import ProductOrm # Keep map_models if used elsewhere, remove if only for old fixture
 from decimal import Decimal
+from core.interfaces.repository_interfaces import IInvoiceRepository
 # import time # Remove time import
 
 # Remove global engine, URL, and SessionFactory
@@ -42,13 +43,22 @@ def repositories(test_db_session: Session): # Use test_db_session directly
     }
 
 @pytest.fixture
-def invoicing_service(repositories): # Depends on the instantiated repositories
-    # The service expects factories, so wrap the instances from the repositories fixture
-    return InvoicingService(
-        lambda session: repositories["invoice_repo"], # Pass instance
-        lambda session: repositories["sale_repo"],   # Pass instance
-        lambda session: repositories["customer_repo"], # Pass instance
-    )
+def invoicing_service(test_db_session):
+    """Provide an InvoicingService instance for testing."""
+    # Set the session factory to use the same engine as the test session
+    from infrastructure.persistence.utils import session_scope_provider
+    from sqlalchemy.orm import sessionmaker
+    
+    # Get the engine from the test session
+    test_engine = test_db_session.bind
+    
+    # Create a session factory that uses the same engine
+    test_session_factory = sessionmaker(bind=test_engine)
+    
+    # Set this as the session factory for the Unit of Work
+    session_scope_provider.set_session_factory(test_session_factory)
+    
+    return InvoicingService()
 
 # Use test_db_session
 def create_customer_and_sale(test_db_session: Session, sale_repo: SqliteSaleRepository, customer_repo: SqliteCustomerRepository):
@@ -62,7 +72,6 @@ def create_customer_and_sale(test_db_session: Session, sale_repo: SqliteSaleRepo
         cuit="20-12345678-9",
         credit_balance=0.0,
     )
-    print(f"[TEST DEBUG] customer.id={customer.id} (type={type(customer.id)})")
     customer = customer_repo.add(customer)
     # Create and persist a product
     product = ProductOrm(
@@ -101,9 +110,13 @@ def test_create_invoice_integration(test_db_session: Session, repositories, invo
     customer, sale = create_customer_and_sale(
         test_db_session, repositories["sale_repo"], repositories["customer_repo"]
     )
+    # Commit the test data so it's visible to the invoicing service's Unit of Work
+    test_db_session.commit()
+    
     invoice = invoicing_service.create_invoice_from_sale(sale.id)
     assert invoice is not None
     assert invoice.sale_id == sale.id
+    assert invoice.customer_id == customer.id
     # Check invoice is persisted within the same transaction
     persisted = repositories["invoice_repo"].get_by_id(invoice.id)
     assert persisted is not None

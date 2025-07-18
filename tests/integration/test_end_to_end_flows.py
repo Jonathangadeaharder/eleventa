@@ -108,70 +108,44 @@ class TestSalesEndToEndFlow:
         # Patch the customer_service.get_customer_by_id method on the instance within test_app
         # Note: This patch might be redundant now if committing solves the visibility issue, but keep for now.
         with patch.object(test_app["services"]["customer_service"], 'get_customer_by_id', side_effect=mock_get_customer_by_id):
-            # Replace the product repository in the sale service
-            original_product_repo_factory = sale_service.product_repo_factory
-        
-        def mock_product_repo_factory(session):
-            repo = original_product_repo_factory(session)
             
-            # Override the get_by_id method to return our test products
-            original_get_by_id = repo.get_by_id
+            # Create a sale with multiple items
+            sale_items = [
+                {
+                    "product_id": product1.id,
+                    "product_code": product1.code,
+                    "product_description": product1.description,
+                    "quantity": 2,
+                    "unit_price": product1.sell_price
+                },
+                {
+                    "product_id": product2.id,
+                    "product_code": product2.code,
+                    "product_description": product2.description,
+                    "quantity": 1,
+                    "unit_price": product2.sell_price
+                }
+            ]
+        
+            # Process the sale - include user_id and payment_type
+            sale = sale_service.create_sale(
+                items_data=sale_items, 
+                customer_id=customer.id, 
+                user_id=user.id, 
+                payment_type='Efectivo'
+                )
+        
+            # Verify the sale was created correctly
+            assert sale.id is not None
+            assert len(sale.items) == 2
             
-            def mock_get_by_id(product_id):
-                if product_id == product1.id or product_id == 1:
-                    return product1
-                elif product_id == product2.id or product_id == 2:
-                    return product2
-                return original_get_by_id(product_id)
-                
-            repo.get_by_id = mock_get_by_id
-            return repo
+            # Calculate expected total
+            expected_total = 2 * product1.sell_price + 1 * product2.sell_price
+            sale_total = sum(item.quantity * item.unit_price for item in sale.items)
+            assert sale_total == expected_total
             
-        # Apply the mock factory
-        sale_service.product_repo_factory = mock_product_repo_factory
-        
-        # Create a sale with multiple items
-        sale_items = [
-            {
-                "product_id": product1.id,
-                "product_code": product1.code,
-                "product_description": product1.description,
-                "quantity": 2,
-                "unit_price": product1.sell_price
-            },
-            {
-                "product_id": product2.id,
-                "product_code": product2.code,
-                "product_description": product2.description,
-                "quantity": 1,
-                "unit_price": product2.sell_price
-            }
-        ]
-        
-        # Process the sale - include user_id and payment_type
-        # Pass the test session explicitly to ensure same transaction context
-        sale = sale_service.create_sale(
-            items_data=sale_items, 
-            customer_id=customer.id, 
-            user_id=user.id, 
-            payment_type='Efectivo',
-            session=test_app["session"] # Pass the test session again
-            )
-        
-        # Restore the original factory (patching handles restoration automatically)
-        sale_service.product_repo_factory = original_product_repo_factory
-        
-        # Verify the sale was created correctly
-        assert sale.id is not None
-        assert len(sale.items) == 2
-        
-        # Calculate expected total
-        expected_total = 2 * product1.sell_price + 1 * product2.sell_price
-        sale_total = sum(item.quantity * item.unit_price for item in sale.items)
-        assert sale_total == expected_total
-        
-        # Verify customer is linked
-        assert sale.customer_id == customer.id
+            # Verify customer is linked
+            assert sale.customer_id == customer.id
         
         # For filesystem mock, we need to configure the return values
         receipt_content = f"Receipt for sale {sale.id}\nCustomer: {customer.name}\nTotal: ${sale_total}"
@@ -222,8 +196,8 @@ class TestSalesEndToEndFlow:
             quantity_in_stock=3
         )
         
-        # Commit changes to make sure the product is saved
-        session.commit()
+        # Flush changes to make them available within the transaction
+        session.flush()
         
         # Manually verify the product exists and has the correct stock
         retrieved_product = product_service.get_product_by_id(product.id)
@@ -319,8 +293,8 @@ class TestInvoicingEndToEndFlow:
             password_hash="$2b$12$test_hash_for_invoice"
         )
 
-        # Commit to ensure all entities are saved
-        session.commit()
+        # Flush to ensure all entities are available within the transaction
+        session.flush()
 
         # Create sale through sale_service
         from decimal import Decimal
@@ -358,8 +332,8 @@ class TestInvoicingEndToEndFlow:
         assert result is not None, f"Sale with ID {created_sale.id} not found in database"
         print(f"Verified sale in database: {result.id}")
         
-        # Commit to ensure the sale is fully persisted
-        session.commit()
+        # Flush to ensure the sale is available within the transaction
+        session.flush()
         
         # Create a temporary file path using the mock filesystem
         temp_filename = "test_invoice.pdf" # Use PDF extension for clarity
@@ -612,8 +586,8 @@ class TestConcurrencyAndEdgeCases:
             password_hash="$2b$12$test_hash_for_product_creation"
         )
         
-        # Commit changes to make sure the user is saved
-        session.commit()
+        # Flush changes to make sure the user is available within the transaction
+        session.flush()
         
         # Get product service
         product_service = test_app["services"]["product_service"]
@@ -630,8 +604,8 @@ class TestConcurrencyAndEdgeCases:
         # Print product ID and details for debugging
         print(f"Created product ID: {product.id}, type: {type(product.id)}")
         
-        # Commit changes to make sure the product is saved
-        session.commit()
+        # Flush changes to make sure the product is available within the transaction
+        session.flush()
         
         # Try directly querying the database to verify product existence
         from infrastructure.persistence.sqlite.models_mapping import ProductOrm

@@ -14,25 +14,8 @@ class TestCorteService(unittest.TestCase):
         self.sale_repository = Mock()
         self.cash_drawer_repository = Mock()
         
-        # Create factory functions that return the mock repositories
-        def sale_repo_factory(session):
-            return self.sale_repository
-            
-        def cash_drawer_repo_factory(session):
-            return self.cash_drawer_repository
-        
-        # Initialize the service with factories
-        self.corte_service = CorteService(
-            sale_repo_factory=sale_repo_factory,
-            cash_drawer_repo_factory=cash_drawer_repo_factory
-        )
-        
-        # Mock _with_session to avoid SQLAlchemy session handling in tests
-        def mock_with_session(func, *args, **kwargs):
-            session = MagicMock()  # Create a mock session
-            return func(session, *args, **kwargs)
-        
-        self.corte_service._with_session = mock_with_session
+        # Initialize the service using Unit of Work pattern
+        self.corte_service = CorteService()
         
         # Set up test periods
         self.start_time = datetime(2025, 4, 13, 8, 0)  # April 13, 2025, 8:00 AM
@@ -109,8 +92,14 @@ class TestCorteService(unittest.TestCase):
         self.cash_drawer_repository.get_last_start_entry.return_value = starting_entry
         self.cash_drawer_repository.get_entries_by_date_range.return_value = mock_cash_entries
         
-        # Call the method being tested
-        result = self.corte_service.calculate_corte_data(self.start_time, self.end_time)
+        # Call the method being tested with Unit of Work mocking
+        with patch('core.services.corte_service.unit_of_work') as mock_uow:
+            mock_context = MagicMock()
+            mock_context.sales = self.sale_repository
+            mock_context.cash_drawer = self.cash_drawer_repository
+            mock_uow.return_value.__enter__.return_value = mock_context
+            
+            result = self.corte_service.calculate_corte_data(self.start_time, self.end_time)
         
         # Verify repository methods were called with correct parameters
         self.sale_repository.get_sales_by_period.assert_called_once_with(self.start_time, self.end_time)
@@ -146,18 +135,19 @@ class TestCorteService(unittest.TestCase):
         # Set up the mock
         self.cash_drawer_repository.get_last_start_entry.return_value = start_entry
         
-        # Create mock session
-        mock_session = MagicMock()
+        # Create mock UnitOfWork
+        mock_uow = MagicMock()
+        mock_uow.cash_drawer = self.cash_drawer_repository
         
-        # Call the method with session parameter
-        result = self.corte_service._calculate_starting_balance(mock_session, self.start_time)
+        # Call the method with UnitOfWork parameter
+        result = self.corte_service._calculate_starting_balance(mock_uow, self.start_time)
         
         # Verify result
         self.assertEqual(result, Decimal("1000.00"))
         
         # Test when no start entry exists
         self.cash_drawer_repository.get_last_start_entry.return_value = None
-        result = self.corte_service._calculate_starting_balance(mock_session, self.start_time)
+        result = self.corte_service._calculate_starting_balance(mock_uow, self.start_time)
         self.assertEqual(result, Decimal("0.00"))
 
     def test_calculate_sales_by_payment_type(self):
@@ -201,13 +191,18 @@ class TestCorteService(unittest.TestCase):
         )
         self.cash_drawer_repository.add_entry.return_value = mock_entry
         
-        # Call the method
-        result = self.corte_service.register_closing_balance(
-            drawer_id=drawer_id,
-            actual_amount=actual_amount,
-            description=description,
-            user_id=user_id
-        )
+        # Call the method with Unit of Work mocking
+        with patch('core.services.corte_service.unit_of_work') as mock_uow:
+            mock_context = MagicMock()
+            mock_context.cash_drawer = self.cash_drawer_repository
+            mock_uow.return_value.__enter__.return_value = mock_context
+            
+            result = self.corte_service.register_closing_balance(
+                drawer_id=drawer_id,
+                actual_amount=actual_amount,
+                description=description,
+                user_id=user_id
+            )
         
         # Verify repository was called
         self.cash_drawer_repository.add_entry.assert_called_once()
@@ -227,19 +222,40 @@ class TestCorteService(unittest.TestCase):
     def test_calculate_corte_data_repository_failure(self):
         """Test calculate_corte_data handles repository exceptions gracefully."""
         self.sale_repository.get_sales_by_period.side_effect = Exception("Repository failure")
-        with self.assertRaises(Exception):
-            self.corte_service.calculate_corte_data(self.start_time, self.end_time)
+        
+        with patch('core.services.corte_service.unit_of_work') as mock_uow:
+            mock_context = MagicMock()
+            mock_context.sales = self.sale_repository
+            mock_context.cash_drawer = self.cash_drawer_repository
+            mock_uow.return_value.__enter__.return_value = mock_context
+            
+            with self.assertRaises(Exception):
+                self.corte_service.calculate_corte_data(self.start_time, self.end_time)
 
         # Test cash drawer repository failure
         self.sale_repository.get_sales_by_period.side_effect = None
         self.cash_drawer_repository.get_last_start_entry.side_effect = Exception("Repository failure")
-        with self.assertRaises(Exception):
-            self.corte_service.calculate_corte_data(self.start_time, self.end_time)
+        
+        with patch('core.services.corte_service.unit_of_work') as mock_uow:
+            mock_context = MagicMock()
+            mock_context.sales = self.sale_repository
+            mock_context.cash_drawer = self.cash_drawer_repository
+            mock_uow.return_value.__enter__.return_value = mock_context
+            
+            with self.assertRaises(Exception):
+                self.corte_service.calculate_corte_data(self.start_time, self.end_time)
 
         self.cash_drawer_repository.get_last_start_entry.side_effect = None
         self.cash_drawer_repository.get_entries_by_date_range.side_effect = Exception("Repository failure")
-        with self.assertRaises(Exception):
-            self.corte_service.calculate_corte_data(self.start_time, self.end_time)
+        
+        with patch('core.services.corte_service.unit_of_work') as mock_uow:
+            mock_context = MagicMock()
+            mock_context.sales = self.sale_repository
+            mock_context.cash_drawer = self.cash_drawer_repository
+            mock_uow.return_value.__enter__.return_value = mock_context
+            
+            with self.assertRaises(Exception):
+                self.corte_service.calculate_corte_data(self.start_time, self.end_time)
 
 
 if __name__ == "__main__":

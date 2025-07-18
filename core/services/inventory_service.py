@@ -1,28 +1,20 @@
-from typing import List, Optional, Callable, Any
-from sqlalchemy.orm import Session
+from typing import List, Optional, Any, Dict
 from decimal import Decimal
+from datetime import datetime
 
-from core.interfaces.repository_interfaces import IInventoryRepository, IProductRepository
 from core.models.inventory import InventoryMovement
 from core.models.product import Product
 from core.services.service_base import ServiceBase
-from infrastructure.persistence.utils import session_scope
+from infrastructure.persistence.unit_of_work import UnitOfWork, unit_of_work
 
 class InventoryService(ServiceBase):
     """Provides services related to inventory management."""
 
-    def __init__(self, inventory_repo_factory: Callable[[Session], IInventoryRepository], 
-                 product_repo_factory: Callable[[Session], IProductRepository]):
+    def __init__(self):
         """
-        Initialize with repository factories.
-        
-        Args:
-            inventory_repo_factory: Factory function to create inventory repository
-            product_repo_factory: Factory function to create product repository
+        Initialize the inventory service.
         """
         super().__init__()  # Initialize base class with default logger
-        self.inventory_repo_factory = inventory_repo_factory
-        self.product_repo_factory = product_repo_factory
 
     def add_inventory(
         self,
@@ -33,15 +25,11 @@ class InventoryService(ServiceBase):
         user_id: Optional[int] = None
     ) -> Product:
         """Adds quantity to a product's stock, logs movement, and optionally updates cost price."""
-        def _add_inventory(session, product_id, quantity, new_cost_price, notes, user_id):
+        with unit_of_work() as uow:
             if quantity <= 0:
                 raise ValueError("Quantity must be positive.")
-                
-            # Get repositories from factories
-            prod_repo = self._get_repository(self.product_repo_factory, session)
-            inv_repo = self._get_repository(self.inventory_repo_factory, session)
 
-            product = prod_repo.get_by_id(product_id)
+            product = uow.products.get_by_id(product_id)
             if not product:
                 raise ValueError(f"Product with ID {product_id} not found.")
             if not product.uses_inventory:
@@ -52,7 +40,7 @@ class InventoryService(ServiceBase):
             new_quantity = current_stock + quantity
 
             # Update product stock (and cost if provided)
-            prod_repo.update_stock(product_id, quantity, new_cost_price)  # Pass quantity change, not new total
+            uow.products.update_stock(product_id, quantity, new_cost_price)  # Pass quantity change, not new total
 
             # Log the movement
             movement = InventoryMovement(
@@ -62,7 +50,7 @@ class InventoryService(ServiceBase):
                 description=notes,
                 user_id=user_id
             )
-            inv_repo.add_movement(movement)
+            uow.inventory.add_movement(movement)
 
             # Update local product object for return
             product.quantity_in_stock = new_quantity
@@ -70,8 +58,6 @@ class InventoryService(ServiceBase):
                 product.cost_price = new_cost_price
 
             return product
-            
-        return self._with_session(_add_inventory, product_id, quantity, new_cost_price, notes, user_id)
 
     def adjust_inventory(
         self,
@@ -81,15 +67,11 @@ class InventoryService(ServiceBase):
         user_id: Optional[int] = None
     ) -> Product:
         """Adjusts a product's stock quantity (positive or negative) and logs movement."""
-        def _adjust_inventory(session, product_id, quantity, reason, user_id):
+        with unit_of_work() as uow:
             if quantity == 0:
                 raise ValueError("Adjustment quantity cannot be zero.")
 
-            # Get repositories from factories
-            prod_repo = self._get_repository(self.product_repo_factory, session)
-            inv_repo = self._get_repository(self.inventory_repo_factory, session)
-
-            product = prod_repo.get_by_id(product_id)
+            product = uow.products.get_by_id(product_id)
             if not product:
                 raise ValueError(f"Product with ID {product_id} not found.")
             if not product.uses_inventory:
@@ -106,7 +88,7 @@ class InventoryService(ServiceBase):
                 )
 
             # Update product stock - pass the change in quantity, not the new total
-            prod_repo.update_stock(product_id, quantity)
+            uow.products.update_stock(product_id, quantity)
 
             # Log the movement
             movement = InventoryMovement(
@@ -116,22 +98,19 @@ class InventoryService(ServiceBase):
                 description=reason,
                 user_id=user_id
             )
-            inv_repo.add_movement(movement)
+            uow.inventory.add_movement(movement)
 
             # Update local product object for return
             product.quantity_in_stock = new_quantity
 
             return product
-            
-        return self._with_session(_adjust_inventory, product_id, quantity, reason, user_id)
 
     def decrease_stock_for_sale(
         self,
         product_id: int,
         quantity: Decimal,
         sale_id: int,
-        user_id: Optional[int] = None,
-        session: Optional[Session] = None
+        user_id: Optional[int] = None
     ) -> None:
         """
         Decreases stock for a sold item.
@@ -141,17 +120,12 @@ class InventoryService(ServiceBase):
             quantity: The quantity to decrease (positive value)
             sale_id: The ID of the sale
             user_id: Optional user ID
-            session: Optional session to use (for transaction sharing)
         """
-        def _decrease_stock_for_sale(session, product_id, quantity, sale_id, user_id):
+        with unit_of_work() as uow:
             if quantity <= 0:
                 raise ValueError("Quantity for sale must be positive.")
 
-            # Get repositories from factories
-            prod_repo = self._get_repository(self.product_repo_factory, session)
-            inv_repo = self._get_repository(self.inventory_repo_factory, session)
-
-            product = prod_repo.get_by_id(product_id)
+            product = uow.products.get_by_id(product_id)
             if not product:
                 raise ValueError(f"Product with ID {product_id} not found for sale item.")
             if not product.uses_inventory:
@@ -175,7 +149,7 @@ class InventoryService(ServiceBase):
                 )
 
             # Update stock - pass the negative quantity as change
-            prod_repo.update_stock(product_id, -quantity)
+            uow.products.update_stock(product_id, -quantity)
 
             # Log movement
             movement = InventoryMovement(
@@ -186,39 +160,32 @@ class InventoryService(ServiceBase):
                 related_id=sale_id,
                 user_id=user_id
             )
-            inv_repo.add_movement(movement)
-        
-        # If session is provided, use it directly; otherwise use _with_session
-        if session:
-            return _decrease_stock_for_sale(session, product_id, quantity, sale_id, user_id)
-        else:
-            return self._with_session(_decrease_stock_for_sale, product_id, quantity, sale_id, user_id)
+            uow.inventory.add_movement(movement)
 
     # --- Reporting Methods ---
 
-    def get_inventory_report(self) -> List[Product]:
-        """Retrieves a general inventory report (all products with stock)."""
-        def _get_inventory_report(session):
-            prod_repo = self._get_repository(self.product_repo_factory, session)
-            return prod_repo.get_all()
-            
-        return self._with_session(_get_inventory_report)
+    def get_inventory_report(self) -> List[Dict[str, Any]]:
+        """Returns a comprehensive inventory report."""
+        with unit_of_work() as uow:
+            return uow.products.get_inventory_report()
 
-    def get_low_stock_products(self) -> List[Product]:
-        """Retrieves products below their minimum stock level."""
-        def _get_low_stock_products(session):
-            prod_repo = self._get_repository(self.product_repo_factory, session)
-            return prod_repo.get_low_stock()
-            
-        return self._with_session(_get_low_stock_products)
+    def get_low_stock_products(self, threshold: Decimal = Decimal('10')) -> List[Product]:
+        """Returns products with stock below the specified threshold."""
+        with unit_of_work() as uow:
+            return uow.products.get_low_stock_products(threshold)
 
-    def get_inventory_movements(self, product_id: Optional[int] = None) -> List[InventoryMovement]:
-        """Retrieves inventory movements, optionally filtered by product."""
-        def _get_inventory_movements(session, product_id):
-            inv_repo = self._get_repository(self.inventory_repo_factory, session)
-            if product_id:
-                return inv_repo.get_movements_for_product(product_id)
-            else:
-                return inv_repo.get_all_movements()
-                
-        return self._with_session(_get_inventory_movements, product_id) 
+    def get_inventory_movements(
+        self,
+        product_id: Optional[int] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        movement_type: Optional[str] = None
+    ) -> List[InventoryMovement]:
+        """Returns inventory movements with optional filters."""
+        with unit_of_work() as uow:
+            return uow.inventory.get_movements(
+                product_id=product_id,
+                start_date=start_date,
+                end_date=end_date,
+                movement_type=movement_type
+            )
