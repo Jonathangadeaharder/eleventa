@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from PySide6.QtWidgets import QApplication, QDialog, QPushButton, QLabel, QTextEdit
 from PySide6.QtCore import Qt
-from PySide6.QtTest import QTest as QtTest
+from PySide6.QtTest import QTest
 
 from ui.dialogs.error_dialog import ErrorDialog
 
@@ -83,7 +83,7 @@ class TestErrorDialog:
         assert dialog.details_button.text() == "Mostrar Detalles"
         
         # Click show details button
-        QtTest.mouseClick(dialog.details_button, Qt.MouseButton.LeftButton)
+        QTest.mouseClick(dialog.details_button, Qt.MouseButton.LeftButton)
         QApplication.processEvents()
         
         # Details should now be visible
@@ -94,7 +94,7 @@ class TestErrorDialog:
         assert "Connection timeout after 30 seconds" in dialog.details_text_edit.toPlainText()
         
         # Click hide details button
-        QtTest.mouseClick(dialog.details_button, Qt.MouseButton.LeftButton)
+        QTest.mouseClick(dialog.details_button, Qt.MouseButton.LeftButton)
         QApplication.processEvents()
         
         # Details should be hidden again
@@ -111,7 +111,7 @@ class TestErrorDialog:
         # Mock the accept method
         with patch.object(dialog, 'accept') as mock_accept:
             # Click OK button
-            QtTest.mouseClick(dialog.ok_button, Qt.MouseButton.LeftButton)
+            QTest.mouseClick(dialog.ok_button, Qt.MouseButton.LeftButton)
             
             # Dialog should be accepted (closed)
             mock_accept.assert_called_once()
@@ -123,7 +123,7 @@ class TestErrorDialog:
         # Mock the reject method
         with patch.object(dialog, 'reject') as mock_reject:
             # Press Escape key
-            QtTest.keyClick(dialog, Qt.Key.Key_Escape)
+            QTest.keyClick(dialog, Qt.Key.Key_Escape)
             
             # Dialog should be rejected (closed)
             mock_reject.assert_called_once()
@@ -138,7 +138,7 @@ class TestErrorDialog:
         # Mock the accept method
         with patch.object(dialog, 'accept') as mock_accept:
             # Press Enter key
-            QtTest.keyClick(dialog.ok_button, Qt.Key.Key_Return)
+            QTest.keyClick(dialog.ok_button, Qt.Key.Key_Return)
             
             # Dialog should be accepted (closed)
             mock_accept.assert_called_once()
@@ -270,7 +270,7 @@ class TestErrorDialog:
         QApplication.processEvents()
         
         # Should be able to navigate with Tab
-        QtTest.keyClick(dialog, Qt.Key.Key_Tab)
+        QTest.keyClick(dialog, Qt.Key.Key_Tab)
         QApplication.processEvents()
         
         # Should not crash
@@ -288,7 +288,7 @@ class TestErrorDialog:
         initial_height = dialog.height()
         
         # Show details
-        QtTest.mouseClick(dialog.details_button, Qt.MouseButton.LeftButton)
+        QTest.mouseClick(dialog.details_button, Qt.MouseButton.LeftButton)
         QApplication.processEvents()
         
         # Dialog should be taller
@@ -296,7 +296,7 @@ class TestErrorDialog:
         assert expanded_height > initial_height
         
         # Hide details
-        QtTest.mouseClick(dialog.details_button, Qt.MouseButton.LeftButton)
+        QTest.mouseClick(dialog.details_button, Qt.MouseButton.LeftButton)
         QApplication.processEvents()
         
         # Dialog should return to original size
