@@ -20,7 +20,7 @@ from core.models.customer import Customer as CoreCustomer
 from core.models.credit_payment import CreditPayment as CoreCreditPayment
 from core.models.user import User as CoreUser
 from core.models.invoice import Invoice as CoreInvoice
-from core.models.cash_drawer import CashDrawerEntryType
+from core.models.enums import PaymentType
 
 # Import core models for reference if needed, but avoid direct coupling in ORM definitions
 #  as CoreSupplier
@@ -126,7 +126,7 @@ class SaleOrm(Base):
     customer_id = Column(SQLiteUUID, ForeignKey('customers.id'), nullable=True, index=True)
     is_credit_sale = Column(Boolean, nullable=False, default=False) # Added credit flag
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True) # User who performed the sale
-    payment_type = Column(String, nullable=True, index=True) # e.g., 'Efectivo', 'Tarjeta'
+    payment_type = Column(Enum(PaymentType), nullable=True, index=True)
 
     # Relationship: One-to-Many (One Sale has Many SaleItems)
     items = relationship(

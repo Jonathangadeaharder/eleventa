@@ -17,6 +17,7 @@ if project_root not in sys.path:
 from core.models.sale import Sale, SaleItem
 from core.models.product import Product, Department
 from core.models.customer import Customer
+from core.models.enums import PaymentType
 from core.interfaces.repository_interfaces import ISaleRepository
 
 # Import application ORM models
@@ -92,7 +93,7 @@ def test_calculate_profit_for_period(test_db_session, create_product, create_cus
     now = datetime.now()
     
     # First sale
-    sale1 = Sale(timestamp=now, payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale1 = Sale(timestamp=now, payment_type=PaymentType.EFECTIVO, customer_id=customer.id, user_id=1)
     sale1.items = [
         SaleItem(product_id=product1.id, quantity=Decimal('5'), unit_price=Decimal('10.0'),
                  product_code=product1.code, product_description=product1.description)
@@ -100,7 +101,7 @@ def test_calculate_profit_for_period(test_db_session, create_product, create_cus
     repository.add_sale(sale1)
     
     # Second sale
-    sale2 = Sale(timestamp=now, payment_type="CARD", customer_id=customer.id, user_id=1)
+    sale2 = Sale(timestamp=now, payment_type=PaymentType.TARJETA, customer_id=customer.id, user_id=1)
     sale2.items = [
         SaleItem(product_id=product2.id, quantity=Decimal('2'), unit_price=Decimal('20.0'),
                  product_code=product2.code, product_description=product2.description)
@@ -136,4 +137,4 @@ def test_calculate_profit_for_period(test_db_session, create_product, create_cus
     assert profit_data['revenue'] == expected_revenue
     assert profit_data['cost'] == expected_cost
     assert profit_data['profit'] == expected_profit
-    assert profit_data['margin'] == pytest.approx(expected_profit / expected_revenue, 0.01) 
+    assert profit_data['margin'] == pytest.approx(expected_profit / expected_revenue, 0.01)

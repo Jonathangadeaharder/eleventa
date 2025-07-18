@@ -19,6 +19,7 @@ from core.models.sale import SaleItem
 from core.models.customer import Customer
 from core.models.user import User
 from core.models.product import Product
+from core.models.enums import PaymentType
 from core.services.product_service import ProductService
 from core.services.sale_service import SaleService
 from core.services.customer_service import CustomerService
@@ -66,11 +67,11 @@ class PaymentDialog(QDialog):
 
     def accept(self):
         if self.cash_radio.isChecked():
-            self.selected_payment_method = "Efectivo"
+            self.selected_payment_method = PaymentType.EFECTIVO.value
         elif self.card_radio.isChecked():
-            self.selected_payment_method = "Tarjeta"
+            self.selected_payment_method = PaymentType.TARJETA.value
         elif self.credit_radio.isChecked():
-            self.selected_payment_method = "Crédito"
+            self.selected_payment_method = PaymentType.CREDITO.value
         elif self.other_radio.isChecked():
             self.selected_payment_method = "Otro"
         else:
@@ -637,7 +638,7 @@ class SalesView(QWidget):
              show_error_message(self, "Error", "No se seleccionó un método de pago válido.")
              return
 
-        is_credit = (payment_method == "Crédito")
+        is_credit = (payment_method == PaymentType.CREDITO.value)
 
         # Final confirmation message, including payment type
         confirmation_message = f"¿Finalizar venta por $ {self._current_total:.2f} con pago '{payment_method}'?"

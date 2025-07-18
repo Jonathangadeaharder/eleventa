@@ -7,6 +7,7 @@ from datetime import datetime
 from core.services.sale_service import SaleService
 from core.models.sale import Sale, SaleItem
 from core.models.customer import Customer
+from core.models.enums import PaymentType
 
 
 class TestReceiptGeneration(unittest.TestCase):
@@ -47,7 +48,7 @@ class TestReceiptGeneration(unittest.TestCase):
                 )
             ],
             user_id=5,
-            payment_type="Efectivo"
+            payment_type=PaymentType.EFECTIVO
         )
         
         # Sample customer

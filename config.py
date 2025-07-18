@@ -1,80 +1,80 @@
 import os
-import json
+from typing import Optional
+from pydantic import Field
+try:
+    from pydantic_settings import BaseSettings, SettingsConfigDict
+except ImportError:
+    from pydantic import BaseSettings
+    SettingsConfigDict = None
 
 # Base directory for the application
-# Should be the directory containing config.py if config.py is in the root
-# Or the parent directory if config.py is in a subdirectory.
-# Assuming config.py is in the project root, it should be:
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Check if we're in test mode
 TEST_MODE = os.environ.get('TEST_MODE', 'false').lower() == 'true'
 
-# Database configuration (now uses corrected BASE_DIR)
+# Database configuration
 if TEST_MODE:
-    # Use in-memory database for tests
     DATABASE_URL = "sqlite:///:memory:"
 else:
-    # Use file-based database for normal operation
     DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'eleventa_clone.db')}"
 
-# Path to configuration file
-CONFIG_FILE = os.path.join(BASE_DIR, 'app_config.json')
-
-# Application Settings
-class Config:
-    STORE_NAME = "Mi Tienda"
-    STORE_ADDRESS = "Calle Falsa 123"
-    STORE_CUIT = "30-12345678-9"
-    STORE_IVA_CONDITION = "Responsable Inscripto"
-    STORE_PHONE = ""
+# Application Settings using Pydantic BaseSettings
+class Config(BaseSettings):
+    """Application configuration with support for .env files and environment variables."""
     
-    # Output directory for generated PDFs
-    PDF_OUTPUT_DIR = os.path.join(BASE_DIR, 'pdfs')
+    # Store information
+    store_name: str = Field(default="Mi Tienda")
+    store_address: str = Field(default="Calle Falsa 123")
+    store_cuit: str = Field(default="30-12345678-9")
+    store_iva_condition: str = Field(default="Responsable Inscripto")
+    store_phone: str = Field(default="")
+    
+    # Directories
+    pdf_output_dir: str = Field(default_factory=lambda: os.path.join(BASE_DIR, 'pdfs'))
+    
+    # Optional printer settings
+    default_printer: Optional[str] = Field(default=None)
+    
+    if SettingsConfigDict:
+        model_config = SettingsConfigDict(
+            env_file=".env",
+            env_file_encoding="utf-8",
+            case_sensitive=False,
+            env_prefix=""
+        )
+    else:
+        class Config:
+            env_file = ".env"
+            env_file_encoding = "utf-8"
+            case_sensitive = False
+        
+    # Backward compatibility properties for uppercase access
+    @property
+    def STORE_NAME(self) -> str:
+        return self.store_name
+        
+    @property
+    def STORE_ADDRESS(self) -> str:
+        return self.store_address
+        
+    @property
+    def STORE_CUIT(self) -> str:
+        return self.store_cuit
+        
+    @property
+    def STORE_IVA_CONDITION(self) -> str:
+        return self.store_iva_condition
+        
+    @property
+    def STORE_PHONE(self) -> str:
+        return self.store_phone
+        
+    @property
+    def PDF_OUTPUT_DIR(self) -> str:
+        return self.pdf_output_dir
 
-    # Add other config variables here
-    # Example: DEFAULT_PRINTER = ""
+# Create global config instance
+config = Config()
 
-    @classmethod
-    def load(cls):
-        """Load configuration from JSON file"""
-        if os.path.exists(CONFIG_FILE):
-            try:
-                with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                    config_data = json.load(f)
-                
-                # Update class attributes from loaded data
-                for key, value in config_data.items():
-                    if hasattr(cls, key):
-                        setattr(cls, key, value)
-                print(f"Configuration loaded from {CONFIG_FILE}")
-                return True
-            except Exception as e:
-                print(f"Error loading configuration: {e}")
-        else:
-            print(f"Configuration file not found. Using defaults.")
-        return False
-
-    @classmethod
-    def save(cls):
-        """Save configuration to JSON file"""
-        try:
-            # Create dictionary from class attributes (only uppercase ones)
-            config_data = {
-                key: value for key, value in cls.__dict__.items() 
-                if key.isupper() and not key.startswith('__')
-            }
-            
-            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-                json.dump(config_data, f, indent=4, ensure_ascii=False)
-            
-            print(f"Configuration saved to {CONFIG_FILE}")
-            return True
-        except Exception as e:
-            print(f"Error saving configuration: {e}")
-            return False
-
-# Try to load configuration on import
-Config.load()
-
-# Make database URL accessible directly 
+# Make database URL accessible directly

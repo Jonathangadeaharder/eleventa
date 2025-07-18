@@ -9,6 +9,7 @@ from decimal import Decimal
 from datetime import datetime
 from unittest.mock import Mock, patch, MagicMock
 
+from core.models.enums import PaymentType
 from infrastructure.reporting.document_generator import DocumentPdfGenerator
 
 
@@ -69,7 +70,7 @@ class TestDocumentPdfGenerator:
         assert generator.store_info == store_info
         assert hasattr(generator, 'styles')
     
-    @patch('infrastructure.reporting.document_generator.Config')
+    @patch('infrastructure.reporting.document_generator.config')
     def test_init_without_store_info(self, mock_config):
         """Test initialization without store info uses Config defaults."""
         mock_config.STORE_NAME = "Default Store"
@@ -88,7 +89,7 @@ class TestDocumentPdfGenerator:
         assert generator.store_info["iva_condition"] == "Responsable Inscripto"
         assert generator.store_info["logo_path"] is None
     
-    @patch('infrastructure.reporting.document_generator.Config')
+    @patch('infrastructure.reporting.document_generator.config')
     def test_init_with_none_config_values(self, mock_config):
         """Test initialization when Config values are None."""
         mock_config.STORE_NAME = None

@@ -333,9 +333,9 @@ class TestInvoicingService(unittest.TestCase):
                 "iva_condition": "Responsable Inscripto"
             }
             
-            # Mock the PDF generation by patching os.makedirs and Config
+            # Mock the PDF generation by patching os.makedirs and config
             with patch('os.makedirs') as mock_makedirs, \
-                 patch('core.services.invoicing_service.Config') as mock_config:
+                 patch('core.services.invoicing_service.config') as mock_config:
                 mock_config.PDF_OUTPUT_DIR = tempfile.gettempdir()
                 
                 result = self.service.generate_invoice_pdf(

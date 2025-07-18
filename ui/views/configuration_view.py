@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-from config import Config
+from config import config
 
 class ConfigurationView(QWidget):
     """Configuration view for editing store information."""
@@ -80,34 +80,33 @@ class ConfigurationView(QWidget):
 
     def load_configuration(self):
         """Load configuration values into the form fields."""
-        self.store_name_edit.setText(Config.STORE_NAME)
-        self.store_address_edit.setText(Config.STORE_ADDRESS)
-        self.store_cuit_edit.setText(Config.STORE_CUIT)
-        self.store_iva_edit.setText(Config.STORE_IVA_CONDITION)
-        self.store_phone_edit.setText(Config.STORE_PHONE)
+        self.store_name_edit.setText(config.STORE_NAME)
+        self.store_address_edit.setText(config.STORE_ADDRESS)
+        self.store_cuit_edit.setText(config.STORE_CUIT)
+        self.store_iva_edit.setText(config.STORE_IVA_CONDITION)
+        self.store_phone_edit.setText(config.STORE_PHONE)
 
     def save_configuration(self):
         """Save configuration values from the form fields."""
-        # Update Config class attributes
-        Config.STORE_NAME = self.store_name_edit.text()
-        Config.STORE_ADDRESS = self.store_address_edit.text()
-        Config.STORE_CUIT = self.store_cuit_edit.text()
-        Config.STORE_IVA_CONDITION = self.store_iva_edit.text()
-        Config.STORE_PHONE = self.store_phone_edit.text()
-        
-        # Save to file
-        success = Config.save()
-        
-        # Show feedback message
-        if success:
+        try:
+            # Update config instance attributes
+            config.store_name = self.store_name_edit.text()
+            config.store_address = self.store_address_edit.text()
+            config.store_cuit = self.store_cuit_edit.text()
+            config.store_iva_condition = self.store_iva_edit.text()
+            config.store_phone = self.store_phone_edit.text()
+            
+            # Show success message
             QMessageBox.information(
                 self, 
                 "Configuración Guardada", 
-                "La configuración ha sido guardada correctamente."
+                "La configuración ha sido actualizada correctamente.\n\n"
+                "Nota: Para persistir estos cambios entre sesiones, "
+                "considere usar un archivo .env en el directorio raíz."
             )
-        else:
+        except Exception as e:
             QMessageBox.warning(
                 self, 
                 "Error al Guardar", 
-                "No se pudo guardar la configuración. Revise los permisos de archivo."
-            ) 
+                f"No se pudo guardar la configuración: {str(e)}"
+            )

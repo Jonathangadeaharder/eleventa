@@ -12,7 +12,8 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.units import inch
 
-from config import Config
+from core.models.enums import PaymentType
+from config import config
 
 
 class ReportBuilder:
@@ -26,11 +27,11 @@ class ReportBuilder:
             store_info: Dictionary with store information like name, address, etc.
         """
         self.store_info = store_info or {
-            "name": Config.STORE_NAME or "Eleventa Demo Store",
-            "address": Config.STORE_ADDRESS or "123 Main St, Buenos Aires, Argentina",
-            "phone": Config.STORE_PHONE or "555-1234",
-            "cuit": Config.STORE_CUIT or "30-12345678-9",
-            "iva_condition": Config.STORE_IVA_CONDITION or "Responsable Inscripto",
+            "name": config.STORE_NAME or "Eleventa Demo Store",
+            "address": config.STORE_ADDRESS or "123 Main St, Buenos Aires, Argentina",
+            "phone": config.STORE_PHONE or "555-1234",
+            "cuit": config.STORE_CUIT or "30-12345678-9",
+            "iva_condition": config.STORE_IVA_CONDITION or "Responsable Inscripto",
             "logo_path": None  # Add logo path if available
         }
 
@@ -651,4 +652,4 @@ class ReportBuilder:
         footer = Paragraph(footer_text, footer_style)
         elements.append(footer)
         
-        return elements 
+        return elements

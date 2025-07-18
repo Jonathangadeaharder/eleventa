@@ -11,6 +11,7 @@ from infrastructure.persistence.utils import session_scope_provider
 from core.models.product import Product, Department
 from core.models.inventory import InventoryMovement
 from core.models.customer import Customer
+from core.models.enums import InventoryMovementType
 
 
 class TestUnitOfWork:
@@ -219,7 +220,7 @@ class TestUnitOfWork:
                 product_id=created_product.id,
                 user_id=domain_user.id,  # Use the test user from clean_db fixture
                 timestamp=datetime.now(),
-                movement_type="initial_stock",
+                movement_type=InventoryMovementType.INITIAL,
                 quantity=Decimal('100'),
                 description="Initial stock for complex operation test"
             )
@@ -241,7 +242,7 @@ class TestUnitOfWork:
             
             movements = uow.inventory.get_movements_for_product(product.id)
             assert len(movements) == 1
-            assert movements[0].movement_type == "initial_stock"
+            assert movements[0].movement_type == InventoryMovementType.INITIAL
             assert movements[0].quantity == Decimal('100')
 
 

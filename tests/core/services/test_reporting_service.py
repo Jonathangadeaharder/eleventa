@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
+from core.models.enums import PaymentType
 from core.services.reporting_service import ReportingService
 
 class TestReportingService:
@@ -43,7 +44,7 @@ class TestReportingService:
     @patch('core.services.reporting_service.unit_of_work')
     def test_get_sales_by_payment_type(self, mock_uow):
         expected_repo_return = [
-            {"payment_type": "Efectivo", "total_amount": 200.0, "num_sales": 5}  # Use correct keys from repo interface
+            {"payment_type": PaymentType.EFECTIVO.value, "total_amount": 200.0, "num_sales": 5}  # Use correct keys from repo interface
         ]
         
         # Set up Unit of Work mock

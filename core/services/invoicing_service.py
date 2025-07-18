@@ -16,7 +16,7 @@ from reportlab.lib.units import inch
 from core.models.invoice import Invoice
 from core.models.sale import Sale
 from core.models.customer import Customer
-from config import Config
+from config import config
 from core.exceptions import ResourceNotFoundError, ExternalServiceError
 from core.services.service_base import ServiceBase
 from core.interfaces.repository_interfaces import IInvoiceRepository
@@ -331,7 +331,7 @@ class InvoicingService(ServiceBase):
                 full_pdf_path = os.path.join(output_dir, filename)
             else:
                 # Default behavior: Use default dir and default/provided filename
-                output_dir = Config.PDF_OUTPUT_DIR
+                output_dir = config.PDF_OUTPUT_DIR
                 if not filename:
                     filename = self._generate_pdf_filename(invoice.invoice_number)
                 full_pdf_path = os.path.join(output_dir, filename)

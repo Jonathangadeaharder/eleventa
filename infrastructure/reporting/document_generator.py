@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Optional
 from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT, TA_CENTER, TA_RIGHT
 import logging # Added import
 
-from config import Config # For store_info defaults
+from config import config # For store_info defaults
 
 # Set locale for date and currency formatting
 try:
@@ -36,13 +36,13 @@ class DocumentPdfGenerator:
         """
         self.logger = logging.getLogger(self.__class__.__name__) # Added logger
         if store_info is None:
-            # Get values from Config, but use defaults if Config values are None
-            store_name = getattr(Config, 'STORE_NAME', None)
-            store_address = getattr(Config, 'STORE_ADDRESS', None)
-            store_phone = getattr(Config, 'STORE_PHONE', None)
-            store_cuit = getattr(Config, 'STORE_CUIT', None)
-            store_iva_condition = getattr(Config, 'STORE_IVA_CONDITION', None)
-            store_logo_path = getattr(Config, 'STORE_LOGO_PATH', None)
+            # Get values from config, but use defaults if config values are None
+            store_name = getattr(config, 'STORE_NAME', None)
+            store_address = getattr(config, 'STORE_ADDRESS', None)
+            store_phone = getattr(config, 'STORE_PHONE', None)
+            store_cuit = getattr(config, 'STORE_CUIT', None)
+            store_iva_condition = getattr(config, 'STORE_IVA_CONDITION', None)
+            store_logo_path = getattr(config, 'STORE_LOGO_PATH', None)
             
             self.store_info = {
                 "name": store_name if store_name is not None else "Eleventa Demo Store",
@@ -639,7 +639,7 @@ class DocumentPdfGenerator:
             story.append(Paragraph(f"Sale ID: {sale.id if sale.id is not None else 'N/A'}", self.styles['Normal']))
             story.append(Paragraph(f"Date: {sale.timestamp.strftime('%Y-%m-%d %H:%M:%S')}", self.styles['Normal']))
             if sale.payment_type:
-                story.append(Paragraph(f"Payment Type: {sale.payment_type}", self.styles['Normal']))
+                story.append(Paragraph(f"Payment Type: {sale.payment_type.value}", self.styles['Normal']))
             if sale.customer_id:
                 story.append(Paragraph(f"Customer ID: {sale.customer_id}", self.styles['Normal']))
             if sale.user_id:

@@ -16,6 +16,7 @@ from core.services.invoicing_service import InvoicingService
 from core.models.customer import Customer
 from core.models.sale import Sale, SaleItem
 from core.models.product import Product
+from core.models.enums import PaymentType
 from infrastructure.persistence.sqlite.models_mapping import ProductOrm
 from decimal import Decimal
 from core.interfaces.repository_interfaces import IInvoiceRepository
@@ -104,7 +105,7 @@ def create_customer_and_sale(db_session, sale_repo, customer_repo):
         id=None,
         customer_id=customer.id,
         items=[sale_item],
-        payment_type="cash",
+        payment_type=PaymentType.EFECTIVO,
     )
     sale = sale_repo.add_sale(sale)
     return customer, sale

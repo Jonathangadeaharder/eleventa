@@ -18,7 +18,7 @@ from core.models.invoice import Invoice
 from core.models.user import User
 from core.models.supplier import Supplier
 from core.models.purchase import PurchaseOrder, PurchaseOrderItem
-from core.models.inventory import InventoryMovement
+from core.models.enums import PaymentType
 
 # Import repositories
 from infrastructure.persistence.sqlite.repositories import (
@@ -147,7 +147,7 @@ def setup_sale_data(
             timestamp=datetime.now() - timedelta(days=i),
             items=items,
             customer_id=customer.id if customer else None,
-            payment_type="Efectivo"
+            payment_type=PaymentType.EFECTIVO.value
         )
         
         # Add the sale to the repository

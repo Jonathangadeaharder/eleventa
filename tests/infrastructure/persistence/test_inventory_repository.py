@@ -9,6 +9,7 @@ from infrastructure.persistence.sqlite.repositories import SqliteProductReposito
 from core.interfaces.repository_interfaces import IInventoryRepository
 from core.models.product import Product
 from core.models.inventory import InventoryMovement
+from core.models.enums import InventoryMovementType
 
 @pytest.fixture
 def test_product_ids(test_db_session):
@@ -48,7 +49,7 @@ def test_add_movement(test_db_session, test_product_ids, clean_movements):
     movement_data = InventoryMovement(
         product_id=test_product_ids['product1'],
         quantity=10.0,
-        movement_type="PURCHASE",
+        movement_type=InventoryMovementType.PURCHASE,
         description="Initial stock",
         user_id=1,
         related_id=101
@@ -59,7 +60,7 @@ def test_add_movement(test_db_session, test_product_ids, clean_movements):
     assert added_movement.id is not None
     assert added_movement.product_id == test_product_ids['product1']
     assert added_movement.quantity == 10.0
-    assert added_movement.movement_type == "PURCHASE"
+    assert added_movement.movement_type == InventoryMovementType.PURCHASE
     assert added_movement.description == "Initial stock"
     assert added_movement.user_id == 1
     assert added_movement.related_id == 101
@@ -69,7 +70,7 @@ def test_add_movement(test_db_session, test_product_ids, clean_movements):
     db_movement = test_db_session.query(InventoryMovementOrm).filter_by(id=added_movement.id).first()
     assert db_movement is not None
     assert db_movement.quantity == 10.0
-    assert db_movement.movement_type == "PURCHASE"
+    assert db_movement.movement_type == InventoryMovementType.PURCHASE.value
 
 def test_get_movements_for_product(test_db_session, test_product_ids, clean_movements):
     """Verify retrieving movements only for a specific product."""
@@ -77,9 +78,9 @@ def test_get_movements_for_product(test_db_session, test_product_ids, clean_move
     now = datetime.now()
     
     # Create movements for testing
-    m1 = InventoryMovement(product_id=test_product_ids['product1'], quantity=5.0, movement_type="ADJUST", timestamp=now - timedelta(hours=2))
-    m2 = InventoryMovement(product_id=test_product_ids['product1'], quantity=-2.0, movement_type="SALE", timestamp=now - timedelta(hours=1), related_id=50)
-    m3 = InventoryMovement(product_id=test_product_ids['product2'], quantity=20.0, movement_type="PURCHASE", timestamp=now) # Different product
+    m1 = InventoryMovement(product_id=test_product_ids['product1'], quantity=5.0, movement_type=InventoryMovementType.ADJUSTMENT, timestamp=now - timedelta(hours=2))
+    m2 = InventoryMovement(product_id=test_product_ids['product1'], quantity=-2.0, movement_type=InventoryMovementType.SALE, timestamp=now - timedelta(hours=1), related_id=50)
+    m3 = InventoryMovement(product_id=test_product_ids['product2'], quantity=20.0, movement_type=InventoryMovementType.PURCHASE, timestamp=now) # Different product
 
     # Add movements
     repo.add_movement(m1)
@@ -96,9 +97,9 @@ def test_get_movements_for_product(test_db_session, test_product_ids, clean_move
     # Sort them by timestamp for predictable testing
     retrieved_movements.sort(key=lambda x: x.timestamp)
     
-    assert retrieved_movements[0].movement_type == "ADJUST"
+    assert retrieved_movements[0].movement_type == InventoryMovementType.ADJUSTMENT
     assert retrieved_movements[0].quantity == 5.0
-    assert retrieved_movements[1].movement_type == "SALE"
+    assert retrieved_movements[1].movement_type == InventoryMovementType.SALE
     assert retrieved_movements[1].quantity == -2.0
     assert retrieved_movements[1].related_id == 50
     # Check if sorted by timestamp
@@ -109,8 +110,8 @@ def test_get_all_movements(test_db_session, test_product_ids, clean_movements):
     repo = SqliteInventoryRepository(test_db_session)
     now = datetime.now()
 
-    m1 = InventoryMovement(product_id=test_product_ids['product1'], quantity=1.0, movement_type="INIT", timestamp=now - timedelta(days=1))
-    m2 = InventoryMovement(product_id=test_product_ids['product2'], quantity=5.0, movement_type="PURCHASE", timestamp=now)
+    m1 = InventoryMovement(product_id=test_product_ids['product1'], quantity=1.0, movement_type=InventoryMovementType.INITIAL, timestamp=now - timedelta(days=1))
+    m2 = InventoryMovement(product_id=test_product_ids['product2'], quantity=5.0, movement_type=InventoryMovementType.PURCHASE, timestamp=now)
 
     repo.add_movement(m1)
     repo.add_movement(m2)
@@ -122,4 +123,4 @@ def test_get_all_movements(test_db_session, test_product_ids, clean_movements):
     # Check if product IDs are correct in the results
     product_ids = {m.product_id for m in all_movements}
     assert test_product_ids['product1'] in product_ids
-    assert test_product_ids['product2'] in product_ids 
+    assert test_product_ids['product2'] in product_ids

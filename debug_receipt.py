@@ -5,7 +5,7 @@ from decimal import Decimal
 from datetime import datetime
 import tempfile
 import os
-import traceback
+from core.models.enums import PaymentType
 
 g = DocumentPdfGenerator()
 
@@ -21,7 +21,7 @@ receipt_data = {
         }
     ],
     "total": Decimal('100.00'),
-    "payment_method": "Efectivo"
+    "payment_method": PaymentType.EFECTIVO.value
 }
 
 with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:

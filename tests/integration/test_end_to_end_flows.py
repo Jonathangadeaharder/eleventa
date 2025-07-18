@@ -27,6 +27,8 @@ from unittest.mock import patch, MagicMock
 from core.models.product import Product
 # Import the Customer model for verification
 from core.models.customer import Customer
+# Import PaymentType enum
+from core.models.enums import PaymentType
 # Import the repository for direct use in the mock
 from infrastructure.persistence.sqlite.repositories import SqliteProductRepository
 # Import the ORM model for direct session interaction and mapping functions
@@ -132,7 +134,7 @@ class TestSalesEndToEndFlow:
                 items_data=sale_items, 
                 customer_id=customer.id, 
                 user_id=user.id, 
-                payment_type='Efectivo'
+                payment_type=PaymentType.EFECTIVO
                 )
         
             # Verify the sale was created correctly
@@ -314,7 +316,7 @@ class TestInvoicingEndToEndFlow:
         created_sale = sale_service.create_sale(
             items_data=items_data,
             user_id=user.id,
-            payment_type='Efectivo',
+            payment_type=PaymentType.EFECTIVO,
             customer_id=customer.id
         )
         
@@ -513,7 +515,7 @@ class TestConcurrencyAndEdgeCases:
             sale1 = sale_service.create_sale(
                 sale_items_template.copy(), 
                 user_id=user.id, 
-                payment_type='Efectivo',
+                payment_type=PaymentType.EFECTIVO,
                 customer_id=customer.id
             )
             
@@ -521,7 +523,7 @@ class TestConcurrencyAndEdgeCases:
             sale2 = sale_service.create_sale(
                 sale_items_template.copy(), 
                 user_id=user.id, 
-                payment_type='Efectivo',
+                payment_type=PaymentType.EFECTIVO,
                 customer_id=customer.id
             )
             
@@ -529,7 +531,7 @@ class TestConcurrencyAndEdgeCases:
             sale3 = sale_service.create_sale(
                 sale_items_template.copy(), 
                 user_id=user.id, 
-                payment_type='Efectivo',
+                payment_type=PaymentType.EFECTIVO,
                 customer_id=customer.id
             )
             
@@ -558,7 +560,7 @@ class TestConcurrencyAndEdgeCases:
                 sale_service.create_sale(
                     over_sale_items, 
                     user_id=user.id, 
-                    payment_type='Efectivo',
+                    payment_type=PaymentType.EFECTIVO,
                     customer_id=customer.id
                 )
                 

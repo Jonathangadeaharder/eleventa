@@ -19,7 +19,7 @@ class TestPrintManager:
     def setup_method(self):
         """Set up test data."""
         # Mock the Config module directly before PrintManager is instantiated
-        with patch('config.Config') as mock_config:
+        with patch('config.config') as mock_config:
             # Set up mock config values
             mock_config.STORE_NAME = "Test Store"
             mock_config.STORE_ADDRESS = "123 Test St"
@@ -89,7 +89,7 @@ class TestPrintManager:
         with patch('infrastructure.reporting.print_utility.ReportBuilder') as mock_report_builder, \
              patch('infrastructure.reporting.print_utility.InvoiceBuilder') as mock_invoice_builder, \
              patch('infrastructure.reporting.print_utility.os.makedirs') as mock_makedirs, \
-             patch('config.Config') as mock_config:
+             patch('config.config') as mock_config:
             
             # Create a new PrintManager
             pm = PrintManager()
@@ -107,7 +107,7 @@ class TestPrintManager:
     
     def test_get_store_info(self):
         """Test the _get_store_info method."""
-        with patch('config.Config') as mock_config:
+        with patch('config.config') as mock_config:
             # Set up mock config values
             mock_config.STORE_NAME = "Test Store"
             mock_config.STORE_ADDRESS = "123 Test St"
@@ -614,7 +614,7 @@ class TestPrintManager:
     
     @patch('infrastructure.reporting.print_utility.ReportBuilder')
     @patch('infrastructure.reporting.print_utility.InvoiceBuilder')
-    @patch('config.Config')
+    @patch('config.config')
     def test_singleton_instance(self, mock_config, mock_invoice_builder, mock_report_builder):
         """Test that the singleton print_manager instance is created correctly."""
         from infrastructure.reporting.print_utility import print_manager
@@ -628,4 +628,4 @@ class TestPrintManager:
 
 
 if __name__ == '__main__':
-    pytest.main(['-xvs', __file__]) 
+    pytest.main(['-xvs', __file__])

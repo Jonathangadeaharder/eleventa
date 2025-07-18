@@ -64,13 +64,13 @@ class PrintManager:
     def _get_store_info(self) -> Dict[str, Any]:
         """Get store information for reports and receipts."""
         if self.store_info is None:
-            from config import Config
+            from config import config
             self.store_info = {
-                "name": Config.STORE_NAME or "Eleventa Demo Store",
-                "address": Config.STORE_ADDRESS or "123 Main St, Buenos Aires, Argentina",
-                "phone": Config.STORE_PHONE or "555-1234",
-                "tax_id": Config.STORE_CUIT or "30-12345678-9",
-                "iva_condition": Config.STORE_IVA_CONDITION or "Responsable Inscripto",
+                "name": config.STORE_NAME or "Eleventa Demo Store",
+                "address": config.STORE_ADDRESS or "123 Main St, Buenos Aires, Argentina",
+                "phone": config.STORE_PHONE or "555-1234",
+                "tax_id": config.STORE_CUIT or "30-12345678-9",
+                "iva_condition": config.STORE_IVA_CONDITION or "Responsable Inscripto",
             }
         return self.store_info
     
@@ -312,4 +312,4 @@ class PrintManager:
             return False
 
 # Create a singleton instance
-print_manager = PrintManager() 
+print_manager = PrintManager()

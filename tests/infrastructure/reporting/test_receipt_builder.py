@@ -6,6 +6,7 @@ from datetime import datetime
 import pytest
 
 from core.models.sale import Sale, SaleItem
+from core.models.enums import PaymentType
 from infrastructure.reporting.receipt_builder import (
     format_currency, format_sale_date, format_item_row, generate_receipt_pdf
 )
@@ -40,7 +41,7 @@ class TestReceiptBuilder(unittest.TestCase):
             timestamp=datetime(2025, 4, 13, 14, 30, 0),
             items=[self.item1, self.item2],
             user_id=5,
-            payment_type="Efectivo"
+            payment_type=PaymentType.EFECTIVO.value
         )
         
         # Add user name and customer name attributes that would be added by the service

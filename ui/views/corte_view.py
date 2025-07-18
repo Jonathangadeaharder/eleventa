@@ -10,6 +10,7 @@ import logging # Added logging import
 
 from core.services.corte_service import CorteService
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
+from core.models.enums import PaymentType
 from ui.models.table_models import CashDrawerEntryTableModel
 from ui.widgets.filter_dropdowns import PeriodFilterWidget, FilterBoxWidget, FilterDropdown
 from infrastructure.reporting.print_utility import print_manager as default_print_manager, PrintType, PrintDestination
@@ -96,16 +97,16 @@ class CorteView(QWidget):
         
         # Placeholder rows - will be replaced with actual data
         payment_layout.addWidget(QLabel("Efectivo:"), 0, 0)
-        self.payment_type_labels["Efectivo"] = QLabel("$0.00")
-        payment_layout.addWidget(self.payment_type_labels["Efectivo"], 0, 1)
+        self.payment_type_labels[PaymentType.EFECTIVO.value] = QLabel("$0.00")
+        payment_layout.addWidget(self.payment_type_labels[PaymentType.EFECTIVO.value], 0, 1)
         
         payment_layout.addWidget(QLabel("Tarjeta:"), 1, 0)
-        self.payment_type_labels["Tarjeta"] = QLabel("$0.00")
-        payment_layout.addWidget(self.payment_type_labels["Tarjeta"], 1, 1)
+        self.payment_type_labels[PaymentType.TARJETA.value] = QLabel("$0.00")
+        payment_layout.addWidget(self.payment_type_labels[PaymentType.TARJETA.value], 1, 1)
         
         payment_layout.addWidget(QLabel("Crédito:"), 2, 0)
-        self.payment_type_labels["Crédito"] = QLabel("$0.00")
-        payment_layout.addWidget(self.payment_type_labels["Crédito"], 2, 1)
+        self.payment_type_labels[PaymentType.CREDITO.value] = QLabel("$0.00")
+        payment_layout.addWidget(self.payment_type_labels[PaymentType.CREDITO.value], 2, 1)
         
         # Add payment types layout to frame
         payment_frame.setLayout(payment_layout)
@@ -271,7 +272,7 @@ class CorteView(QWidget):
             for payment_type, amount in corte_data['sales_by_payment_type'].items():
                 # Create label if it doesn't exist
                 if payment_type not in self.payment_type_labels:
-                    payment_layout = self.payment_type_labels["Efectivo"].parent().layout()
+                    payment_layout = self.payment_type_labels[PaymentType.EFECTIVO.value].parent().layout()
                     row = payment_layout.rowCount()
                     payment_layout.addWidget(QLabel(f"{payment_type}:"), row, 0)
                     self.payment_type_labels[payment_type] = QLabel("$0.00")

@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QApplication, QDialog
 from PySide6.QtCore import Qt
 
 # --- Config and Logging Setup (Step 0) ---
-from config import Config # Removed load_config, setup_logging
+from config import config # Removed load_config, setup_logging
 # load_config() # Load config early - This is now done within config.py on import
 # setup_logging() # Setup logging based on config - This function is not defined in config.py
 

@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from core.services.corte_service import CorteService
 from core.models.sale import Sale, SaleItem
+from core.models.enums import PaymentType
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
 
 
@@ -39,28 +40,28 @@ class TestCorteService(unittest.TestCase):
             Mock(
                 id=1, 
                 timestamp=datetime(2025, 4, 13, 10, 15),
-                payment_type="Efectivo",
+                payment_type=PaymentType.EFECTIVO,
                 total=Decimal("150.00")
             ),
             # Card sale
             Mock(
                 id=2, 
                 timestamp=datetime(2025, 4, 13, 11, 30),
-                payment_type="Tarjeta",
+                payment_type=PaymentType.TARJETA,
                 total=Decimal("250.00")
             ),
             # Another cash sale
             Mock(
                 id=3, 
                 timestamp=datetime(2025, 4, 13, 14, 45),
-                payment_type="Efectivo",
+                payment_type=PaymentType.EFECTIVO,
                 total=Decimal("75.50")
             ),
             # Credit sale
             Mock(
                 id=4, 
                 timestamp=datetime(2025, 4, 13, 16, 20),
-                payment_type="Crédito",
+                payment_type=PaymentType.CREDITO,
                 total=Decimal("430.00")
             )
         ]
@@ -109,9 +110,9 @@ class TestCorteService(unittest.TestCase):
         # Assert results
         self.assertEqual(result["starting_balance"], Decimal("1000.00"))
         self.assertEqual(result["total_sales"], Decimal("905.50"))  # Sum of all sales
-        self.assertEqual(result["sales_by_payment_type"]["Efectivo"], Decimal("225.50"))  # Sum of cash sales
-        self.assertEqual(result["sales_by_payment_type"]["Tarjeta"], Decimal("250.00"))
-        self.assertEqual(result["sales_by_payment_type"]["Crédito"], Decimal("430.00"))
+        self.assertEqual(result["sales_by_payment_type"][PaymentType.EFECTIVO.value], Decimal("225.50"))  # Sum of cash sales
+        self.assertEqual(result["sales_by_payment_type"][PaymentType.TARJETA.value], Decimal("250.00"))
+        self.assertEqual(result["sales_by_payment_type"][PaymentType.CREDITO.value], Decimal("430.00"))
         self.assertEqual(result["cash_in_total"], Decimal("500.00"))
         self.assertEqual(result["cash_out_total"], Decimal("200.00"))
         
@@ -154,10 +155,10 @@ class TestCorteService(unittest.TestCase):
         """Test the _calculate_sales_by_payment_type method."""
         # Create mock sales
         mock_sales = [
-            Mock(payment_type="Efectivo", total=Decimal("100.00")),
-            Mock(payment_type="Tarjeta", total=Decimal("200.00")),
-            Mock(payment_type="Efectivo", total=Decimal("50.00")),
-            Mock(payment_type="Crédito", total=Decimal("300.00")),
+            Mock(payment_type=PaymentType.EFECTIVO, total=Decimal("100.00")),
+            Mock(payment_type=PaymentType.TARJETA, total=Decimal("200.00")),
+            Mock(payment_type=PaymentType.EFECTIVO, total=Decimal("50.00")),
+            Mock(payment_type=PaymentType.CREDITO, total=Decimal("300.00")),
             Mock(payment_type=None, total=Decimal("75.00"))  # Test handling of None payment type
         ]
         
@@ -166,9 +167,9 @@ class TestCorteService(unittest.TestCase):
         
         # Verify results
         self.assertEqual(len(result), 4)  # Efectivo, Tarjeta, Crédito, Sin especificar
-        self.assertEqual(result["Efectivo"], Decimal("150.00"))
-        self.assertEqual(result["Tarjeta"], Decimal("200.00"))
-        self.assertEqual(result["Crédito"], Decimal("300.00"))
+        self.assertEqual(result[PaymentType.EFECTIVO.value], Decimal("150.00"))
+        self.assertEqual(result[PaymentType.TARJETA.value], Decimal("200.00"))
+        self.assertEqual(result[PaymentType.CREDITO.value], Decimal("300.00"))
         self.assertEqual(result["Sin especificar"], Decimal("75.00"))
 
     def test_register_closing_balance(self):

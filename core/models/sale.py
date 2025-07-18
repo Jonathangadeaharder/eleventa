@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
+from core.models.enums import PaymentType
 
 # Assuming Product model is defined elsewhere or not needed directly for definition
 # from core.models.product import Product
@@ -41,7 +42,7 @@ class Sale:
     customer_id: Optional[int] = None # Added customer ID
     is_credit_sale: bool = False # Added credit flag
     user_id: Optional[int] = None # User who made the sale
-    payment_type: Optional[str] = None # e.g., 'Efectivo', 'Tarjeta', 'Crédito'
+    payment_type: Optional["PaymentType"] = None # e.g., 'Efectivo', 'Tarjeta', 'Crédito'
     # status: str = "COMPLETED" # Example status
 
     @property

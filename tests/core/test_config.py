@@ -1,41 +1,35 @@
 import os
-import json
 import pytest
-import tempfile
-import config
-from config import Config
+from config import config
 
 
-def test_load_defaults_when_no_file(tmp_path, monkeypatch):
-    temp_file = tmp_path / "nonexistent.json"
-    # Point to a non-existent file
-    monkeypatch.setattr(config, "CONFIG_FILE", str(temp_file))
-    # Ensure no file exists
-    if temp_file.exists():
-        temp_file.unlink()
-    # Use a sentinel to check unchanged default
-    prev = Config.STORE_NAME
-    result = Config.load()
-    assert result is False
-    assert Config.STORE_NAME == prev
+def test_config_defaults():
+    """Test that config has default values."""
+    assert config.store_name == "Mi Tienda"
+    assert config.store_address == "Calle Falsa 123"
+    assert config.store_cuit == "30-12345678-9"
+    assert config.store_iva_condition == "Responsable Inscripto"
+    assert config.store_phone == ""
 
 
-def test_save_and_load_cycle(tmp_path, monkeypatch):
-    temp_file = tmp_path / "app_config.json"
-    monkeypatch.setattr(config, "CONFIG_FILE", str(temp_file))
-    # Set custom values
-    Config.STORE_NAME = "Test Store"
-    Config.STORE_ADDRESS = "123 Test Ave"
-    # Save should succeed
-    assert Config.save() is True
-    # File created
-    assert temp_file.exists()
-    data = json.loads(temp_file.read_text(encoding='utf-8'))
-    assert data.get("STORE_NAME") == "Test Store"
-    assert data.get("STORE_ADDRESS") == "123 Test Ave"
-    # Modify file externally
-    data["STORE_NAME"] = "Loaded Store"
-    temp_file.write_text(json.dumps(data), encoding='utf-8')
-    # Load should pick up change
-    assert Config.load() is True
-    assert Config.STORE_NAME == "Loaded Store"
+def test_config_backward_compatibility():
+    """Test that uppercase properties work for backward compatibility."""
+    assert config.STORE_NAME == config.store_name
+    assert config.STORE_ADDRESS == config.store_address
+    assert config.STORE_CUIT == config.store_cuit
+    assert config.STORE_IVA_CONDITION == config.store_iva_condition
+    assert config.STORE_PHONE == config.store_phone
+    assert config.PDF_OUTPUT_DIR == config.pdf_output_dir
+
+
+def test_config_env_override(monkeypatch):
+    """Test that environment variables override defaults."""
+    # Set environment variable
+    monkeypatch.setenv("STORE_NAME", "Test Store from Env")
+    
+    # Create new config instance to pick up env var
+    from config import Config
+    test_config = Config()
+    
+    assert test_config.store_name == "Test Store from Env"
+    assert test_config.STORE_NAME == "Test Store from Env"

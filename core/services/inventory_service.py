@@ -3,6 +3,7 @@ from decimal import Decimal
 from datetime import datetime
 
 from core.models.inventory import InventoryMovement
+from core.models.enums import InventoryMovementType
 from core.models.product import Product
 from core.services.service_base import ServiceBase
 from infrastructure.persistence.unit_of_work import UnitOfWork, unit_of_work
@@ -46,7 +47,7 @@ class InventoryService(ServiceBase):
             movement = InventoryMovement(
                 product_id=product_id,
                 quantity=quantity,
-                movement_type="PURCHASE",
+                movement_type=InventoryMovementType.PURCHASE,
                 description=notes,
                 user_id=user_id
             )
@@ -94,7 +95,7 @@ class InventoryService(ServiceBase):
             movement = InventoryMovement(
                 product_id=product_id,
                 quantity=quantity,
-                movement_type="ADJUSTMENT",
+                movement_type=InventoryMovementType.ADJUSTMENT,
                 description=reason,
                 user_id=user_id
             )
@@ -155,7 +156,7 @@ class InventoryService(ServiceBase):
             movement = InventoryMovement(
                 product_id=product_id,
                 quantity=-quantity,
-                movement_type="SALE",
+                movement_type=InventoryMovementType.SALE,
                 description=f"Venta #{sale_id}",
                 related_id=sale_id,
                 user_id=user_id

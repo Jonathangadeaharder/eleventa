@@ -2,6 +2,7 @@ import pytest
 import os
 from unittest.mock import MagicMock, patch
 from core.models import Sale, Product, Customer
+from core.models.enums import PaymentType
 from core.services.sale_service import SaleService
 from decimal import Decimal
 
@@ -45,7 +46,7 @@ def test_create_sale_success(mock_unit_of_work, mock_sale_service, product1, sam
     # Arrange
     items_data = [{'product_id': 1, 'quantity': '2'}]
     user_id = 1
-    payment_type = 'cash'
+    payment_type = PaymentType.EFECTIVO
 
     # Create a mock sale object with expected attributes
     mock_sale = MagicMock(spec=Sale)

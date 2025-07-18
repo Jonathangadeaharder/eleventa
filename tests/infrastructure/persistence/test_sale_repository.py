@@ -17,6 +17,7 @@ if project_root not in sys.path:
 from core.models.sale import Sale, SaleItem
 from core.models.product import Product, Department
 from core.models.customer import Customer
+from core.models.enums import PaymentType
 from core.interfaces.repository_interfaces import ISaleRepository
 
 # Import application ORM models
@@ -94,7 +95,7 @@ def test_add_sale(test_db_session, create_product, create_customer):
     # Create sale with items
     sale = Sale(
         timestamp=datetime.now(),
-        payment_type="CASH",
+        payment_type=PaymentType.EFECTIVO,
         customer_id=customer.id,
         user_id=1
     )
@@ -159,7 +160,7 @@ def test_get_sales_summary_by_period(test_db_session, create_product, create_cus
     yesterday = fixed_now - timedelta(days=1)    # Oct 26, 2023
     
     # Day 1 sales (Oct 25, 2023)
-    sale1 = Sale(timestamp=two_days_ago, payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale1 = Sale(timestamp=two_days_ago, payment_type=PaymentType.EFECTIVO, customer_id=customer.id, user_id=1)
     sale1.items = [
         SaleItem(product_id=product1.id, quantity=Decimal('3'), unit_price=Decimal('10.0'),
                  product_code=product1.code, product_description=product1.description)
@@ -167,7 +168,7 @@ def test_get_sales_summary_by_period(test_db_session, create_product, create_cus
     repository.add_sale(sale1)
     
     # Day 2 sales (2 sales)
-    sale2 = Sale(timestamp=yesterday, payment_type="CARD", customer_id=customer.id, user_id=1)
+    sale2 = Sale(timestamp=yesterday, payment_type=PaymentType.TARJETA, customer_id=customer.id, user_id=1)
     sale2.items = [
         SaleItem(product_id=product1.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
                  product_code=product1.code, product_description=product1.description),
@@ -176,7 +177,7 @@ def test_get_sales_summary_by_period(test_db_session, create_product, create_cus
     ]
     repository.add_sale(sale2)
     
-    sale3 = Sale(timestamp=yesterday + timedelta(hours=3), payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale3 = Sale(timestamp=yesterday + timedelta(hours=3), payment_type=PaymentType.EFECTIVO, customer_id=customer.id, user_id=1)
     sale3.items = [
         SaleItem(product_id=product2.id, quantity=Decimal('1'), unit_price=Decimal('20.0'),
                  product_code=product2.code, product_description=product2.description)
@@ -229,7 +230,7 @@ def test_get_sales_by_payment_type(test_db_session, create_product, create_custo
     
     # Cash sales (2)
     for _ in range(2):
-        sale = Sale(timestamp=now, payment_type="CASH", customer_id=customer.id, user_id=1)
+        sale = Sale(timestamp=now, payment_type=PaymentType.EFECTIVO, customer_id=customer.id, user_id=1)
         sale.items = [
             SaleItem(product_id=product.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
                      product_code=product.code, product_description=product.description)
@@ -238,7 +239,7 @@ def test_get_sales_by_payment_type(test_db_session, create_product, create_custo
     
     # Card sales (3)
     for _ in range(3):
-        sale = Sale(timestamp=now, payment_type="CARD", customer_id=customer.id, user_id=1)
+        sale = Sale(timestamp=now, payment_type=PaymentType.TARJETA, customer_id=customer.id, user_id=1)
         sale.items = [
             SaleItem(product_id=product.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
                      product_code=product.code, product_description=product.description)
@@ -254,8 +255,8 @@ def test_get_sales_by_payment_type(test_db_session, create_product, create_custo
     assert len(payment_summary) == 2
     
     # Find each payment type in results
-    cash_summary = [s for s in payment_summary if s['payment_type'] == "CASH"][0]
-    card_summary = [s for s in payment_summary if s['payment_type'] == "CARD"][0]
+    cash_summary = [s for s in payment_summary if s['payment_type'] == PaymentType.EFECTIVO][0]
+    card_summary = [s for s in payment_summary if s['payment_type'] == PaymentType.TARJETA][0]
     
     assert cash_summary['num_sales'] == 2
     assert cash_summary['total_sales'] == 20.0  # 2 sales * $10
@@ -298,7 +299,7 @@ def test_get_sales_by_department(test_db_session, create_department, create_prod
     
     # Department 1 sales (2 sales * $10 = $20)
     for _ in range(2):
-        sale = Sale(timestamp=datetime.now(), payment_type="CASH", customer_id=customer.id, user_id=1)
+        sale = Sale(timestamp=datetime.now(), payment_type=PaymentType.EFECTIVO, customer_id=customer.id, user_id=1)
         sale.items = [
             SaleItem(product_id=added_product1.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
                      product_code=added_product1.code, product_description=added_product1.description)
@@ -306,7 +307,7 @@ def test_get_sales_by_department(test_db_session, create_department, create_prod
         repository.add_sale(sale)
     
     # Department 2 sales (1 sale * $30 = $30)
-    sale = Sale(timestamp=datetime.now(), payment_type="CARD", customer_id=customer.id, user_id=1)
+    sale = Sale(timestamp=datetime.now(), payment_type=PaymentType.TARJETA, customer_id=customer.id, user_id=1)
     sale.items = [
         SaleItem(product_id=added_product2.id, quantity=Decimal('1'), unit_price=Decimal('30.0'),
                  product_code=added_product2.code, product_description=added_product2.description)
@@ -352,14 +353,14 @@ def test_get_sales_by_customer(test_db_session, create_product, create_customer)
     now = datetime.now()
     
     # Sales for customer 1 (more sales/volume)
-    sale1 = Sale(timestamp=now - timedelta(days=5), payment_type="CASH", customer_id=customer1.id, user_id=1)
+    sale1 = Sale(timestamp=now - timedelta(days=5), payment_type=PaymentType.EFECTIVO, customer_id=customer1.id, user_id=1)
     sale1.items = [
         SaleItem(product_id=product.id, quantity=Decimal('3'), unit_price=Decimal('10.0'),
                   product_code=product.code, product_description=product.description)
     ]
     repository.add_sale(sale1)
     
-    sale2 = Sale(timestamp=now - timedelta(days=3), payment_type="CASH", customer_id=customer1.id, user_id=1)
+    sale2 = Sale(timestamp=now - timedelta(days=3), payment_type=PaymentType.EFECTIVO, customer_id=customer1.id, user_id=1)
     sale2.items = [
         SaleItem(product_id=product.id, quantity=Decimal('2'), unit_price=Decimal('10.0'),
                   product_code=product.code, product_description=product.description)
@@ -367,7 +368,7 @@ def test_get_sales_by_customer(test_db_session, create_product, create_customer)
     repository.add_sale(sale2)
     
     # Sale for customer 2 (less volume)
-    sale3 = Sale(timestamp=now - timedelta(days=2), payment_type="CARD", customer_id=customer2.id, user_id=1)
+    sale3 = Sale(timestamp=now - timedelta(days=2), payment_type=PaymentType.TARJETA, customer_id=customer2.id, user_id=1)
     sale3.items = [
         SaleItem(product_id=product.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
                   product_code=product.code, product_description=product.description)
@@ -405,7 +406,7 @@ def test_get_top_selling_products(test_db_session, create_product, create_custom
     
     # Create sales with different products
     # Product 1: 5 units
-    sale1 = Sale(timestamp=datetime.now(), payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale1 = Sale(timestamp=datetime.now(), payment_type=PaymentType.EFECTIVO, customer_id=customer.id, user_id=1)
     sale1.items = [
         SaleItem(product_id=product1.id, quantity=Decimal('5'), unit_price=Decimal('10.0'),
                  product_code=product1.code, product_description=product1.description)
@@ -413,7 +414,7 @@ def test_get_top_selling_products(test_db_session, create_product, create_custom
     repository.add_sale(sale1)
     
     # Product 2: 3 units
-    sale2 = Sale(timestamp=datetime.now(), payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale2 = Sale(timestamp=datetime.now(), payment_type=PaymentType.EFECTIVO, customer_id=customer.id, user_id=1)
     sale2.items = [
         SaleItem(product_id=product2.id, quantity=Decimal('3'), unit_price=Decimal('20.0'),
                  product_code=product2.code, product_description=product2.description)
@@ -421,7 +422,7 @@ def test_get_top_selling_products(test_db_session, create_product, create_custom
     repository.add_sale(sale2)
     
     # Product 3: 1 unit
-    sale3 = Sale(timestamp=datetime.now(), payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale3 = Sale(timestamp=datetime.now(), payment_type=PaymentType.EFECTIVO, customer_id=customer.id, user_id=1)
     sale3.items = [
         SaleItem(product_id=product3.id, quantity=Decimal('1'), unit_price=Decimal('30.0'),
                  product_code=product3.code, product_description=product3.description)
@@ -461,7 +462,7 @@ def test_calculate_profit_for_period(test_db_session, create_product, create_cus
     now = datetime.now()
     
     # First sale - should be included in period
-    sale1 = Sale(timestamp=now, payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale1 = Sale(timestamp=now, payment_type=PaymentType.EFECTIVO, customer_id=customer.id, user_id=1)
     sale1.items = [
         SaleItem(product_id=product1.id, quantity=Decimal('5'), unit_price=Decimal('10.0'),
                  product_code=product1.code, product_description=product1.description)
@@ -469,7 +470,7 @@ def test_calculate_profit_for_period(test_db_session, create_product, create_cus
     repository.add_sale(sale1)
     
     # Second sale - should be included in period
-    sale2 = Sale(timestamp=now, payment_type="CARD", customer_id=customer.id, user_id=1)
+    sale2 = Sale(timestamp=now, payment_type=PaymentType.TARJETA, customer_id=customer.id, user_id=1)
     sale2.items = [
         SaleItem(product_id=product2.id, quantity=Decimal('2'), unit_price=Decimal('20.0'),
                  product_code=product2.code, product_description=product2.description)
@@ -503,7 +504,7 @@ def test_get_sale_by_id(test_db_session, create_product, create_customer):
     repository = SqliteSaleRepository(test_db_session)
     
     # Create a sale
-    sale = Sale(timestamp=datetime.now(), payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale = Sale(timestamp=datetime.now(), payment_type=PaymentType.EFECTIVO, customer_id=customer.id, user_id=1)
     sale.items = [
         SaleItem(product_id=product.id, quantity=Decimal('3'), unit_price=Decimal('10.0'),
                  product_code=product.code, product_description=product.description)
@@ -517,7 +518,7 @@ def test_get_sale_by_id(test_db_session, create_product, create_customer):
     # Verify the sale was retrieved correctly
     assert retrieved_sale is not None
     assert retrieved_sale.id == saved_sale.id
-    assert retrieved_sale.payment_type == "CASH"
+    assert retrieved_sale.payment_type == PaymentType.EFECTIVO
     assert retrieved_sale.customer_id == customer.id
     
     # Verify items
@@ -545,7 +546,7 @@ def test_get_sales_by_period_filtering(test_db_session, create_product, create_c
     two_days_ago = now - timedelta(days=2)
     
     # Day 1 sale
-    sale1 = Sale(timestamp=two_days_ago, payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale1 = Sale(timestamp=two_days_ago, payment_type=PaymentType.EFECTIVO, customer_id=customer.id, user_id=1)
     sale1.items = [
         SaleItem(product_id=product.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
                  product_code=product.code, product_description=product.description)
@@ -553,7 +554,7 @@ def test_get_sales_by_period_filtering(test_db_session, create_product, create_c
     repository.add_sale(sale1)
     
     # Day 2 sale
-    sale2 = Sale(timestamp=yesterday, payment_type="CARD", customer_id=customer.id, user_id=1)
+    sale2 = Sale(timestamp=yesterday, payment_type=PaymentType.TARJETA, customer_id=customer.id, user_id=1)
     sale2.items = [
         SaleItem(product_id=product.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
                  product_code=product.code, product_description=product.description)
@@ -561,7 +562,7 @@ def test_get_sales_by_period_filtering(test_db_session, create_product, create_c
     repository.add_sale(sale2)
     
     # Day 3 (today) sale
-    sale3 = Sale(timestamp=now, payment_type="CASH", customer_id=customer.id, user_id=1)
+    sale3 = Sale(timestamp=now, payment_type=PaymentType.EFECTIVO, customer_id=customer.id, user_id=1)
     sale3.items = [
         SaleItem(product_id=product.id, quantity=Decimal('1'), unit_price=Decimal('10.0'),
                  product_code=product.code, product_description=product.description)
@@ -583,7 +584,7 @@ def test_get_sales_by_period_filtering(test_db_session, create_product, create_c
     end_yesterday = yesterday + timedelta(hours=1)
     sales_yesterday = repository.get_sales_by_period(start_yesterday, end_yesterday)
     assert len(sales_yesterday) == 1
-    assert sales_yesterday[0].payment_type == "CARD"  # The payment type we used for yesterday's sale
+    assert sales_yesterday[0].payment_type == PaymentType.TARJETA  # The payment type we used for yesterday's sale
     
     # Two days (yesterday and today)
     start_recent = yesterday - timedelta(hours=1)

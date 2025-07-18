@@ -33,6 +33,7 @@ from core.models.customer import Customer
 from core.models.sale import Sale, SaleItem
 from core.models.product import Product
 from core.models.user import User
+from core.models.enums import PaymentType
 from core.interfaces.repository_interfaces import IInvoiceRepository
 
 from infrastructure.persistence.sqlite.repositories import (
@@ -154,7 +155,7 @@ class TestInvoicingIntegration:
             customer_id=customer.id,
             items=[sale_item],
             user_id=test_user.id,
-            payment_type="Efectivo"
+            payment_type=PaymentType.EFECTIVO
         )
 
         sale = sale_repo.add_sale(sale)
@@ -398,8 +399,8 @@ class TestInvoicingIntegration:
             pdf_path = tmp.name
             
         try:
-            # Generate PDF with Config.PDF_OUTPUT_DIR patch
-            with patch("core.services.invoicing_service.Config") as mock_config:
+            # Generate PDF with config.PDF_OUTPUT_DIR patch
+            with patch("core.services.invoicing_service.config") as mock_config:
                 # Set PDF_OUTPUT_DIR to temp directory
                 mock_config.PDF_OUTPUT_DIR = tempfile.gettempdir()
                 

@@ -2,7 +2,8 @@ from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict, List, Optional, Any
 
-from core.models.cash_drawer import CashDrawerEntryType, CashDrawerEntry
+from core.models.enums import PaymentType
+from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
 from core.services.service_base import ServiceBase
 from infrastructure.persistence.unit_of_work import UnitOfWork, unit_of_work
 
@@ -56,7 +57,7 @@ class CorteService(ServiceBase):
             cash_out_total = sum(abs(entry.amount) for entry in cash_out_entries)
             
             # Calculate expected cash in drawer
-            cash_sales = sales_by_payment_type.get("Efectivo", Decimal("0.00"))
+            cash_sales = sales_by_payment_type.get(PaymentType.EFECTIVO.value, Decimal("0.00"))
             expected_cash = starting_balance + cash_sales + cash_in_total - cash_out_total
             
             # Total sales across all payment types
@@ -111,7 +112,7 @@ class CorteService(ServiceBase):
         result = {}
         
         for sale in sales:
-            payment_type = sale.payment_type or "Sin especificar"
+            payment_type = sale.payment_type.value if sale.payment_type else PaymentType.SIN_ESPECIFICAR.value
             if payment_type not in result:
                 result[payment_type] = Decimal("0.00")
             result[payment_type] += sale.total

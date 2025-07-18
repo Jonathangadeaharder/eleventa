@@ -16,6 +16,7 @@ from core.models.customer import Customer
 from core.models.sale import Sale, SaleItem
 from core.models.invoice import Invoice
 from core.models.user import User
+from core.models.enums import PaymentType
 # from core.models.supplier import Supplier
 # from core.models.purchase import PurchaseOrder, PurchaseOrderItem
 
@@ -105,7 +106,7 @@ def create_sale(
     customer_id: Optional[int] = None,
     is_credit_sale: bool = False,
     user_id: Optional[int] = None,
-    payment_type: Optional[str] = "Efectivo"
+    payment_type: Optional[PaymentType] = PaymentType.EFECTIVO
 ) -> Sale:
     """Create a sale with default test values."""
     if timestamp is None:
@@ -247,7 +248,7 @@ class SaleBuilder:
         self.customer_id = None
         self.is_credit_sale = False
         self.user_id = None
-        self.payment_type = "Efectivo"
+        self.payment_type = PaymentType.EFECTIVO
         
     def with_id(self, id: int):
         self.id = id
@@ -279,10 +280,10 @@ class SaleBuilder:
         
     def as_credit_sale(self):
         self.is_credit_sale = True
-        self.payment_type = "Crédito"
+        self.payment_type = PaymentType.CREDITO
         return self
         
-    def with_payment_type(self, payment_type: str):
+    def with_payment_type(self, payment_type: PaymentType):
         self.payment_type = payment_type
         return self
         
@@ -468,4 +469,4 @@ def test_data_factory(clean_db):
             session.commit()
             return sale
     
-    return TestDataFactory() 
+    return TestDataFactory()
