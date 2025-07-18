@@ -4,7 +4,7 @@ import os
 from decimal import Decimal
 from datetime import datetime
 
-from core.services.sale_service import SaleService, create_receipt_pdf
+from core.services.sale_service import SaleService
 from core.models.sale import Sale, SaleItem
 from core.models.customer import Customer
 
@@ -59,8 +59,8 @@ class TestReceiptGeneration(unittest.TestCase):
         )
 
     @patch('core.services.sale_service.unit_of_work')
-    @patch('core.services.sale_service.create_receipt_pdf')
-    def test_generate_receipt_pdf_success(self, mock_create_receipt, mock_uow):
+    @patch('infrastructure.reporting.document_generator.DocumentPdfGenerator.generate_receipt_from_sale')
+    def test_generate_receipt_pdf_success(self, mock_generate_receipt, mock_uow):
         """Test successfully generating a receipt PDF."""
         # Setup Unit of Work mock
         mock_context = MagicMock()
@@ -68,7 +68,7 @@ class TestReceiptGeneration(unittest.TestCase):
         
         # Configure mocks
         mock_context.sales.get_by_id.return_value = self.sale
-        mock_create_receipt.return_value = os.path.join("receipts", "test", "receipt_101.pdf")
+        mock_generate_receipt.return_value = True
         
         # Call the method
         output_dir = os.path.join("receipts", "test")
@@ -77,14 +77,14 @@ class TestReceiptGeneration(unittest.TestCase):
         # Assert expected behavior
         mock_context.sales.get_by_id.assert_called_once_with(101)
         expected_path = os.path.join(output_dir, f"receipt_{self.sale.id}.pdf")
-        mock_create_receipt.assert_called_once_with(self.sale, expected_path)
+        mock_generate_receipt.assert_called_once_with(self.sale, expected_path)
         
         # Verify result
-        self.assertEqual(result, mock_create_receipt.return_value)
+        self.assertEqual(result, expected_path)
 
     @patch('core.services.sale_service.unit_of_work')
-    @patch('core.services.sale_service.create_receipt_pdf')
-    def test_generate_receipt_pdf_with_customer(self, mock_create_receipt, mock_uow):
+    @patch('infrastructure.reporting.document_generator.DocumentPdfGenerator.generate_receipt_from_sale')
+    def test_generate_receipt_pdf_with_customer(self, mock_generate_receipt, mock_uow):
         """Test generating a receipt PDF for a sale with a customer."""
         # Setup Unit of Work mock
         mock_context = MagicMock()
@@ -95,7 +95,7 @@ class TestReceiptGeneration(unittest.TestCase):
         
         # Configure mocks
         mock_context.sales.get_by_id.return_value = self.sale
-        mock_create_receipt.return_value = os.path.join("receipts", "test", "receipt_101.pdf")
+        mock_generate_receipt.return_value = True
         
         # Call the method
         output_dir = os.path.join("receipts", "test")
@@ -104,8 +104,8 @@ class TestReceiptGeneration(unittest.TestCase):
         # Since the implementation doesn't actually call customer_service.get_customer_by_id,
         # we just verify that the output path is correct
         expected_path = os.path.join(output_dir, f"receipt_{self.sale.id}.pdf")
-        mock_create_receipt.assert_called_once_with(self.sale, expected_path)
-        self.assertEqual(result, mock_create_receipt.return_value)
+        mock_generate_receipt.assert_called_once_with(self.sale, expected_path)
+        self.assertEqual(result, expected_path)
 
     @patch('core.services.sale_service.unit_of_work')
     def test_generate_receipt_pdf_sale_not_found(self, mock_uow):
@@ -123,8 +123,8 @@ class TestReceiptGeneration(unittest.TestCase):
             self.sale_service.generate_receipt_pdf(101, output_dir)
             
     @patch('core.services.sale_service.unit_of_work')
-    @patch('core.services.sale_service.create_receipt_pdf')
-    def test_generate_receipt_pdf_filename_format(self, mock_create_receipt, mock_uow):
+    @patch('infrastructure.reporting.document_generator.DocumentPdfGenerator.generate_receipt_from_sale')
+    def test_generate_receipt_pdf_filename_format(self, mock_generate_receipt, mock_uow):
         """Test that the PDF filename is formatted correctly."""
         # Setup Unit of Work mock
         mock_context = MagicMock()
@@ -132,7 +132,7 @@ class TestReceiptGeneration(unittest.TestCase):
         
         # Configure mocks
         mock_context.sales.get_by_id.return_value = self.sale
-        mock_create_receipt.return_value = "/path/to/generated/receipt.pdf"
+        mock_generate_receipt.return_value = True
         
         # Call the method
         output_dir = os.path.join("receipts", "test")
@@ -140,7 +140,7 @@ class TestReceiptGeneration(unittest.TestCase):
         
         # Verify the filename format
         expected_path = os.path.join(output_dir, f"receipt_{self.sale.id}.pdf")
-        mock_create_receipt.assert_called_once_with(self.sale, expected_path)
+        mock_generate_receipt.assert_called_once_with(self.sale, expected_path)
 
 
 if __name__ == '__main__':

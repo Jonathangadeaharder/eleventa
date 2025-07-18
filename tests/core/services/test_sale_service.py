@@ -139,9 +139,9 @@ def test_get_sale_by_id(mock_unit_of_work, mock_sale_service):
     mock_unit_of_work.assert_called_once()
     mock_uow.sales.get_by_id.assert_called_once_with(sale_id)
 
-@patch('core.services.sale_service.create_receipt_pdf')
+@patch('infrastructure.reporting.document_generator.DocumentPdfGenerator.generate_receipt_from_sale')
 @patch('core.services.sale_service.unit_of_work')
-def test_generate_receipt_pdf(mock_unit_of_work, mock_create_receipt, mock_sale_service):
+def test_generate_receipt_pdf(mock_unit_of_work, mock_generate_receipt, mock_sale_service):
     """Test PDF receipt generation."""
     # Arrange
     sale_id = 1
@@ -157,15 +157,15 @@ def test_generate_receipt_pdf(mock_unit_of_work, mock_create_receipt, mock_sale_
     mock_uow.sales.get_by_id.return_value = mock_sale
     mock_unit_of_work.return_value.__enter__.return_value = mock_uow
     
-    # Configure the mock to return the expected path
-    mock_create_receipt.return_value = expected_path
+    # Configure the mock to return success
+    mock_generate_receipt.return_value = True
 
     # Act
     result = mock_sale_service.generate_receipt_pdf(sale_id, output_dir)
 
     # Assert
     assert result == expected_path
-    mock_create_receipt.assert_called_once_with(mock_sale, expected_path)
+    mock_generate_receipt.assert_called_once_with(mock_sale, expected_path)
     
     # Verify the unit of work was used
     mock_unit_of_work.assert_called_once()

@@ -615,6 +615,193 @@ class DocumentPdfGenerator:
             self.logger.error(f"Error generating presupuesto PDF: {e}") # Changed from print
             return False
 
+    def generate_receipt_from_sale(self, sale, filename: str) -> bool:
+        """
+        Generate a PDF receipt for a Sale object (migrated from sale_service.py).
+        
+        Args:
+            sale: Sale object containing sale data
+            filename: Absolute path where to save the PDF
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            self._ensure_directory_exists(filename)
+            doc = SimpleDocTemplate(filename, pagesize=letter)
+            story = []
+
+            # Title
+            story.append(Paragraph("Receipt", self.styles['h1']))
+            story.append(Spacer(1, 0.2 * inch))
+
+            # Sale Info
+            story.append(Paragraph(f"Sale ID: {sale.id if sale.id is not None else 'N/A'}", self.styles['Normal']))
+            story.append(Paragraph(f"Date: {sale.timestamp.strftime('%Y-%m-%d %H:%M:%S')}", self.styles['Normal']))
+            if sale.payment_type:
+                story.append(Paragraph(f"Payment Type: {sale.payment_type}", self.styles['Normal']))
+            if sale.customer_id:
+                story.append(Paragraph(f"Customer ID: {sale.customer_id}", self.styles['Normal']))
+            if sale.user_id:
+                story.append(Paragraph(f"User ID: {sale.user_id}", self.styles['Normal']))
+            story.append(Spacer(1, 0.2 * inch))
+
+            # Items Table
+            data = [["Code", "Description", "Qty", "Unit Price", "Subtotal"]]
+            for item in sale.items:
+                data.append([
+                    item.product_code if item.product_code else "N/A",
+                    item.product_description if item.product_description else "N/A",
+                    f"{item.quantity:.2f}",
+                    f"${item.unit_price:.2f}",
+                    f"${item.subtotal:.2f}"
+                ])
+            
+            # Add total row to data
+            data.append(["", "", "", Paragraph("<b>TOTAL:</b>", self.styles['Normal']), Paragraph(f"<b>${sale.total:.2f}</b>", self.styles['Normal'])])
+
+            table = Table(data, colWidths=[0.7*inch, 2.5*inch, 0.5*inch, 1*inch, 1*inch])
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4F81BD')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                ('BACKGROUND', (0, 1), (-1, -2), colors.HexColor('#DCE6F1')),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                ('SPAN', (0, -1), (2, -1)),
+                ('ALIGN', (3, -1), (4, -1), 'RIGHT'),
+                ('FONTNAME', (3, -1), (4, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (3, -1), (4, -1), 10),
+                ('VALIGN', (3, -1), (4, -1), 'MIDDLE'),
+                ('BOTTOMPADDING', (0, -1), (-1, -1), 8),
+                ('TOPPADDING', (0, -1), (-1, -1), 8),
+                ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#C5D9F1')),
+            ]))
+            story.append(table)
+            story.append(Spacer(1, 0.3 * inch))
+
+            # Footer Message
+            story.append(Paragraph("Thank you for your purchase!", self.styles['Normal']))
+
+            doc.build(story)
+            self.logger.info(f"Receipt {filename} generated successfully for sale ID {sale.id}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error generating receipt PDF for sale ID {sale.id}: {e}")
+            return False
+
+    def generate_presupuesto_content(self, filename: str, items: List[Any], total_amount: Decimal, 
+                                   customer_name: Optional[str] = None, 
+                                   user_name: Optional[str] = None, 
+                                   presupuesto_id: Optional[str] = None) -> bool:
+        """
+        Generate a PDF for a 'Presupuesto' (Quote) - migrated from sale_service.py.
+        
+        Args:
+            filename: Absolute path where to save the PDF
+            items: List of items (can be dicts or objects with attributes)
+            total_amount: The total amount for the presupuesto
+            customer_name: Optional name of the customer
+            user_name: Optional name of the user preparing the quote
+            presupuesto_id: Optional ID for the presupuesto
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            self._ensure_directory_exists(filename)
+            doc = SimpleDocTemplate(filename, pagesize=letter)
+            story = []
+
+            # Title
+            title_style = self.styles['h1']
+            title_style.alignment = 1  # Center alignment
+            story.append(Paragraph("PRESUPUESTO", title_style))
+            story.append(Spacer(1, 0.3 * inch))
+
+            # Presupuesto Info
+            info_style = self.styles['Normal']
+            info_style.leading = 14
+
+            if presupuesto_id:
+                story.append(Paragraph(f"<b>Presupuesto ID:</b> {presupuesto_id}", info_style))
+            story.append(Paragraph(f"<b>Fecha:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", info_style))
+            if customer_name:
+                story.append(Paragraph(f"<b>Cliente:</b> {customer_name}", info_style))
+            if user_name:
+                story.append(Paragraph(f"<b>Atendido por:</b> {user_name}", info_style))
+            story.append(Spacer(1, 0.2 * inch))
+
+            # Items Table
+            data = [[
+                Paragraph("<b>Código</b>", self.styles['Normal']),
+                Paragraph("<b>Descripción</b>", self.styles['Normal']),
+                Paragraph("<b>Cant.</b>", self.styles['Normal']),
+                Paragraph("<b>P. Unit.</b>", self.styles['Normal']),
+                Paragraph("<b>Subtotal</b>", self.styles['Normal'])
+            ]]
+
+            for item in items:
+                try:
+                    quantity_val = Decimal(item.get('quantity') if isinstance(item, dict) else getattr(item, 'quantity', 0))
+                    unit_price_val = Decimal(item.get('unit_price') if isinstance(item, dict) else getattr(item, 'unit_price', 0))
+                    subtotal_val = Decimal(item.get('subtotal') if isinstance(item, dict) else getattr(item, 'subtotal', 0))
+
+                    data.append([
+                        item.get('product_code') if isinstance(item, dict) else getattr(item, 'product_code', "N/A"),
+                        item.get('product_description') if isinstance(item, dict) else getattr(item, 'product_description', "N/A"),
+                        f"{quantity_val:.2f}",
+                        f"${unit_price_val:.2f}",
+                        f"${subtotal_val:.2f}"
+                    ])
+                except Exception as e:
+                    self.logger.error(f"Error processing item for PDF: {item}. Error: {e}")
+                    data.append(["Error", "Error processing item", "", "", ""])
+
+            # Total row
+            total_decimal = Decimal(total_amount)
+            data.append([
+                "", "", "", 
+                Paragraph("<b>TOTAL:</b>", self.styles['Normal']), 
+                Paragraph(f"<b>${total_decimal:.2f}</b>", self.styles['Normal'])
+            ])
+
+            table = Table(data, colWidths=[0.8*inch, 3*inch, 0.6*inch, 1*inch, 1.1*inch])
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#CCCCCC')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('ALIGN', (2, 1), (2, -1), 'RIGHT'),
+                ('ALIGN', (3, 1), (3, -1), 'RIGHT'),
+                ('ALIGN', (4, 1), (4, -1), 'RIGHT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -2), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            story.append(table)
+            story.append(Spacer(1, 0.3 * inch))
+
+            # Footer Notes
+            footer_style = self.styles['Normal']
+            footer_style.fontSize = 9
+            story.append(Paragraph("Este presupuesto es válido por 15 días a partir de la fecha de emisión.", footer_style))
+            story.append(Paragraph("Los precios están sujetos a cambios sin previo aviso después de la fecha de validez.", footer_style))
+            story.append(Paragraph("Este documento no es un comprobante fiscal.", footer_style))
+
+            doc.build(story)
+            return True
+        except Exception as e:
+            self.logger.error(f"Error building PDF '{filename}': {str(e)}")
+            return False
+
 # Example Usage (for testing, can be removed later)
 if __name__ == '__main__':
     # Sample Data (mimicking what services would provide)
