@@ -13,6 +13,7 @@ class SessionScopeProvider:
     def __init__(self):
         self._default_session_factory = None
         self._current_session_factory = None
+        self._test_session = None  # For test mode where we want to reuse the same session
     
     def set_default_session_factory(self, session_factory: Callable) -> None:
         """
@@ -41,13 +42,28 @@ class SessionScopeProvider:
         """
         return self._current_session_factory or self._default_session_factory
     
+    def set_test_session(self, session: Optional[Any]) -> None:
+        """
+        Set a test session to be reused across all get_session calls.
+        This is useful for testing where we want all operations to use the same session.
+        
+        Args:
+            session: The session to reuse, or None to clear test mode
+        """
+        self._test_session = session
+    
     def get_session(self) -> Any:
         """
-        Get a new session using the current factory.
+        Get a session. In test mode, returns the test session. Otherwise, creates a new session.
         
         Returns:
-            A new session
+            A session
         """
+        # If we have a test session, return it
+        if self._test_session is not None:
+            return self._test_session
+        
+        # Otherwise, create a new session using the factory
         session_factory = self.get_session_factory()
         if session_factory is None:
             raise ValueError("No session factory has been set. Make sure to call set_default_session_factory or set_session_factory first.")

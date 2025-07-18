@@ -32,11 +32,11 @@ def test_simple_db_session(clean_db):
     assert result == 1, "Basic SQL query should work"
     
     # Verify user was created correctly
-    assert user.username == "testuser", "Test user should have correct username"
+    assert user.username.startswith("clean_db_testuser_"), "Test user should have correct username prefix"
     
     # Verify we can query the user from the database directly
     result = session.execute(
         text("SELECT username FROM users WHERE id = :user_id"),
         {"user_id": user.id}
     ).scalar()
-    assert result == "testuser", "User should be queryable from the database" 
+    assert result == user.username, "User should be queryable from the database"

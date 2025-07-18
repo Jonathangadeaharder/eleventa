@@ -71,7 +71,17 @@ class UnitOfWork:
             )
         
         try:
-            self.session = self.session_factory()
+            # Check if we're in a test environment where get_session should be used instead
+            # This allows tests to provide a pre-configured session with proper isolation
+            try:
+                self.session = session_scope_provider.get_session()
+                self._session_created_by_factory = False  # Test session, don't close it
+                logging.debug("Using test session from session_scope_provider")
+            except Exception as e:
+                # Fallback to session factory if get_session doesn't work
+                logging.debug(f"get_session failed with {type(e).__name__}: {e}, falling back to session factory")
+                self.session = self.session_factory()
+                self._session_created_by_factory = True  # We created it, we should close it
         except Exception as e:
             logging.error(f"Failed to create database session: {e}")
             raise ValueError(f"Database connection error: {e}") from e
@@ -110,6 +120,7 @@ class UnitOfWork:
                 self.session.rollback()
             else:
                 # No exception, commit the transaction
+                # Always commit to ensure data persists across UnitOfWork instances
                 self.session.commit()
         except Exception as e:
             # Error during commit/rollback
@@ -120,23 +131,26 @@ class UnitOfWork:
                 logging.error(f"Additional error during rollback: {rollback_error}")
             raise
         finally:
-            # Always close the session
-            try:
-                self.session.close()
-            except Exception as close_error:
-                logging.error(f"Error closing session: {close_error}")
-            finally:
-                self.session = None
-                # Clear repository references
-                self.departments = None
-                self.products = None
-                self.inventory = None
-                self.sales = None
-                self.customers = None
-                self.invoices = None
-                self.credit_payments = None
-                self.users = None
-                self.cash_drawer = None
+            # Don't close the session if it came from session_scope_provider (test environment)
+            # In test environments, the session is managed by the test framework
+            if getattr(self, '_session_created_by_factory', True):
+                try:
+                    self.session.close()
+                except Exception as close_error:
+                    logging.error(f"Error closing session: {close_error}")
+            
+            # Always clear references
+            self.session = None
+            # Clear repository references
+            self.departments = None
+            self.products = None
+            self.inventory = None
+            self.sales = None
+            self.customers = None
+            self.invoices = None
+            self.credit_payments = None
+            self.users = None
+            self.cash_drawer = None
     
     def commit(self):
         """Manually commit the current transaction.
@@ -153,6 +167,7 @@ class UnitOfWork:
         
         try:
             self.session.commit()
+            logging.debug("Transaction committed manually")
         except Exception as e:
             logging.error(f"Error during manual commit: {e}")
             self.session.rollback()
@@ -172,6 +187,7 @@ class UnitOfWork:
         
         try:
             self.session.rollback()
+            logging.debug("Transaction rolled back manually")
         except Exception as e:
             logging.error(f"Error during manual rollback: {e}")
             raise ValueError(f"Database rollback error: {e}") from e

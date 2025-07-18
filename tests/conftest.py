@@ -41,7 +41,15 @@ def test_engine():
     else:
         db_url = TEST_DB_URL
         
-    engine = create_engine(db_url, echo=False)
+    # Use StaticPool for in-memory SQLite to ensure all tests use the same connection.
+    # This is crucial for test isolation with in-memory databases, especially when
+    # tests might run in multiple threads (e.g., with pytest-xdist).
+    engine = create_engine(
+        db_url,
+        echo=False,
+        poolclass=sqlalchemy.pool.StaticPool,
+        connect_args={"check_same_thread": False}  # Needed for multi-threaded test runners
+    )
     
     # Ensure models are mapped
     ensure_all_models_mapped()
@@ -56,28 +64,18 @@ def test_engine():
     Base.metadata.drop_all(engine)
 
 @pytest.fixture(scope="function")
-def test_db_session(test_engine):
-    """Create a new database session for a test."""
-    # Connect to the database and create a session
-    connection = test_engine.connect()
-    transaction = connection.begin()
+def test_db_session(clean_db):
+    """Create a new database session for a test.
     
-    # Create a session bound to the connection
-    Session = sessionmaker(bind=connection)
-    session = Session()
+    DEPRECATED: This fixture is deprecated in favor of clean_db.
+    It now delegates to clean_db for consistency and proper isolation.
     
-    # Return session for the test to use
-    yield session
-    
-    # Cleanup after test
-    session.close()
-    
-    # Check if transaction is still active before attempting to roll it back
-    # This is the correct way to check transaction state in SQLAlchemy
-    if transaction.is_active:
-        transaction.rollback()
-    
-    connection.close()
+    Returns:
+        session: Database session (first element of clean_db tuple)
+    """
+    # Extract just the session from clean_db tuple
+    session, _ = clean_db
+    return session
 
 @pytest.fixture(scope="session", autouse=True)
 def verify_test_database():
@@ -292,12 +290,33 @@ def clean_db(request, test_engine):
         
         # Start a nested transaction (savepoint) for true transactional testing
         savepoint = session.begin_nested()
+
+        # Ensure that after each commit, a new nested transaction (savepoint) is started automatically. This guarantees
+        # that each test remains isolated even if the code under test calls session.commit().
+        from sqlalchemy import event
+        @event.listens_for(session, "after_transaction_end")
+        def restart_savepoint(sess, trans):
+            # If we're ending the nested transaction, start a new one so that further operations
+            # continue to be isolated within the outer transaction.
+            if trans.nested and not trans._parent.nested:
+                sess.begin_nested()
         
-        # Patch the session_scope_provider's get_session method to return our test session
-        with patch.object(session_scope_provider, 'get_session', return_value=session):
+        # Override session.commit to prevent committing the outer transaction.  Many tests call
+        # `session.commit()` only to flush changes; committing the real connection transaction would
+        # break our isolation strategy.  We therefore replace it with a flush-only variant.
+        def _isolation_safe_commit():
+            """Flush pending changes but keep the outer transaction open."""
+            session.flush()
+        session.commit = _isolation_safe_commit  # type: ignore[attr-defined]
+
+        # Set the test session and patch get_session_factory to ensure UnitOfWork works properly
+        session_scope_provider.set_test_session(session)
+        with patch.object(session_scope_provider, 'get_session_factory', return_value=TestSessionFactory):
             # Add a default test user for convenience in other tests
-            # Let SQLite auto-assign the ID to avoid conflicts
-            test_user_orm = UserOrm(username="clean_db_testuser", password_hash="hash", is_active=True, is_admin=True)
+            # Generate a unique username for each test to avoid UNIQUE constraint violations
+            import uuid
+            unique_username = f"clean_db_testuser_{uuid.uuid4().hex[:8]}"
+            test_user_orm = UserOrm(username=unique_username, password_hash="hash", is_active=True, is_admin=True)
             session.add(test_user_orm)
             session.flush()  # Flush to make the user available within the transaction and get the auto-assigned ID
             
@@ -316,6 +335,9 @@ def clean_db(request, test_engine):
             savepoint.rollback()
         
     finally:
+        # Clear the test session
+        session_scope_provider.set_test_session(None)
+        
         # Close the session
         session.close()
         
