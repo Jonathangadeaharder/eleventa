@@ -1,5 +1,6 @@
 import os
 from typing import Optional
+from pathlib import Path
 from pydantic import Field
 try:
     from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,11 +14,31 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Check if we're in test mode
 TEST_MODE = os.environ.get('TEST_MODE', 'false').lower() == 'true'
 
+def get_app_data_dir() -> Path:
+    """
+    Determines the appropriate user-specific data directory for the application.
+    """
+    # For Windows, use %LOCALAPPDATA%
+    if os.name == 'nt':
+        app_data_path = Path(os.environ.get('LOCALAPPDATA', ''))
+    # For other OS (macOS, Linux), use a standard dot-folder in the home directory
+    else:
+        app_data_path = Path.home()
+
+    # Create the application-specific directory
+    app_dir = app_data_path / 'Eleventa'
+    app_dir.mkdir(parents=True, exist_ok=True)
+    return app_dir
+
+# Define the path for the SQLite database
+APP_DATA_DIR = get_app_data_dir()
+DATABASE_PATH = APP_DATA_DIR / 'eleventa.db'
+
 # Database configuration
 if TEST_MODE:
     DATABASE_URL = "sqlite:///:memory:"
 else:
-    DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'eleventa_clone.db')}"
+    DATABASE_URL = f"sqlite:///{DATABASE_PATH.resolve()}"
 
 # Application Settings using Pydantic BaseSettings
 class Config(BaseSettings):

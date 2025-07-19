@@ -4,9 +4,13 @@ from PySide6.QtWidgets import QApplication, QDialog
 from PySide6.QtCore import Qt
 
 # --- Config and Logging Setup (Step 0) ---
-from config import config # Removed load_config, setup_logging
+from config import config, DATABASE_URL # Import the dynamically generated URL
 # load_config() # Load config early - This is now done within config.py on import
 # setup_logging() # Setup logging based on config - This function is not defined in config.py
+
+# --- Alembic Migration Imports ---
+from alembic.config import Config
+from alembic import command
 
 # --- Core Service and Repository Imports (Step 1) ---
 # Services (alphabetical)
@@ -39,6 +43,38 @@ from infrastructure.persistence.sqlite.repositories import (
 
 # --- Database Initialization (Step 2) ---
 from infrastructure.persistence.sqlite.database import init_db
+
+def run_migrations():
+    """
+    Programmatically runs Alembic migrations to ensure the database is up-to-date.
+    """
+    # Alembic needs to know where to find its configuration and scripts.
+    # When frozen, the executable's path can be used to find bundled files.
+    if getattr(sys, 'frozen', False):
+        # If the application is run as a bundle, the PyInstaller bootloader
+        # extends the sys module by a flag frozen=True and sets the app
+        # path into sys._MEIPASS.
+        bundle_dir = sys._MEIPASS
+    else:
+        # In a normal development environment
+        bundle_dir = os.path.dirname(os.path.abspath(__file__))
+
+    alembic_cfg_path = os.path.join(bundle_dir, 'alembic.ini')
+    alembic_script_location = os.path.join(bundle_dir, 'alembic')
+
+    try:
+        print("Running database migrations...")
+        alembic_cfg = Config(alembic_cfg_path)
+        alembic_cfg.set_main_option("script_location", alembic_script_location)
+        alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
+        command.upgrade(alembic_cfg, "head")
+        print("Migrations complete.")
+    except Exception as e:
+        print(f"Error running migrations: {e}")
+        # In a real application, you might want to show an error dialog here
+        # and exit gracefully.
+        sys.exit(1)
+
 def main(test_mode=False, test_user=None, mock_services=None):
     """
     Initializes and runs the Eleventa application.
@@ -71,8 +107,12 @@ def main(test_mode=False, test_user=None, mock_services=None):
     if sys.platform == 'win32':
         os.environ['QT_QPA_PLATFORM'] = 'windows:darkmode=0'
 
-    # --- Database Initialization ---
-    init_db()
+    # --- Database Initialization and Migration ---
+    # The init_db() function from the original code, which creates tables
+    # from SQLAlchemy's Base.metadata, is now superseded by Alembic's
+    # migration system. It should be removed or commented out.
+    # init_db() # REMOVE THIS LINE
+    run_migrations() # ADD THIS LINE
 
     # --- UI Imports (AFTER QApplication and init_db) ---
     import ui.resources.resources

@@ -1,0 +1,54 @@
+{
+  "pyinstaller_hints": {
+    "hidden_imports": [
+      "ui.resources.resources",
+      "PySide6.QtCore",
+      "PySide6.QtWidgets",
+      "PySide6.QtGui",
+      "SQLAlchemy",
+      "alembic",
+      "bcrypt",
+      "ui.resources.resources"
+    ],
+    "datas": [
+      [
+        "C:\\Users\\Jonandrop\\Documents\\eleventa\\alembic\\env.py",
+        "alembic"
+      ],
+      [
+        "C:\\Users\\Jonandrop\\Documents\\eleventa\\alembic\\script.py.mako",
+        "alembic"
+      ],
+      [
+        "C:\\Users\\Jonandrop\\Documents\\eleventa\\alembic\\versions\\20241220_120000_add_cost_price_to_sale_items.py",
+        "alembic\\versions"
+      ],
+      [
+        "C:\\Users\\Jonandrop\\Documents\\eleventa\\alembic.ini",
+        "."
+      ],
+      [
+        "C:\\Users\\Jonandrop\\Documents\\eleventa\\app_config.json",
+        "."
+      ],
+      [
+        "C:\\Users\\Jonandrop\\Documents\\eleventa\\ui\\style.qss",
+        "ui"
+      ]
+    ],
+    "binaries": [],
+    "excludes": [
+      "tkinter",
+      "matplotlib",
+      "numpy",
+      "scipy"
+    ]
+  },
+  "build_info": {
+    "build_time": "2025-07-19T14:04:43.506521",
+    "python_version": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+    "platform": "win32",
+    "project_root": "C:\\Users\\Jonandrop\\Documents\\eleventa",
+    "git_commit": "58a81d2a2ba758cfca4fd437a186ac78ffc79878"
+  }
+}
