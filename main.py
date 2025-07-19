@@ -33,13 +33,7 @@ from infrastructure.persistence.sqlite.models_mapping import (
     SaleItemOrm, SaleOrm, UserOrm # Removed SupplierOrm, PurchaseOrderOrm, PurchaseOrderItemOrm
 )
 
-# Repositories (alphabetical - these are used by services via factories)
-from infrastructure.persistence.sqlite.repositories import (
-    SqliteCashDrawerRepository, SqliteCreditPaymentRepository, SqliteCustomerRepository,
-    SqliteDepartmentRepository, SqliteInventoryRepository, SqliteInvoiceRepository,
-    SqliteProductRepository, SqliteSaleRepository, # Removed SqlitePurchaseOrderRepository
-    SqliteUserRepository # Removed SqliteSupplierRepository
-)
+# Repository imports removed - services now use Unit of Work pattern
 
 # --- Database Initialization (Step 2) ---
 from infrastructure.persistence.sqlite.database import init_db
@@ -133,21 +127,10 @@ def main(test_mode=False, test_user=None, mock_services=None):
         user_service = mock_services.get('user_service')
         cash_drawer_service = mock_services.get('cash_drawer_service')
     else:
-        # --- Repository Factories (defined locally within main) ---
-        def get_inventory_repo(session): return SqliteInventoryRepository(session)
-        def get_product_repo(session): return SqliteProductRepository(session)
-        def get_dept_repo(session): return SqliteDepartmentRepository(session)
-        def get_sale_repo(session): return SqliteSaleRepository(session)
-        def get_customer_repo(session): return SqliteCustomerRepository(session)
-        def get_credit_payment_repo(session): return SqliteCreditPaymentRepository(session)
-        def get_cash_drawer_repo(session): return SqliteCashDrawerRepository(session)
-        def get_invoice_repo(session): return SqliteInvoiceRepository(session)
-        def get_user_repo(session): return SqliteUserRepository(session)
-        # def get_supplier_repo(session): return SqliteSupplierRepository(session) # Removed
-        # def get_po_repo(session): return SqlitePurchaseOrderRepository(session) # Removed
+        # Repository factories are no longer needed as services use Unit of Work pattern
 
-        # --- Service Instantiation (using factories) ---
-        user_service = UserService(user_repo_factory=get_user_repo)
+        # --- Service Instantiation (using Unit of Work pattern) ---
+        user_service = UserService()
 
         try:
             print("Attempting to add admin user...")
@@ -164,47 +147,19 @@ def main(test_mode=False, test_user=None, mock_services=None):
         except Exception as e:
             print(f"An unexpected error occurred during admin user creation: {e}")
 
-        product_service = ProductService(
-            product_repo_factory=get_product_repo,
-            department_repo_factory=get_dept_repo
-        )
-
-        inventory_service = InventoryService(
-            inventory_repo_factory=get_inventory_repo,
-            product_repo_factory=get_product_repo
-        )
-
-        customer_service = CustomerService(
-            customer_repo_factory=get_customer_repo,
-            credit_payment_repo_factory=get_credit_payment_repo
-        )
-
+        product_service = ProductService()
+        inventory_service = InventoryService()
+        customer_service = CustomerService()
+        
         sale_service = SaleService(
-            sale_repo_factory=get_sale_repo,
-            product_repo_factory=get_product_repo,
-            customer_repo_factory=get_customer_repo,
             inventory_service=inventory_service,
             customer_service=customer_service
         )
 
-        corte_service = CorteService(
-            sale_repo_factory=get_sale_repo,
-            cash_drawer_repo_factory=get_cash_drawer_repo
-        )
-
-        invoicing_service = InvoicingService(
-            invoice_repo_factory=get_invoice_repo,
-            sale_repo_factory=get_sale_repo,
-            customer_repo_factory=get_customer_repo
-        )
-
-        reporting_service = ReportingService(
-            sale_repo_factory=get_sale_repo
-        )
-
-        cash_drawer_service = CashDrawerService(
-            cash_drawer_repo_factory=get_cash_drawer_repo
-        )
+        corte_service = CorteService()
+        invoicing_service = InvoicingService()
+        reporting_service = ReportingService()
+        cash_drawer_service = CashDrawerService()
 
     if not test_mode:
         try:

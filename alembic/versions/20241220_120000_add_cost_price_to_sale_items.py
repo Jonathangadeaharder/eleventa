@@ -16,11 +16,40 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Create users table
+    op.create_table('users',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('username', sa.String(length=50), nullable=False),
+        sa.Column('password_hash', sa.String(length=255), nullable=False),
+        sa.Column('email', sa.String(length=100), nullable=True),
+        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column('is_admin', sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('username')
+    )
+    
     # Create departments table
     op.create_table('departments',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('name', sa.String(length=100), nullable=True),
         sa.Column('description', sa.String(length=255), nullable=True),
+        sa.PrimaryKeyConstraint('id')
+    )
+    
+    # Create customers table
+    op.create_table('customers',
+        sa.Column('id', sa.String(), nullable=False),  # UUID as string
+        sa.Column('name', sa.String(length=100), nullable=False),
+        sa.Column('email', sa.String(length=100), nullable=True),
+        sa.Column('phone', sa.String(length=20), nullable=True),
+        sa.Column('address', sa.String(length=255), nullable=True),
+        sa.Column('cuit', sa.String(length=15), nullable=True),
+        sa.Column('iva_condition', sa.String(length=50), nullable=True),
+        sa.Column('credit_limit', sa.Numeric(precision=12, scale=2), nullable=False, server_default=sa.text("'0.0'")),
+        sa.Column('credit_balance', sa.Numeric(precision=12, scale=2), nullable=False, server_default=sa.text("'0.0'")),
+        sa.Column('created_at', sa.DateTime(), nullable=False),
+        sa.Column('updated_at', sa.DateTime(), nullable=True),
+        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.PrimaryKeyConstraint('id')
     )
 
@@ -55,11 +84,58 @@ def upgrade() -> None:
     # Create sales table
     op.create_table('sales',
         sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('timestamp', sa.DateTime(), nullable=True),
-        sa.Column('customer_id', sa.Integer(), nullable=True), # Assuming customer table might exist or be added later
-        sa.Column('is_credit_sale', sa.Boolean(), nullable=True),
-        sa.Column('user_id', sa.Integer(), nullable=True), # Assuming user table might exist or be added later
+        sa.Column('date_time', sa.DateTime(), nullable=False),
+        sa.Column('total_amount', sa.Numeric(precision=12, scale=2), nullable=False, server_default=sa.text("'0.00'")),
+        sa.Column('customer_id', sa.String(), nullable=True),  # UUID as string
+        sa.Column('is_credit_sale', sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column('user_id', sa.Integer(), nullable=True),
         sa.Column('payment_type', sa.String(length=50), nullable=True),
+        sa.Column('notes', sa.String(length=500), nullable=True),
+        sa.ForeignKeyConstraint(['customer_id'], ['customers.id'], ),
+        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+        sa.PrimaryKeyConstraint('id')
+    )
+    
+    # Create inventory_movements table
+    op.create_table('inventory_movements',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('product_id', sa.Integer(), nullable=False),
+        sa.Column('quantity', sa.Numeric(precision=15, scale=3), nullable=False),
+        sa.Column('movement_type', sa.String(length=20), nullable=False),
+        sa.Column('timestamp', sa.DateTime(), nullable=False),
+        sa.Column('description', sa.String(length=255), nullable=True),
+        sa.Column('related_id', sa.Integer(), nullable=True),
+        sa.Column('user_id', sa.Integer(), nullable=True),
+        sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),
+        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+        sa.PrimaryKeyConstraint('id')
+    )
+    
+    # Create credit_payments table
+    op.create_table('credit_payments',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('customer_id', sa.String(), nullable=False),  # UUID as string
+        sa.Column('user_id', sa.Integer(), nullable=False),
+        sa.Column('amount', sa.Numeric(precision=10, scale=2), nullable=False),
+        sa.Column('timestamp', sa.DateTime(), nullable=False),
+        sa.Column('notes', sa.String(length=255), nullable=True),
+        sa.ForeignKeyConstraint(['customer_id'], ['customers.id'], ),
+        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+        sa.PrimaryKeyConstraint('id')
+    )
+    
+    # Create cash_drawer_entries table
+    op.create_table('cash_drawer_entries',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('timestamp', sa.DateTime(), nullable=False),
+        sa.Column('entry_type', sa.String(), nullable=False),
+        sa.Column('amount', sa.Numeric(precision=12, scale=2), nullable=False),
+        sa.Column('description', sa.Text(), nullable=True),
+        sa.Column('user_id', sa.Integer(), nullable=True),
+        sa.Column('drawer_id', sa.Integer(), nullable=True),
+        sa.Column('related_sale_id', sa.Integer(), nullable=True),
+        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+        sa.ForeignKeyConstraint(['related_sale_id'], ['sales.id'], ),
         sa.PrimaryKeyConstraint('id')
     )
 
@@ -105,6 +181,11 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table('invoices')
     op.drop_table('sale_items')
+    op.drop_table('cash_drawer_entries')
+    op.drop_table('credit_payments')
+    op.drop_table('inventory_movements')
     op.drop_table('sales')
     op.drop_table('products')
+    op.drop_table('customers')
     op.drop_table('departments')
+    op.drop_table('users')
