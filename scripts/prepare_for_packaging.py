@@ -245,11 +245,11 @@ def main():
         installed_packages, missing_packages = check_dependencies()
         
         if missing_packages:
-            print(f"   ✗ Missing packages: {', '.join(missing_packages)}")
+            print(f"   [FAIL] Missing packages: {', '.join(missing_packages)}")
             print("   Please install missing packages before packaging.")
             return 1
         else:
-            print("   ✓ All required packages are installed")
+            print("   [OK] All required packages are installed")
             if args.verbose:
                 for package, version in installed_packages.items():
                     print(f"     {package}: {version}")
@@ -259,11 +259,11 @@ def main():
         available_tools, missing_tools = check_pyside6_tools()
         
         if missing_tools:
-            print(f"   ✗ Missing tools: {', '.join(missing_tools)}")
+            print(f"   [FAIL] Missing tools: {', '.join(missing_tools)}")
             print("   Please ensure PySide6 tools are in PATH.")
             return 1
         else:
-            print("   ✓ All required PySide6 tools are available")
+            print("   [OK] All required PySide6 tools are available")
             if args.verbose:
                 for tool, version in available_tools.items():
                     print(f"     {tool}: {version}")
@@ -284,17 +284,17 @@ def main():
                     if success:
                         verify_success, verify_error = verify_compilation(output_file)
                         if verify_success:
-                            print(f"   ✓ Compiled: {qrc_file.name}")
+                            print(f"   [OK] Compiled: {qrc_file.name}")
                             success_count += 1
                         else:
-                            print(f"   ✗ Verification failed: {verify_error}")
+                            print(f"   [FAIL] Verification failed: {verify_error}")
                     else:
-                        print(f"   ✗ Failed: {error}")
+                        print(f"   [FAIL] Failed: {error}")
                 
                 if success_count == len(qrc_files):
-                    print(f"   ✓ All {success_count} resource files compiled successfully")
+                    print(f"   [OK] All {success_count} resource files compiled successfully")
                 else:
-                    print(f"   ✗ {len(qrc_files) - success_count} resource files failed to compile")
+                    print(f"   [FAIL] {len(qrc_files) - success_count} resource files failed to compile")
                     return 1
         
         # Step 4: Find data files
@@ -302,23 +302,23 @@ def main():
         data_files = find_data_files(project_root)
         
         if data_files:
-            print(f"   ✓ Found {len(data_files)} data file categories")
+            print(f"   [OK] Found {len(data_files)} data file categories")
             if args.verbose:
                 for category, files in data_files:
                     print(f"     {category}: {len(files)} files")
         else:
-            print("   ! No additional data files found")
+            print("   [WARN] No additional data files found")
         
         # Step 5: Check resource imports
         print("\n5. Checking resource imports...")
         import_issues = check_resource_imports(project_root)
         
         if import_issues:
-            print(f"   ! Found {len(import_issues)} potential issues:")
+            print(f"   [WARN] Found {len(import_issues)} potential issues:")
             for issue in import_issues:
                 print(f"     {issue}")
         else:
-            print("   ✓ No resource import issues found")
+            print("   [OK] No resource import issues found")
         
         # Step 6: Generate PyInstaller hints
         print("\n6. Generating packaging hints...")
@@ -334,14 +334,14 @@ def main():
             output_path = Path(args.output_hints)
             with open(output_path, 'w') as f:
                 json.dump(packaging_config, f, indent=2)
-            print(f"   ✓ Packaging hints saved to: {output_path}")
+            print(f"   [OK] Packaging hints saved to: {output_path}")
         else:
             hints_file = project_root / 'packaging_hints.json'
             with open(hints_file, 'w') as f:
                 json.dump(packaging_config, f, indent=2)
-            print(f"   ✓ Packaging hints saved to: {hints_file}")
+            print(f"   [OK] Packaging hints saved to: {hints_file}")
         
-        print("\n✓ Application preparation completed successfully!")
+        print("\n[OK] Application preparation completed successfully!")
         print("\nNext steps:")
         print("1. Review the generated packaging_hints.json file")
         print("2. Create a PyInstaller spec file using the hints")

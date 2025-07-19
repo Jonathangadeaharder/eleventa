@@ -86,15 +86,15 @@ function Invoke-BuildCommand {
         }
         
         if ($result.ExitCode -eq 0) {
-            Write-ColorOutput "    ✓ Success" "Green"
+            Write-ColorOutput "    [OK] Success" "Green"
             return $true
         } else {
-            Write-ColorOutput "    ✗ Failed with exit code: $($result.ExitCode)" "Red"
+            Write-ColorOutput "    [FAIL] Failed with exit code: $($result.ExitCode)" "Red"
             return $false
         }
     }
     catch {
-        Write-ColorOutput "    ✗ Error: $($_.Exception.Message)" "Red"
+        Write-ColorOutput "    [FAIL] Error: $($_.Exception.Message)" "Red"
         return $false
     }
 }
@@ -117,13 +117,13 @@ try {
         if (Test-Command $prereq.Command) {
             try {
                 $version = & $prereq.Command $prereq.Args.Split(' ') 2>$null
-                Write-ColorOutput "  ✓ $($prereq.Name): $($version -join ' ')" "Green"
+                Write-ColorOutput "  [OK] $($prereq.Name): $($version -join ' ')" "Green"
             }
             catch {
-                Write-ColorOutput "  ✓ $($prereq.Name): Available" "Green"
+                Write-ColorOutput "  [OK] $($prereq.Name): Available" "Green"
             }
         } else {
-            Write-ColorOutput "  ✗ $($prereq.Name): Not found" "Red"
+            Write-ColorOutput "  [FAIL] $($prereq.Name): Not found" "Red"
             throw "$($prereq.Name) is required but not found in PATH"
         }
     }
@@ -131,10 +131,10 @@ try {
     # Check Inno Setup (optional for installer)
     $innoSetupPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
     if (Test-Path $innoSetupPath) {
-        Write-ColorOutput "  ✓ Inno Setup: Available" "Green"
+        Write-ColorOutput "  [OK] Inno Setup: Available" "Green"
         $hasInnoSetup = $true
     } else {
-        Write-ColorOutput "  ⚠ Inno Setup: Not found (installer creation will be skipped)" "Yellow"
+        Write-ColorOutput "  [WARN] Inno Setup: Not found (installer creation will be skipped)" "Yellow"
         $hasInnoSetup = $false
         $SkipInstaller = $true
     }
@@ -154,7 +154,7 @@ try {
         
         # Verify resource compilation
         if (Test-Path "ui\resources\resources.py") {
-            Write-ColorOutput "  ✓ Resources compiled successfully" "Green"
+            Write-ColorOutput "  [OK] Resources compiled successfully" "Green"
         } else {
             throw "Resource compilation completed but output file not found"
         }
@@ -181,7 +181,7 @@ try {
     $exePath = "dist\Eleventa\Eleventa.exe"
     if (Test-Path $exePath) {
         $exeSize = [math]::Round((Get-ChildItem $exePath).Length / 1MB, 2)
-        Write-ColorOutput "  ✓ Executable created: $exeSize MB" "Green"
+        Write-ColorOutput "  [OK] Executable created: $exeSize MB" "Green"
     } else {
         throw "Executable build completed but output file not found"
     }
@@ -200,16 +200,16 @@ try {
         $installerPath = "installer\Eleventa_Setup_v1.0.0.exe"
         if (Test-Path $installerPath) {
             $installerSize = [math]::Round((Get-ChildItem $installerPath).Length / 1MB, 2)
-            Write-ColorOutput "  ✓ Installer created: $installerSize MB" "Green"
+            Write-ColorOutput "  [OK] Installer created: $installerSize MB" "Green"
         } else {
             throw "Installer creation completed but output file not found"
         }
     } else {
         Write-ColorOutput "\n=== Stage 3: Skipping Installer Creation ===" "Yellow"
         if ($SkipInstaller) {
-            Write-ColorOutput "  ⚠ Installer creation was skipped by request" "Yellow"
+            Write-ColorOutput "  [WARN] Installer creation was skipped by request" "Yellow"
         } else {
-            Write-ColorOutput "  ⚠ Inno Setup not available" "Yellow"
+            Write-ColorOutput "  [WARN] Inno Setup not available" "Yellow"
         }
     }
     
@@ -220,18 +220,18 @@ try {
     Write-ColorOutput "\nBuild Artifacts:" "Cyan"
     
     if (Test-Path "ui\resources\resources.py") {
-        Write-ColorOutput "  ✓ Compiled resources: ui\resources\resources.py" "Green"
+        Write-ColorOutput "  [OK] Compiled resources: ui\resources\resources.py" "Green"
     }
     
     if (Test-Path $exePath) {
         $exeSize = [math]::Round((Get-ChildItem $exePath).Length / 1MB, 2)
-        Write-ColorOutput "  ✓ Executable: $exePath ($exeSize MB)" "Green"
+        Write-ColorOutput "  [OK] Executable: $exePath ($exeSize MB)" "Green"
     }
     
     $installerPath = "installer\Eleventa_Setup_v1.0.0.exe"
     if (Test-Path $installerPath) {
         $installerSize = [math]::Round((Get-ChildItem $installerPath).Length / 1MB, 2)
-        Write-ColorOutput "  ✓ Installer: $installerPath ($installerSize MB)" "Green"
+        Write-ColorOutput "  [OK] Installer: $installerPath ($installerSize MB)" "Green"
     }
     
     Write-ColorOutput "\nBuild completed successfully!" "Green"
