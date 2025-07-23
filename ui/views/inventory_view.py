@@ -18,6 +18,7 @@ from ui.dialogs.add_inventory_dialog import AddInventoryDialog # Import the dial
 from ui.dialogs.adjust_inventory_dialog import AdjustInventoryDialog # Import the new dialog
 from ui.dialogs.import_export_dialog import ImportExportDialog # Import the import/export dialog
 from core.models.product import Product # Import Product model
+from ui.resources import resources  # Import the compiled resources
 from ui.widgets.filter_dropdowns import FilterBoxWidget, FilterDropdown, PeriodFilterWidget
 
 class InventoryView(QWidget):

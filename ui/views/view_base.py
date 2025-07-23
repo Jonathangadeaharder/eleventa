@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QIcon
 
 from ui.utils import show_error_message, show_info_message, ask_confirmation
+from ui.resources import resources  # Import the compiled resources
 
 class ViewBase(QWidget):
     """Base class for views to standardize layout and common functionalities."""

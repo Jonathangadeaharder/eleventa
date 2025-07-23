@@ -8,6 +8,7 @@ import os
 from datetime import datetime
 
 from core.services.data_import_export_service import DataImportExportService
+from ui.resources import resources  # Import the compiled resources
 
 
 class ImportExportWorker(QThread):

@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Slot, Signal
 from PySide6.QtGui import QIcon
 from typing import Optional, Dict, Any
+from ui.resources import resources  # Import the compiled resources
 
 # Assuming models and service are available (using mocks initially)
 # Need Product and Department definitions

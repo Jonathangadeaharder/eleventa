@@ -94,6 +94,16 @@ def clean_build_directories(project_root, verbose=False):
         pyc_file.unlink()
 
 
+def clean_dist_directory(project_root, verbose=False):
+    """Clean only the dist directory to prevent PyInstaller conflicts."""
+    dist_dir = project_root / 'dist'
+    
+    if dist_dir.exists():
+        if verbose:
+            print(f"Removing dist directory: {dist_dir}")
+        shutil.rmtree(dist_dir)
+
+
 def get_executable_info(project_root):
     """Get information about the created executable."""
     dist_dir = project_root / 'dist'
@@ -185,7 +195,9 @@ def main():
             clean_build_directories(project_root, args.verbose)
             print("   ✓ Build directories cleaned")
         else:
-            print("\n2. Skipping clean (use --clean to clean build directories)")
+            print("\n2. Cleaning dist directory (preventing PyInstaller conflicts)...")
+            clean_dist_directory(project_root, args.verbose)
+            print("   ✓ Dist directory cleaned (use --clean to clean all build directories)")
         
         # Step 3: Prepare application
         if not args.skip_preparation:

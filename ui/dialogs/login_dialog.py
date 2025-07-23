@@ -8,6 +8,7 @@ from ui.utils import (
     style_text_input, style_primary_button, style_secondary_button, 
     style_heading_label
 )
+from ui.resources import resources  # Import the compiled resources
 
 class LoginDialog(QDialog):
     """

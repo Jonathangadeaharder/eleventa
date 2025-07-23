@@ -7,6 +7,7 @@ from PySide6.QtGui import QIcon
 from datetime import datetime, timedelta
 
 from ui.utils import style_dropdown, style_secondary_button, style_primary_button
+from ui.resources import resources  # Import the compiled resources
 
 # Ensure style functions have __name__ for shiboken support
 for func, name in [(style_dropdown, 'style_dropdown'),

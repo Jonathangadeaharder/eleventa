@@ -24,6 +24,18 @@
         "alembic\\versions"
       ],
       [
+        "C:\\Users\\Jonandrop\\Documents\\eleventa\\alembic\\versions\\20241220_130000_add_product_unit_to_sale_items.py",
+        "alembic\\versions"
+      ],
+      [
+        "C:\\Users\\Jonandrop\\Documents\\eleventa\\alembic\\versions\\20250123_140000_add_units_table.py",
+        "alembic\\versions"
+      ],
+      [
+        "C:\\Users\\Jonandrop\\Documents\\eleventa\\alembic\\versions\\eb76c1b5283e_merge_heads.py",
+        "alembic\\versions"
+      ],
+      [
         "C:\\Users\\Jonandrop\\Documents\\eleventa\\alembic.ini",
         "."
       ],
@@ -45,10 +57,10 @@
     ]
   },
   "build_info": {
-    "build_time": "2025-07-19T18:31:12.978605",
+    "build_time": "2025-07-23T10:13:35.291921",
     "python_version": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
     "platform": "win32",
     "project_root": "C:\\Users\\Jonandrop\\Documents\\eleventa",
-    "git_commit": "d5af3c5d995d1df18799110e14638ca245ee725f"
+    "git_commit": "bf0abc2082237d49b2bd4d267d5c70fa92150780"
   }
 }
