@@ -156,6 +156,7 @@ class SaleItemOrm(Base):
     unit_price = Column(Numeric(10, 2), nullable=False) # Price at the time of sale
     product_code = Column(String, nullable=True) # Denormalized
     product_description = Column(String, nullable=True) # Denormalized
+    product_unit = Column(String, nullable=True, default="Unidad") # Unit of measure
 
     # Relationship: Many-to-One (Many SaleItems belong to One Sale)
     sale = relationship("SaleOrm", back_populates="items")
@@ -182,6 +183,8 @@ class CustomerOrm(Base):
     iva_condition = Column(String, nullable=True)
     credit_limit = Column(Numeric(12, 2), default=0.0, nullable=False)
     credit_balance = Column(Numeric(12, 2), default=0.0, nullable=False) # Current debt
+    created_at = Column(DateTime, nullable=False, default=datetime.datetime.now)
+    updated_at = Column(DateTime, nullable=True, onupdate=datetime.datetime.now)
     is_active = Column(Boolean, default=True, index=True)
 
     # Relationships
@@ -250,6 +253,25 @@ class InvoiceOrm(Base):
     def __repr__(self):
         return f"<InvoiceOrm(id={self.id}, sale_id={self.sale_id}, invoice_number='{self.invoice_number}')>"
 
+class UnitOrm(Base):
+    """ORM mapping for custom units."""
+    __tablename__ = "units"
+    __table_args__ = (
+        UniqueConstraint('name', name='uq_unit_name'),
+        {'extend_existing': True}
+    )
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(50), nullable=False, unique=True, index=True)
+    abbreviation = Column(String(10), nullable=True)
+    description = Column(String(255), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.datetime.now)
+    updated_at = Column(DateTime, nullable=True, onupdate=datetime.datetime.now)
+    
+    def __repr__(self):
+        return f"<UnitOrm(id={self.id}, name='{self.name}', abbreviation='{self.abbreviation}')>"
+
 class CashDrawerEntryOrm(Base):
     """ORM mapping for cash drawer entries."""
     __tablename__ = "cash_drawer_entries"
@@ -279,7 +301,7 @@ def ensure_all_models_mapped():
     model_classes = [
         UserOrm, DepartmentOrm, ProductOrm, InventoryMovementOrm,
         SaleOrm, SaleItemOrm, CustomerOrm, CreditPaymentOrm,
-        InvoiceOrm, CashDrawerEntryOrm
+        InvoiceOrm, UnitOrm, CashDrawerEntryOrm
     ]
 
     print(f"Verifying mapping for {len(model_classes)} models...")
@@ -360,7 +382,7 @@ def map_models():
     orm_classes = [
         UserOrm, DepartmentOrm, ProductOrm, InventoryMovementOrm, SaleOrm, 
         SaleItemOrm, CustomerOrm, CreditPaymentOrm,
-        InvoiceOrm, 
+        InvoiceOrm, UnitOrm,
         CashDrawerEntryOrm # Ensure CashDrawerEntryOrm is included here
     ]
     

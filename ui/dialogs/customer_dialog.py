@@ -1,5 +1,6 @@
 import sys
 from typing import Optional
+from decimal import Decimal
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QLineEdit, QPushButton,
     QDialogButtonBox, QMessageBox, QDoubleSpinBox
@@ -73,7 +74,7 @@ class CustomerDialog(QDialog):
             "phone": self.phone_edit.text().strip() or None,
             "email": self.email_edit.text().strip() or None,
             "address": self.address_edit.text().strip() or None,
-            "credit_limit": self.credit_limit_spin.value(),
+            "credit_limit": Decimal(str(self.credit_limit_spin.value())),
             # Credit balance is not typically edited here
             # "credit_balance": self._customer.credit_balance if self._customer else 0.0
         }
@@ -123,4 +124,4 @@ if __name__ == '__main__':
     if dialog_edit.exec():
         print("Edit Dialog Accepted")
 
-    sys.exit() # Exit without starting event loop if run directly 
+    sys.exit() # Exit without starting event loop if run directly

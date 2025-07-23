@@ -96,14 +96,22 @@ class ConfigurationView(QWidget):
             config.store_iva_condition = self.store_iva_edit.text()
             config.store_phone = self.store_phone_edit.text()
             
-            # Show success message
-            QMessageBox.information(
-                self, 
-                "Configuración Guardada", 
-                "La configuración ha sido actualizada correctamente.\n\n"
-                "Nota: Para persistir estos cambios entre sesiones, "
-                "considere usar un archivo .env en el directorio raíz."
-            )
+            # Save to .env file for persistence
+            if config.save_to_env_file():
+                # Show success message
+                QMessageBox.information(
+                    self, 
+                    "Configuración Guardada", 
+                    "Los cambios han sido guardados exitosamente y se mantendrán entre sesiones."
+                )
+            else:
+                # Show warning if file save failed
+                QMessageBox.warning(
+                    self, 
+                    "Advertencia", 
+                    "Los cambios se aplicaron en memoria pero no se pudieron guardar en el archivo .env.\n"
+                    "Los cambios se perderán al reiniciar la aplicación."
+                )
         except Exception as e:
             QMessageBox.warning(
                 self, 

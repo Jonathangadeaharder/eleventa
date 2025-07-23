@@ -95,6 +95,35 @@ class Config(BaseSettings):
     def PDF_OUTPUT_DIR(self) -> str:
         return self.pdf_output_dir
 
+    def save_to_env_file(self):
+        """Save current configuration to .env file."""
+        env_path = os.path.join(BASE_DIR, '.env')
+        env_content = f"""# Eleventa Configuration
+# Store Information
+STORE_NAME={self.store_name}
+STORE_ADDRESS={self.store_address}
+STORE_CUIT={self.store_cuit}
+STORE_IVA_CONDITION={self.store_iva_condition}
+STORE_PHONE={self.store_phone}
+
+# Directories
+PDF_OUTPUT_DIR={self.pdf_output_dir}
+
+# Optional Settings
+{f'DEFAULT_PRINTER={self.default_printer}' if self.default_printer else '# DEFAULT_PRINTER='}
+
+# Test Mode (for development)
+TEST_MODE=false
+"""
+        
+        try:
+            with open(env_path, 'w', encoding='utf-8') as f:
+                f.write(env_content)
+            return True
+        except Exception as e:
+            print(f"Error saving configuration to .env file: {e}")
+            return False
+
 # Create global config instance
 config = Config()
 

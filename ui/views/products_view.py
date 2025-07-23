@@ -15,6 +15,7 @@ from ui.models.table_models import ProductTableModel, Product # Assuming Product
 from ui.dialogs.department_dialog import DepartmentDialog, MockProductService_Departments # Import the dialog
 from ui.dialogs.product_dialog import ProductDialog # Import the Product dialog
 from ui.dialogs.update_prices_dialog import UpdatePricesDialog # Import the Update Prices dialog
+from ui.dialogs.unit_management_dialog import UnitManagementDialog # Import the Unit Management dialog
 
 # Placeholder for the actual service
 # from core.services.product_service import ProductService
@@ -170,6 +171,9 @@ class ProductsView(QWidget):
         self.departments_button = QPushButton("Departamentos")
         self.departments_button.setIcon(QIcon(":/icons/icons/departments.png"))
         
+        self.units_button = QPushButton("Unidades")
+        self.units_button.setIcon(QIcon(":/icons/icons/departments.png"))  # Using same icon as departments for now
+        
         self.update_prices_button = QPushButton("Actualizar Precios")
         self.update_prices_button.setIcon(QIcon(":/icons/icons/edit.png"))
         
@@ -177,6 +181,7 @@ class ProductsView(QWidget):
         toolbar_layout.addWidget(self.modify_button)
         toolbar_layout.addWidget(self.delete_button)
         toolbar_layout.addWidget(self.departments_button)
+        toolbar_layout.addWidget(self.units_button)
         toolbar_layout.addWidget(self.update_prices_button)
 
         spacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
@@ -247,6 +252,7 @@ class ProductsView(QWidget):
         self.modify_button.clicked.connect(self.modify_selected_product)
         self.delete_button.clicked.connect(self.delete_selected_product)
         self.departments_button.clicked.connect(self.manage_departments)
+        self.units_button.clicked.connect(self.manage_units)
         self.update_prices_button.clicked.connect(self.open_update_prices_dialog)
         self.search_input.textChanged.connect(self.filter_products)
         self.table_view.doubleClicked.connect(self.modify_selected_product) # Double-click to modify
@@ -354,6 +360,17 @@ class ProductsView(QWidget):
         self.refresh_products()
 
     @Slot()
+    def manage_units(self):
+        """Handles the 'Units' button click."""
+        print("[ProductsView] 'Manage Units' clicked.")
+        # Instantiate and exec UnitManagementDialog
+        units_dialog = UnitManagementDialog(parent=self)
+        units_dialog.exec()
+        # Refresh product list afterwards in case unit changes affect products
+        print("[ProductsView] Units dialog closed. Refreshing product list.")
+        self.refresh_products()
+
+    @Slot()
     def open_update_prices_dialog(self):
         """Handles the 'Actualizar Precios' button click."""
         print("[ProductsView] 'Update Prices' clicked.")
@@ -371,7 +388,6 @@ class ProductsView(QWidget):
         """Filters the product list based on the search input."""
         print(f"[ProductsView] Filtering products with text: '{text}'")
         self.refresh_products()
-
 
 # Example of running this view directly (for testing)
 if __name__ == '__main__':

@@ -19,13 +19,14 @@ from core.models.inventory import InventoryMovement
 from core.models.invoice import Invoice
 from core.models.credit_payment import CreditPayment
 from core.models.user import User
+from core.models.unit import Unit
 
 # ORM models (imported at runtime to avoid circular imports)
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from infrastructure.persistence.sqlite.models_mapping import (
         ProductOrm, DepartmentOrm, SaleOrm, SaleItemOrm, CustomerOrm,
-        InventoryMovementOrm, InvoiceOrm, CreditPaymentOrm, UserOrm
+        InventoryMovementOrm, InvoiceOrm, CreditPaymentOrm, UserOrm, UnitOrm
     )
 
 # Type variables for generic mapping
@@ -87,7 +88,8 @@ class ModelMapper:
             quantity=item_orm.quantity,
             unit_price=item_orm.unit_price,
             product_code=item_orm.product_code,
-            product_description=item_orm.product_description
+            product_description=item_orm.product_description,
+            product_unit=getattr(item_orm, 'product_unit', 'Unidad')
         )
     
     @staticmethod
@@ -125,8 +127,8 @@ class ModelMapper:
             address=cust_orm.address,
             cuit=cust_orm.cuit,
             iva_condition=cust_orm.iva_condition,
-            credit_limit=cust_orm.credit_limit,
-            credit_balance=cust_orm.credit_balance,
+            credit_limit=Decimal(str(cust_orm.credit_limit)) if cust_orm.credit_limit is not None else Decimal('0.0'),
+            credit_balance=Decimal(str(cust_orm.credit_balance)) if cust_orm.credit_balance is not None else Decimal('0.0'),
             is_active=cust_orm.is_active
         )
     
@@ -240,6 +242,21 @@ class ModelMapper:
         invoice_orm.is_active = invoice.is_active
         
         return invoice_orm
+    
+    @staticmethod
+    def unit_orm_to_domain(unit_orm: "UnitOrm") -> Optional[Unit]:
+        """Maps UnitOrm to Unit domain model."""
+        if not unit_orm:
+            return None
+        return Unit(
+            id=unit_orm.id,
+            name=unit_orm.name,
+            abbreviation=unit_orm.abbreviation,
+            description=unit_orm.description,
+            is_active=unit_orm.is_active,
+            created_at=unit_orm.created_at,
+            updated_at=unit_orm.updated_at
+        )
 
 
 class AutoMapper:

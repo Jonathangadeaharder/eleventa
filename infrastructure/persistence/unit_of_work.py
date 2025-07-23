@@ -19,7 +19,8 @@ from .sqlite.repositories import (
     SqliteInvoiceRepository,
     SqliteCreditPaymentRepository,
     SqliteUserRepository,
-    SqliteCashDrawerRepository
+    SqliteCashDrawerRepository,
+    SqliteUnitRepository
 )
 
 
@@ -54,6 +55,7 @@ class UnitOfWork:
         self.credit_payments: Optional[SqliteCreditPaymentRepository] = None
         self.users: Optional[SqliteUserRepository] = None
         self.cash_drawer: Optional[SqliteCashDrawerRepository] = None
+        self.units: Optional[SqliteUnitRepository] = None
     
     def __enter__(self):
         """Enter the Unit of Work context.
@@ -97,6 +99,7 @@ class UnitOfWork:
         self.users = SqliteUserRepository(self.session)
         # Note: SQLiteCashDrawerRepository has a different interface and uses _session internally
         self.cash_drawer = SqliteCashDrawerRepository(self.session)
+        self.units = SqliteUnitRepository(self.session)
         
         return self
     
@@ -151,6 +154,7 @@ class UnitOfWork:
             self.credit_payments = None
             self.users = None
             self.cash_drawer = None
+            self.units = None
     
     def commit(self):
         """Manually commit the current transaction.

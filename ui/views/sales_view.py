@@ -406,8 +406,8 @@ class SalesView(QWidget):
         line_edit = self.product_combo.lineEdit()
         combo_box = self.product_combo
 
-        # If text is too short or empty, clear suggestions and hide popup
-        if not text or len(text) < 2: # Min 2 chars to search
+        # If text is empty or too short, clear suggestions and hide popup
+        if not text or len(text) < 2: # Require at least 2 characters
             self._suggestion_model.setStringList([])
             self._display_map = {}
             self._selected_suggested_product = None
@@ -461,6 +461,25 @@ class SalesView(QWidget):
 
     @Slot()
     def add_item_from_entry(self):
+        # First check if there's a selected row in the sales table
+        selected_indexes = self.table_view.selectionModel().selectedRows()
+        if selected_indexes:
+            # If there's a selected row, increment its quantity
+            model_index = selected_indexes[0]
+            row = model_index.row()
+            item = self.sale_item_model.get_item_at_row(row)
+            if item:
+                # Increment quantity by 1
+                item.quantity += Decimal("1")
+                # Emit dataChanged to update the display
+                self.sale_item_model.dataChanged.emit(
+                    self.sale_item_model.index(row, 0),
+                    self.sale_item_model.index(row, self.sale_item_model.columnCount() - 1)
+                )
+                self.update_total()
+                return
+        
+        # If no row is selected, proceed with normal product addition logic
         product_to_add: Optional[Product] = None
 
         # Prefer product selected from completer
@@ -478,6 +497,7 @@ class SalesView(QWidget):
                 # If no selection or data is not Product, use the text (code or name fragment)
                 code_or_name = self.product_combo.currentText().strip()
                 if not code_or_name:
+                    show_error_message(self, "Producto Requerido", "Por favor, ingrese el código o nombre de un producto para agregar.")
                     self.product_combo.setFocus()
                     return
 
@@ -515,7 +535,12 @@ class SalesView(QWidget):
                     return
 
         if not product_to_add:
-            show_error_message(self, "Producto No Encontrado", f"No se encontró un producto con el texto: {self.product_combo.currentText().strip()}")
+            texto_ingresado = self.product_combo.currentText().strip()
+            if texto_ingresado:
+                show_error_message(self, "Producto No Encontrado", 
+                                   f"No se encontró ningún producto con el código o nombre '{texto_ingresado}'.\n\nPor favor, verifique que el producto existe o seleccione uno de la lista desplegable.")
+            else:
+                show_error_message(self, "Producto Requerido", "Por favor, seleccione un producto para agregar.")
             self.product_combo.lineEdit().selectAll()
             self.product_combo.setFocus()
             return
@@ -536,7 +561,8 @@ class SalesView(QWidget):
                 quantity=quantity,
                 unit_price=unit_price,
                 product_code=product_to_add.code,
-                product_description=product_to_add.description
+                product_description=product_to_add.description,
+                product_unit=product_to_add.unit
             )
             
             print(f"Adding product: {product_to_add.code}, price: {product_to_add.sell_price}, as Decimal: {unit_price}")

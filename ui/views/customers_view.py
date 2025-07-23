@@ -1,4 +1,5 @@
 import sys
+from decimal import Decimal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit,
     QTableView, QMessageBox, QAbstractItemView, QHeaderView, QLabel
@@ -286,7 +287,7 @@ if __name__ == '__main__':
             print(f"Mock: apply payment for {customer_id}, Amount: {amount}, Notes: {notes}")
             cust = self.get_customer_by_id(customer_id)
             if cust:
-                cust.credit_balance -= float(amount) # Simulate payment decreasing debt
+                cust.credit_balance -= Decimal(str(amount)) # Simulate payment decreasing debt
             # Return a dummy CreditPayment object if needed
             return CreditPayment(id=999, customer_id=customer_id, amount=amount)
         def adjust_balance(self, customer_id, amount, is_increase, notes, user_id=None):
@@ -294,9 +295,9 @@ if __name__ == '__main__':
             cust = self.get_customer_by_id(customer_id)
             if cust:
                 if is_increase:
-                    cust.credit_balance += float(amount) # Increase debt
+                    cust.credit_balance += Decimal(str(amount)) # Increase debt
                 else:
-                    cust.credit_balance -= float(amount) # Decrease debt
+                    cust.credit_balance -= Decimal(str(amount)) # Decrease debt
             # Return a dummy CreditPayment object
             return CreditPayment(id=998, customer_id=customer_id, amount=amount if is_increase else -amount)
 

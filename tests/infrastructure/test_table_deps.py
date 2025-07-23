@@ -45,12 +45,19 @@ def test_direct_table_creation(test_engine):
         # Verify the foreign key relationship works
         try:
             # Execute each statement separately
-            connection.execute(text("CREATE TABLE IF NOT EXISTS test_insert (id INTEGER PRIMARY KEY)"))
+            # First create a user
+            connection.execute(text("""
+                INSERT INTO users 
+                (id, username, password_hash, is_active, is_admin) 
+                VALUES 
+                (1, 'testuser', 'hash123', 1, 0)
+            """))
+            
             connection.execute(text("""
                 INSERT INTO customers 
-                (id, name, is_active, credit_limit, credit_balance) 
+                (id, name, is_active, credit_limit, credit_balance, created_at) 
                 VALUES 
-                ('12345678-1234-5678-1234-567812345678', 'Test Customer', 1, 0.0, 0.0)
+                ('12345678-1234-5678-1234-567812345678', 'Test Customer', 1, 0.0, 0.0, datetime('now'))
             """))
             connection.execute(text("""
                 INSERT INTO credit_payments 
@@ -96,4 +103,4 @@ def test_table_order_validation(test_engine):
         fks = inspector.get_foreign_keys('credit_payments')
         customer_fk = next((fk for fk in fks if fk['referred_table'] == 'customers'), None)
         assert customer_fk is not None, "Foreign key to customers should exist"
-        assert 'customer_id' in customer_fk['constrained_columns'], "customer_id should be constrained column" 
+        assert 'customer_id' in customer_fk['constrained_columns'], "customer_id should be constrained column"

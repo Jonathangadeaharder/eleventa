@@ -19,6 +19,7 @@ class SaleItem:
     sale_id: Optional[int] = None
     product_code: str = "" # Denormalized for easy display
     product_description: str = "" # Denormalized for easy display
+    product_unit: str = "Unidad" # Unit of measure for the product
 
     def __post_init__(self):
         # Ensure quantity and unit_price are always Decimal objects

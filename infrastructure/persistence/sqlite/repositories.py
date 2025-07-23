@@ -20,7 +20,7 @@ if project_root not in sys.path:
 from core.interfaces.repository_interfaces import (
     IDepartmentRepository, IProductRepository, IInventoryRepository, ISaleRepository, ICustomerRepository,
     ICreditPaymentRepository, IUserRepository,
-    IInvoiceRepository, ICashDrawerRepository
+    IInvoiceRepository, ICashDrawerRepository, IUnitRepository
 )
 from core.models.product import Department, Product
 from core.models.inventory import InventoryMovement
@@ -30,12 +30,13 @@ from core.models.credit_payment import CreditPayment
 from core.models.user import User
 from core.models.invoice import Invoice
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
+from core.models.unit import Unit
 from infrastructure.persistence.sqlite.database import Base
 
 # Import specific ORM classes directly
 from infrastructure.persistence.sqlite.models_mapping import (
     UserOrm, ProductOrm, DepartmentOrm, CustomerOrm, SaleOrm, SaleItemOrm,
-    InventoryMovementOrm, InvoiceOrm, CashDrawerEntryOrm, CreditPaymentOrm
+    InventoryMovementOrm, InvoiceOrm, CashDrawerEntryOrm, CreditPaymentOrm, UnitOrm
 )
 
 from ..utils import session_scope
@@ -362,16 +363,44 @@ class SqliteProductRepository(IProductRepository):
         return False
 
     def search(self, term: str) -> List[Product]:
-        """Searches products by code or description."""
+        """Searches products by code or description, prioritizing exact matches."""
         search_term = f"%{term}%"
-        stmt = select(ProductOrm).options(joinedload(ProductOrm.department)).where(
-            or_(
-                ProductOrm.code.ilike(search_term),
-                ProductOrm.description.ilike(search_term)
-            )
-        ).order_by(ProductOrm.description)
-        results_orm = self.session.scalars(stmt).all()
-        return [ModelMapper.product_orm_to_domain(prod) for prod in results_orm]
+        
+        # First try exact matches for code
+        exact_code_stmt = select(ProductOrm).options(joinedload(ProductOrm.department)).where(
+            ProductOrm.code.ilike(term)
+        )
+        exact_code_results = self.session.scalars(exact_code_stmt).all()
+        
+        # If we found exact code matches, return them first
+        if exact_code_results:
+            exact_products = [ModelMapper.product_orm_to_domain(prod) for prod in exact_code_results]
+            
+            # Also get partial matches but exclude the exact ones
+            partial_stmt = select(ProductOrm).options(joinedload(ProductOrm.department)).where(
+                and_(
+                    or_(
+                        ProductOrm.code.ilike(search_term),
+                        ProductOrm.description.ilike(search_term)
+                    ),
+                    ~ProductOrm.code.ilike(term)  # Exclude exact code matches
+                )
+            ).order_by(ProductOrm.description)
+            partial_results = self.session.scalars(partial_stmt).all()
+            partial_products = [ModelMapper.product_orm_to_domain(prod) for prod in partial_results]
+            
+            # Return exact matches first, then partial matches
+            return exact_products + partial_products
+        else:
+            # No exact code matches, return all partial matches
+            stmt = select(ProductOrm).options(joinedload(ProductOrm.department)).where(
+                or_(
+                    ProductOrm.code.ilike(search_term),
+                    ProductOrm.description.ilike(search_term)
+                )
+            ).order_by(ProductOrm.description)
+            results_orm = self.session.scalars(stmt).all()
+            return [ModelMapper.product_orm_to_domain(prod) for prod in results_orm]
 
     def get_low_stock(self, threshold: Optional[Decimal] = None) -> List[Product]: # Changed threshold to Decimal
         """Retrieves products where stock <= min_stock or below optional threshold."""
@@ -383,10 +412,10 @@ class SqliteProductRepository(IProductRepository):
         if threshold is not None:
             stmt = stmt.where(ProductOrm.quantity_in_stock <= threshold)
         else:
-            # Default: stock <= min_stock (handle potential None for min_stock if nullable)
+            # Default: stock <= min_stock (only for products that have min_stock set)
             stmt = stmt.where(
-                or_(
-                   ProductOrm.min_stock == None, # Include products where min_stock is not set
+                and_(
+                   ProductOrm.min_stock != None, # Only products with min_stock configured
                    ProductOrm.quantity_in_stock <= ProductOrm.min_stock
                 )
             )
@@ -530,7 +559,8 @@ class SqliteSaleRepository(ISaleRepository):
                      quantity=item_model.quantity, # Decimal -> Numeric
                      unit_price=item_model.unit_price, # Decimal -> Numeric
                      product_code=item_model.product_code,
-                     product_description=item_model.product_description
+                     product_description=item_model.product_description,
+                     product_unit=getattr(item_model, 'product_unit', 'Unidad')
                  )
                  sale_orm.items.append(item_orm)
                  
@@ -993,6 +1023,7 @@ class SqliteCustomerRepository(ICustomerRepository):
             # We typically don't update credit_balance directly through update()
             # It should be managed through dedicated operations that log the changes
             customer_orm.is_active = customer.is_active
+            customer_orm.updated_at = datetime.now()
             
             # Flush changes
             self.session.flush()
@@ -1015,6 +1046,7 @@ class SqliteCustomerRepository(ICustomerRepository):
                 
             # Update the balance
             customer_orm.credit_balance = new_balance
+            customer_orm.updated_at = datetime.now()
             
             # Flush changes
             self.session.flush()
@@ -1294,3 +1326,115 @@ class SqliteUserRepository(IUserRepository):
 class SqliteCashDrawerRepository(SQLiteCashDrawerRepository):
     """Adapter class for SQLiteCashDrawerRepository to maintain API compatibility."""
     pass
+
+class SqliteUnitRepository(IUnitRepository):
+    """SQLite implementation of the unit repository interface."""
+    
+    def __init__(self, session: Session):
+        self.session = session
+        
+    def add(self, unit: Unit) -> Unit:
+        """Adds a new unit to the database."""
+        try:
+            # Check if unit name already exists
+            existing = self.get_by_name(unit.name)
+            if existing:
+                raise ValueError(f"Unit name '{unit.name}' already exists.")
+                
+            # Create ORM object
+            unit_orm = UnitOrm(
+                name=unit.name,
+                abbreviation=unit.abbreviation,
+                description=unit.description,
+                is_active=unit.is_active
+            )
+            
+            # Add to session
+            self.session.add(unit_orm)
+            self.session.flush()
+            self.session.refresh(unit_orm)
+            
+            # Map back to domain model
+            return ModelMapper.unit_orm_to_domain(unit_orm)
+        except Exception as e:
+            logging.error(f"Error adding unit: {e}")
+            raise
+            
+    def get_by_id(self, unit_id: int) -> Optional[Unit]:
+        """Retrieves a unit by its ID."""
+        unit_orm = self.session.get(UnitOrm, unit_id)
+        return ModelMapper.unit_orm_to_domain(unit_orm)
+        
+    def get_by_name(self, name: str) -> Optional[Unit]:
+        """Retrieves a unit by its name."""
+        stmt = select(UnitOrm).where(UnitOrm.name == name)
+        unit_orm = self.session.scalars(stmt).first()
+        return ModelMapper.unit_orm_to_domain(unit_orm)
+        
+    def get_all(self, active_only: bool = True) -> List[Unit]:
+        """Retrieves all units, optionally filtered by active status."""
+        stmt = select(UnitOrm).order_by(UnitOrm.name)
+        if active_only:
+            stmt = stmt.where(UnitOrm.is_active == True)
+        units_orm = self.session.scalars(stmt).all()
+        return [ModelMapper.unit_orm_to_domain(unit) for unit in units_orm]
+        
+    def update(self, unit: Unit) -> Optional[Unit]:
+        """Updates an existing unit."""
+        try:
+            if unit.id is None:
+                raise ValueError("Unit ID is required for update.")
+                
+            # Check for name collision if name is being changed
+            existing_by_name = self.get_by_name(unit.name)
+            if existing_by_name and existing_by_name.id != unit.id:
+                raise ValueError(f"Another unit with name '{unit.name}' already exists.")
+                
+            unit_orm = self.session.get(UnitOrm, unit.id)
+            if not unit_orm:
+                raise ValueError(f"Unit with ID {unit.id} not found.")
+                
+            # Update ORM attributes
+            unit_orm.name = unit.name
+            unit_orm.abbreviation = unit.abbreviation
+            unit_orm.description = unit.description
+            unit_orm.is_active = unit.is_active
+            
+            self.session.flush()
+            self.session.refresh(unit_orm)
+            return ModelMapper.unit_orm_to_domain(unit_orm)
+        except Exception as e:
+            logging.error(f"Error updating unit: {e}")
+            raise
+            
+    def delete(self, unit_id: int) -> bool:
+        """Deletes a unit by its ID."""
+        try:
+            unit_orm = self.session.get(UnitOrm, unit_id)
+            if not unit_orm:
+                raise ValueError(f"Unit with ID {unit_id} not found")
+                
+            # Check if unit is used by products
+            product_count = self.session.scalar(
+                select(func.count(ProductOrm.id)).where(ProductOrm.unit == unit_orm.name)
+            )
+            if product_count > 0:
+                raise ValueError(f"Unit {unit_id} cannot be deleted, it is used by {product_count} products.")
+                
+            self.session.delete(unit_orm)
+            self.session.flush()
+            return True
+        except Exception as e:
+            logging.error(f"Error deleting unit: {e}")
+            raise
+            
+    def search(self, query: str) -> List[Unit]:
+        """Searches for units based on name or abbreviation."""
+        stmt = select(UnitOrm).where(
+            or_(
+                UnitOrm.name.ilike(f"%{query}%"),
+                UnitOrm.abbreviation.ilike(f"%{query}%")
+            )
+        ).order_by(UnitOrm.name)
+        units_orm = self.session.scalars(stmt).all()
+        return [ModelMapper.unit_orm_to_domain(unit) for unit in units_orm]

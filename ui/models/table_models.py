@@ -138,7 +138,7 @@ class ProductTableModel(QAbstractTableModel):
 
 class SaleItemTableModel(QAbstractTableModel):
     """Model for displaying sale items in a QTableView."""
-    HEADERS = ["Código", "Descripción", "Cantidad", "Precio Unit.", "Subtotal"]
+    HEADERS = ["Código", "Descripción", "Cantidad/Unidad", "Precio Unit.", "Subtotal"]
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -163,8 +163,8 @@ class SaleItemTableModel(QAbstractTableModel):
             elif column == 1:
                 return item.product_description
             elif column == 2:
-                # Format quantity appropriately (might need context for units)
-                return str(item.quantity.normalize()) # Normalize to remove trailing zeros
+                # Format quantity with unit
+                return f"{item.quantity.normalize()} {getattr(item, 'product_unit', 'U')}"
             elif column == 3:
                 return f"{item.unit_price:.2f}"
             elif column == 4:
@@ -188,10 +188,22 @@ class SaleItemTableModel(QAbstractTableModel):
                 return None
         return None
 
-    def add_item(self, item: SaleItem):
-        """Adds a new item to the end of the model."""
-        # Check if product already exists, if so, increment quantity?
-        # For simplicity now, just append. Add merge logic later if needed.
+    def add_item(self, item: SaleItem, merge_duplicates: bool = False):
+        """Adds a new item. If merge_duplicates is True, increments quantity if product already exists."""
+        if merge_duplicates:
+            # Check if product already exists in the sale
+            for i, existing_item in enumerate(self._items):
+                if existing_item.product_id == item.product_id:
+                    # Product already exists, increment quantity
+                    existing_item.quantity += item.quantity
+                    # Emit dataChanged for the entire row to update display
+                    self.dataChanged.emit(
+                        self.index(i, 0),
+                        self.index(i, self.columnCount() - 1)
+                    )
+                    return
+        
+        # Product doesn't exist or merging is disabled, add new item
         row_count = self.rowCount()
         self.beginInsertRows(QModelIndex(), row_count, row_count)
         self._items.append(item)
@@ -246,9 +258,8 @@ class SaleItemTableModel(QAbstractTableModel):
                 if new_quantity <= 0:
                     return False
                 
-                # Update the quantity and recalculate subtotal
+                # Update the quantity (subtotal will be recalculated automatically)
                 item.quantity = new_quantity
-                item.subtotal = item.quantity * item.unit_price
                 
                 # Emit dataChanged for the entire row to update subtotal display
                 self.dataChanged.emit(

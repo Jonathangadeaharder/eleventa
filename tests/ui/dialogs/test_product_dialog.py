@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox
 from ui.dialogs.product_dialog import ProductDialog
 from core.models.product import Product, Department
 from core.services.product_service import ProductService
+from core.models.unit import Unit
 
 
 @pytest.fixture(scope="session")
@@ -33,7 +34,7 @@ def sample_product():
         quantity_in_stock=Decimal("20.00"),
         uses_inventory=True,
         min_stock=Decimal("5.00"),
-        unit="pcs",
+        unit="Pieza",
         department_id=1
     )
 
@@ -48,6 +49,16 @@ def sample_departments():
 
 
 @pytest.fixture
+def sample_units():
+    """Create sample units for testing."""
+    return [
+        Unit(id=1, name="Pieza", abbreviation="pza", is_active=True),
+        Unit(id=2, name="Kilogramo", abbreviation="kg", is_active=True),
+        Unit(id=3, name="Metro", abbreviation="m", is_active=True)
+    ]
+
+
+@pytest.fixture
 def mock_product_service(sample_departments):
     """Create a mock product service."""
     service = MagicMock(spec=ProductService)
@@ -56,15 +67,26 @@ def mock_product_service(sample_departments):
 
 
 @pytest.fixture
-def dialog_add_mode(qapp, mock_product_service):
-    """Create dialog in add mode."""
-    return ProductDialog(mock_product_service, product_to_edit=None)
+def mock_unit_service(sample_units):
+    """Create a mock unit service."""
+    from core.services.unit_service import UnitService
+    service = MagicMock(spec=UnitService)
+    service.get_all_units.return_value = sample_units
+    return service
 
 
 @pytest.fixture
-def dialog_edit_mode(qapp, mock_product_service, sample_product):
+def dialog_add_mode(qapp, mock_product_service, mock_unit_service):
+    """Create dialog in add mode."""
+    with patch('ui.dialogs.product_dialog.UnitService', return_value=mock_unit_service):
+        return ProductDialog(mock_product_service, product_to_edit=None)
+
+
+@pytest.fixture
+def dialog_edit_mode(qapp, mock_product_service, mock_unit_service, sample_product):
     """Create dialog in edit mode."""
-    return ProductDialog(mock_product_service, product_to_edit=sample_product)
+    with patch('ui.dialogs.product_dialog.UnitService', return_value=mock_unit_service):
+        return ProductDialog(mock_product_service, product_to_edit=sample_product)
 
 
 def test_dialog_initialization_add_mode(qtbot, dialog_add_mode):
@@ -86,6 +108,9 @@ def test_dialog_initialization_add_mode(qtbot, dialog_add_mode):
     assert dialog.sale_price_input.value() == 0.0
     assert dialog.min_stock_input.value() == 0.0
     assert dialog.inventory_checkbox.isChecked() is True
+    
+    # Check that unit combo is populated
+    assert dialog.unit_combo.count() > 0
 
 
 def test_dialog_initialization_edit_mode(qtbot, dialog_edit_mode, sample_product):
@@ -107,6 +132,10 @@ def test_dialog_initialization_edit_mode(qtbot, dialog_edit_mode, sample_product
     assert dialog.sale_price_input.value() == float(sample_product.sell_price)
     assert dialog.min_stock_input.value() == float(sample_product.min_stock)
     assert dialog.inventory_checkbox.isChecked() == sample_product.uses_inventory
+    
+    # Check that unit combo has the correct selection
+    current_unit = dialog.unit_combo.currentData()
+    assert current_unit is not None
 
 
 def test_departments_loaded(qtbot, dialog_add_mode, mock_product_service):
@@ -133,6 +162,7 @@ def test_service_validation_empty_code(qtbot, dialog_add_mode, mock_product_serv
     qtbot.addWidget(dialog)
     
     # Fill in data with empty code
+    dialog.id_input.setText("")  # Clear auto-suggested ID
     dialog.code_input.setText("")  # Empty code
     dialog.description_input.setText("Test Product")
     dialog.cost_price_input.setValue(10.0)
@@ -152,6 +182,7 @@ def test_service_validation_empty_description(qtbot, dialog_add_mode, mock_produ
     qtbot.addWidget(dialog)
     
     # Fill in data with empty description
+    dialog.id_input.setText("")  # Clear auto-suggested ID
     dialog.code_input.setText("TEST001")
     dialog.description_input.setText("")  # Empty description
     dialog.cost_price_input.setValue(10.0)
@@ -171,6 +202,7 @@ def test_service_validation_zero_cost_price(qtbot, dialog_add_mode, mock_product
     qtbot.addWidget(dialog)
     
     # Set cost price to zero
+    dialog.id_input.setText("")  # Clear auto-suggested ID
     dialog.code_input.setText("TEST001")
     dialog.description_input.setText("Test Product")
     dialog.cost_price_input.setValue(0.0)
@@ -190,6 +222,7 @@ def test_service_validation_zero_sell_price(qtbot, dialog_add_mode, mock_product
     qtbot.addWidget(dialog)
     
     # Set sell price to zero
+    dialog.id_input.setText("")  # Clear auto-suggested ID
     dialog.code_input.setText("TEST001")
     dialog.description_input.setText("Test Product")
     dialog.cost_price_input.setValue(10.0)
@@ -209,6 +242,7 @@ def test_successful_add_product(qtbot, dialog_add_mode, mock_product_service, mo
     qtbot.addWidget(dialog)
     
     # Fill in valid data
+    dialog.id_input.setText("")  # Clear auto-suggested ID
     dialog.code_input.setText("TEST001")
     dialog.description_input.setText("Test Product")
     dialog.cost_price_input.setValue(10.0)
@@ -294,6 +328,7 @@ def test_service_error_handling_add(qtbot, dialog_add_mode, mock_product_service
     qtbot.addWidget(dialog)
     
     # Fill in valid data
+    dialog.id_input.setText("")  # Clear auto-suggested ID
     dialog.code_input.setText("TEST001")
     dialog.description_input.setText("Test Product")
     dialog.cost_price_input.setValue(10.0)
@@ -320,6 +355,7 @@ def test_field_focus_on_validation_error(qtbot, dialog_add_mode, mock_product_se
     qtbot.waitExposed(dialog)
     
     # Test code field focus
+    dialog.id_input.setText("")  # Clear auto-suggested ID
     dialog.code_input.setText("")
     dialog.description_input.setText("Test Product")
     mock_product_service.add_product.side_effect = ValueError("Code cannot be empty")
@@ -370,6 +406,7 @@ def test_duplicate_code_error_handling(qtbot, dialog_add_mode, mock_product_serv
     qtbot.waitExposed(dialog)
     
     # Fill in data
+    dialog.id_input.setText("")  # Clear auto-suggested ID
     dialog.code_input.setText("DUP001")
     dialog.description_input.setText("Test Product")
     dialog.cost_price_input.setValue(10.0)
@@ -464,3 +501,101 @@ def test_uses_inventory_checkbox_behavior(qtbot, dialog_add_mode):
     
     # min_stock should be visible again
     assert dialog.min_stock_input.isVisible() is True
+
+
+def test_unit_combo_functionality(qtbot, dialog_add_mode, sample_units):
+    """Test that unit combo box works correctly with units."""
+    dialog = dialog_add_mode
+    qtbot.addWidget(dialog)
+    
+    # Verify unit combo is populated (includes default "U" + sample_units)
+    expected_count = len(sample_units) + 1  # +1 for default "U"
+    assert dialog.unit_combo.count() == expected_count
+    
+    # Verify default unit "U" is first
+    assert dialog.unit_combo.itemText(0) == "U"
+    assert dialog.unit_combo.itemData(0) == "U"
+    
+    # Verify sample units are loaded correctly (starting from index 1)
+    for i, unit in enumerate(sample_units):
+        combo_index = i + 1  # +1 because "U" is at index 0
+        expected_text = f"{unit.name} ({unit.abbreviation})"
+        assert dialog.unit_combo.itemText(combo_index) == expected_text
+        assert dialog.unit_combo.itemData(combo_index) == unit.name  # Data is unit.name, not abbreviation
+    
+    # Test selecting different units
+    dialog.unit_combo.setCurrentIndex(1)  # Select first sample unit
+    assert dialog.unit_combo.currentData() == sample_units[0].name
+    
+    dialog.unit_combo.setCurrentIndex(2)  # Select second sample unit
+    assert dialog.unit_combo.currentData() == sample_units[1].name
+
+
+def test_unit_combo_in_edit_mode(qtbot, dialog_edit_mode, sample_product, sample_units):
+    """Test that unit combo shows correct selection in edit mode."""
+    dialog = dialog_edit_mode
+    qtbot.addWidget(dialog)
+    
+    # Verify the unit combo has the correct selection for the product being edited
+    current_unit = dialog.unit_combo.currentData()
+    assert current_unit == sample_product.unit  # Should be "Pieza"
+    
+    # Verify the correct index is selected (should be index 1 for "Pieza")
+    expected_index = 1  # "Pieza" is the first unit in sample_units, so index 1 (after "U" at index 0)
+    assert dialog.unit_combo.currentIndex() == expected_index
+    
+    # Test changing the unit selection
+    original_index = dialog.unit_combo.currentIndex()
+    new_index = (original_index + 1) % dialog.unit_combo.count()
+    dialog.unit_combo.setCurrentIndex(new_index)
+    
+    # Verify the selection changed
+    assert dialog.unit_combo.currentIndex() == new_index
+    assert dialog.unit_combo.currentData() != sample_product.unit
+
+
+def test_product_creation_with_unit_selection(qtbot, dialog_add_mode, mock_product_service):
+    """Test that product creation includes the selected unit."""
+    dialog = dialog_add_mode
+    qtbot.addWidget(dialog)
+    
+    # Clear auto-suggested ID
+    dialog.id_input.setText("")
+    
+    # Fill in valid data
+    dialog.code_input.setText("TEST001")
+    dialog.description_input.setText("Test Product")
+    dialog.cost_price_input.setValue(10.0)
+    dialog.sale_price_input.setValue(15.0)
+    dialog.min_stock_input.setValue(5.0)
+    dialog.department_combo.setCurrentIndex(1)  # Electronics
+    dialog.unit_combo.setCurrentIndex(1)  # Select second unit
+    
+    # Mock successful service call
+    from core.models.product import Product
+    from decimal import Decimal
+    mock_product = Product(
+         id=1,
+         code="TEST001",
+         description="Test Product",
+         cost_price=Decimal("10.0"),
+         sell_price=Decimal("15.0"),
+         quantity_in_stock=Decimal("0.0"),
+         uses_inventory=True,
+         min_stock=Decimal("5.0"),
+         unit="Pieza",  # First unit from sample_units (index 1 in combo)
+         department_id=1
+     )
+    mock_product_service.add_product.return_value = mock_product
+    
+    with patch('ui.dialogs.product_dialog.show_info_message') as mock_info:
+        # Patch super().accept() to prevent actual dialog closing but allow the method to complete
+        with patch.object(dialog.__class__.__bases__[0], 'accept') as mock_super_accept:
+            dialog.accept()
+            mock_info.assert_called_once_with(dialog, "Éxito", "Producto agregado correctamente")
+            mock_super_accept.assert_called_once()
+    
+    # Verify service was called with correct unit
+    mock_product_service.add_product.assert_called_once()
+    call_args = mock_product_service.add_product.call_args[0][0]
+    assert call_args.unit == dialog.unit_combo.currentData()

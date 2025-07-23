@@ -85,7 +85,7 @@ class ProductService(ServiceBase):
             return uow.products.update(product_update_data)
 
     def delete_product(self, product_id: int) -> None:
-        """Deletes a product if it doesn't have stock or doesn't use inventory."""
+        """Deletes a product. Raises ValueError if it has stock."""
         with unit_of_work() as uow:
             product = uow.products.get_by_id(product_id)
             if product:
@@ -95,7 +95,8 @@ class ProductService(ServiceBase):
                     quantity_in_stock = float(product.quantity_in_stock)
                     
                 if has_inventory and quantity_in_stock > 0:
-                    raise ValueError(f"Product '{product.code}' cannot be deleted because it has stock ({quantity_in_stock})")
+                    raise ValueError(f"Product '{product.code}' cannot be deleted because it has stock")
+                
                 self.logger.info(f"Deleting product with ID: {product_id}")
                 return uow.products.delete(product_id)
             else:
@@ -253,3 +254,23 @@ class ProductService(ServiceBase):
             
             self.logger.info(f"Successfully updated prices for {updated_count} products by {percentage}%.")
             return updated_count
+
+    def get_next_available_id(self) -> int:
+        """Gets the next available ID for a new product."""
+        with unit_of_work() as uow:
+            products = uow.products.get_all()
+            if not products:
+                return 1
+            
+            # Get all existing IDs and find the next available one
+            existing_ids = {p.id for p in products if p.id is not None}
+            if not existing_ids:
+                return 1
+            
+            # Find the first gap in the sequence, or return max + 1
+            max_id = max(existing_ids)
+            for i in range(1, max_id + 2):
+                if i not in existing_ids:
+                    return i
+            
+            return max_id + 1

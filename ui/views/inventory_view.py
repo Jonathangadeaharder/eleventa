@@ -16,6 +16,7 @@ from ui.models.table_models import ProductTableModel # Assuming reuse initially
 from ui.utils import show_error_message, ask_confirmation # Assuming utility functions
 from ui.dialogs.add_inventory_dialog import AddInventoryDialog # Import the dialog
 from ui.dialogs.adjust_inventory_dialog import AdjustInventoryDialog # Import the new dialog
+from ui.dialogs.import_export_dialog import ImportExportDialog # Import the import/export dialog
 from core.models.product import Product # Import Product model
 from ui.widgets.filter_dropdowns import FilterBoxWidget, FilterDropdown, PeriodFilterWidget
 
@@ -43,6 +44,7 @@ class InventoryView(QWidget):
         toolbar_layout = QHBoxLayout()
         self.add_button = QPushButton(QIcon(":/icons/icons/new.png"), " Agregar Cantidad")
         self.adjust_button = QPushButton(QIcon(":/icons/icons/edit.png"), " Ajustar Stock")
+        self.import_export_button = QPushButton(QIcon(":/icons/icons/import.png"), " Importar/Exportar")
         self.report_button = QPushButton(QIcon(":/icons/icons/reports.png"), " Reporte de Inventario")
         self.low_stock_button = QPushButton(QIcon(":/icons/icons/inventory.png"), " Productos Bajos")
         self.movements_button = QPushButton(QIcon(":/icons/icons/inventory.png"), " Movimientos")
@@ -57,6 +59,7 @@ class InventoryView(QWidget):
 
         toolbar_layout.addWidget(self.add_button)
         toolbar_layout.addWidget(self.adjust_button)
+        toolbar_layout.addWidget(self.import_export_button)
         toolbar_layout.addSpacerItem(QSpacerItem(20, 20, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum))
         toolbar_layout.addWidget(self.report_button)
         toolbar_layout.addWidget(self.low_stock_button)
@@ -80,6 +83,9 @@ class InventoryView(QWidget):
         search_label = QLabel("Buscar:")
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Código o descripción...")
+        self.search_input.setEnabled(True)
+        self.search_input.setReadOnly(False)
+        self.search_input.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         search_layout.addWidget(search_label)
         search_layout.addWidget(self.search_input)
         
@@ -148,6 +154,7 @@ class InventoryView(QWidget):
         # Connect add/adjust buttons (will be implemented in TASK-018)
         self.add_button.clicked.connect(self.add_inventory_item)
         self.adjust_button.clicked.connect(self.adjust_inventory_item)
+        self.import_export_button.clicked.connect(self.open_import_export_dialog)
         
         # Connect filter signals
         self.department_filter.selectionChanged.connect(self._on_filter_changed)
@@ -300,6 +307,20 @@ class InventoryView(QWidget):
                 self.refresh_low_stock_report()
             # Optionally, re-select the item if needed
             print(f"Inventory adjusted for {selected_product.code}") # Debug
+
+    @Slot()
+    def open_import_export_dialog(self):
+        """Abre el diálogo de importación/exportación."""
+        print("[InventoryView] 'Import/Export' clicked.")
+        dialog = ImportExportDialog(self)
+        if dialog.exec() == ImportExportDialog.DialogCode.Accepted:
+            # Refrescar la vista actual después de una posible importación
+            print("[InventoryView] Import/Export dialog accepted. Refreshing inventory view.")
+            current_index = self.tab_widget.currentIndex()
+            if current_index == 0:
+                self.refresh_inventory_report()
+            elif current_index == 1:
+                self.refresh_low_stock_report()
 
     def showEvent(self, event):
         """Override showEvent to load filter data when the view becomes visible."""

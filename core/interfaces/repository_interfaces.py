@@ -14,6 +14,7 @@ try:
     from ..models.credit_payment import CreditPayment
     from ..models.invoice import Invoice # Add Invoice model import
     from ..models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
+    from ..models.unit import Unit
 except ImportError:
     # Fallback for different import contexts
     from core.models.product import Product, Department
@@ -23,6 +24,7 @@ except ImportError:
     from core.models.credit_payment import CreditPayment
     from core.models.invoice import Invoice # Add Invoice model import
     from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
+    from core.models.unit import Unit
     # Removed User import from here
 
 class IDepartmentRepository(ABC):
@@ -56,6 +58,45 @@ class IDepartmentRepository(ABC):
     @abstractmethod
     def delete(self, department_id: uuid.UUID) -> bool:
         """Deletes a department by its ID."""
+        pass  # pragma: no cover
+
+
+class IUnitRepository(ABC):
+    """Interface for unit data access operations."""
+
+    @abstractmethod
+    def add(self, unit: Unit) -> Unit:
+        """Adds a new unit to the repository."""
+        pass  # pragma: no cover
+
+    @abstractmethod
+    def get_by_id(self, unit_id: int) -> Optional[Unit]:
+        """Retrieves a unit by its unique ID."""
+        pass  # pragma: no cover
+
+    @abstractmethod
+    def get_by_name(self, name: str) -> Optional[Unit]:
+        """Retrieves a unit by its name."""
+        pass  # pragma: no cover
+
+    @abstractmethod
+    def get_all(self, active_only: bool = True) -> List[Unit]:
+        """Retrieves all units, optionally filtered by active status."""
+        pass  # pragma: no cover
+
+    @abstractmethod
+    def update(self, unit: Unit) -> Optional[Unit]:
+        """Updates an existing unit."""
+        pass  # pragma: no cover
+
+    @abstractmethod
+    def delete(self, unit_id: int) -> bool:
+        """Deletes a unit by its ID."""
+        pass  # pragma: no cover
+
+    @abstractmethod
+    def search(self, query: str) -> List[Unit]:
+        """Searches for units based on name or abbreviation."""
         pass  # pragma: no cover
 
 

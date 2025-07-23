@@ -8,3 +8,4 @@ pydantic[email]
 pydantic-settings
 reportlab
 alembic
+numpy<2

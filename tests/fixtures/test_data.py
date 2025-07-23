@@ -61,8 +61,8 @@ def create_customer(
     address: Optional[str] = "123 Test St",
     cuit: Optional[str] = "20123456789",
     iva_condition: Optional[str] = "Consumidor Final",
-    credit_limit: float = 1000.0,
-    credit_balance: float = 0.0,
+    credit_limit: Decimal = Decimal('1000.0'),
+    credit_balance: Decimal = Decimal('0.0'),
     is_active: bool = True
 ) -> Customer:
     """Create a customer with default test values."""
