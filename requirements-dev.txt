@@ -7,4 +7,10 @@ bcrypt
 black
 ruff
 pytest-timeout
+# Type checking and security
+mypy
+bandit[toml]
+safety
+# Pre-commit hooks
+pre-commit
 # Add other dev dependencies here

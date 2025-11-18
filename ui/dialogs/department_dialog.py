@@ -1,7 +1,16 @@
 import sys
 from PySide6.QtWidgets import (
-    QDialog, QHBoxLayout, QVBoxLayout, QListWidget, QLineEdit, QPushButton,
-    QMessageBox, QApplication, QListWidgetItem, QLabel, QDialogButtonBox
+    QDialog,
+    QHBoxLayout,
+    QVBoxLayout,
+    QListWidget,
+    QLineEdit,
+    QPushButton,
+    QMessageBox,
+    QApplication,
+    QListWidgetItem,
+    QLabel,
+    QDialogButtonBox,
 )
 from PySide6.QtCore import Qt, Slot
 from typing import Optional
@@ -12,7 +21,7 @@ from core.models.product import Department
 # Assuming ProductService provides department methods
 # from core.services.product_service import ProductService
 # For testing, let's create a mock service and department structure
-from dataclasses import dataclass
+
 
 class MockProductService_Departments:
     def __init__(self):
@@ -33,7 +42,9 @@ class MockProductService_Departments:
         if not department_data.name:
             raise ValueError("El nombre del departamento no puede estar vacío.")
         # Check for duplicates (case-insensitive)
-        if any(d.name.lower() == department_data.name.lower() for d in self._departments):
+        if any(
+            d.name.lower() == department_data.name.lower() for d in self._departments
+        ):
             raise ValueError(f"El departamento '{department_data.name}' ya existe.")
         # Assign an ID if not provided
         if department_data.id is None:
@@ -43,15 +54,23 @@ class MockProductService_Departments:
         return department_data
 
     def update_department(self, department_data: Department) -> Department:
-        print(f"[MockService] Updating department ID {department_data.id} to: {department_data.name}")
+        print(
+            f"[MockService] Updating department ID {department_data.id} to: {department_data.name}"
+        )
         if not department_data.name:
             raise ValueError("El nombre del departamento no puede estar vacío.")
         if department_data.id is None:
             raise ValueError("Department ID must be provided for update.")
-            
+
         # Check for duplicates excluding self (case-insensitive)
-        if any(d.name.lower() == department_data.name.lower() and d.id != department_data.id for d in self._departments):
-            raise ValueError(f"Ya existe otro departamento con el nombre '{department_data.name}'.")
+        if any(
+            d.name.lower() == department_data.name.lower()
+            and d.id != department_data.id
+            for d in self._departments
+        ):
+            raise ValueError(
+                f"Ya existe otro departamento con el nombre '{department_data.name}'."
+            )
 
         for i, dept in enumerate(self._departments):
             if dept.id == department_data.id:
@@ -65,7 +84,7 @@ class MockProductService_Departments:
         original_length = len(self._departments)
         self._departments = [d for d in self._departments if d.id != department_id]
         if len(self._departments) == original_length:
-             raise ValueError("No se encontró el departamento a eliminar.")
+            raise ValueError("No se encontró el departamento a eliminar.")
         # In a real app, check if the department is in use by products
         # if self.product_repository.exists_product_with_department(department_id):
         #     raise ValueError("No se puede eliminar el departamento porque está asignado a uno o más productos.")
@@ -80,7 +99,9 @@ class DepartmentDialog(QDialog):
         self.setWindowTitle("Administrar Departamentos")
         self.setMinimumWidth(450)
 
-        self._current_department_id: Optional[int] = None # Store ID of selected department for editing
+        self._current_department_id: Optional[int] = (
+            None  # Store ID of selected department for editing
+        )
 
         self._init_ui()
         self._connect_signals()
@@ -95,20 +116,22 @@ class DepartmentDialog(QDialog):
         self.dept_list_widget = QListWidget()
         self.dept_list_widget.setAlternatingRowColors(True)
         list_layout.addWidget(self.dept_list_widget)
-        main_layout.addLayout(list_layout, 2) # Give list more stretch factor
+        main_layout.addLayout(list_layout, 2)  # Give list more stretch factor
 
         # Right side: Form and buttons
         form_layout = QVBoxLayout()
         form_layout.addWidget(QLabel("Nombre Departamento:"))
         self.name_input = QLineEdit()
         form_layout.addWidget(self.name_input)
-        form_layout.addStretch() # Push buttons down
+        form_layout.addStretch()  # Push buttons down
 
         self.new_button = QPushButton("Nuevo")
         self.save_button = QPushButton("Guardar")
         self.delete_button = QPushButton("Eliminar")
-        self.save_button.setEnabled(False) # Disabled until changes are made or new is clicked
-        self.delete_button.setEnabled(False) # Disabled until an item is selected
+        self.save_button.setEnabled(
+            False
+        )  # Disabled until changes are made or new is clicked
+        self.delete_button.setEnabled(False)  # Disabled until an item is selected
 
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.new_button)
@@ -129,7 +152,7 @@ class DepartmentDialog(QDialog):
         self.new_button.clicked.connect(self._new_department)
         self.save_button.clicked.connect(self._save_department)
         self.delete_button.clicked.connect(self._delete_department)
-        self.button_box.rejected.connect(self.reject) # Close button action
+        self.button_box.rejected.connect(self.reject)  # Close button action
 
     @Slot()
     def _load_departments(self):
@@ -140,20 +163,26 @@ class DepartmentDialog(QDialog):
             departments = self.product_service.get_all_departments()
             print(f"Loaded {len(departments)} departments")
             for dept in departments:
-                print(f"Adding department to list: ID={dept.id}, Name={dept.name}, Type={type(dept)}")
+                print(
+                    f"Adding department to list: ID={dept.id}, Name={dept.name}, Type={type(dept)}"
+                )
                 item = QListWidgetItem(dept.name)
-                item.setData(Qt.ItemDataRole.UserRole, dept) # Store the whole object
+                item.setData(Qt.ItemDataRole.UserRole, dept)  # Store the whole object
                 self.dept_list_widget.addItem(item)
             self._update_button_states()
         except Exception as e:
             print(f"ERROR loading departments: {e}")
             import traceback
-            traceback.print_exc()
-            QMessageBox.critical(self, "Error", f"No se pudieron cargar los departamentos: {e}")
 
+            traceback.print_exc()
+            QMessageBox.critical(
+                self, "Error", f"No se pudieron cargar los departamentos: {e}"
+            )
 
     @Slot(QListWidgetItem, QListWidgetItem)
-    def _on_selection_changed(self, current: Optional[QListWidgetItem], previous: Optional[QListWidgetItem]):
+    def _on_selection_changed(
+        self, current: Optional[QListWidgetItem], previous: Optional[QListWidgetItem]
+    ):
         """Updates the form when list selection changes."""
         if current:
             department: Department = current.data(Qt.ItemDataRole.UserRole)
@@ -163,14 +192,14 @@ class DepartmentDialog(QDialog):
             self.name_input.setText(department.name)
             self.name_input.textChanged.connect(self._on_name_input_changed)
             self.name_input.setReadOnly(False)
-            self.name_input.setFocus() # Ready to edit
+            self.name_input.setFocus()  # Ready to edit
         else:
             self._current_department_id = None
             # Keep disconnected when clearing
             self.name_input.textChanged.disconnect(self._on_name_input_changed)
             self.name_input.clear()
             self.name_input.textChanged.connect(self._on_name_input_changed)
-            self.name_input.setReadOnly(True) # Can't edit if nothing selected
+            self.name_input.setReadOnly(True)  # Can't edit if nothing selected
 
         self._update_button_states()
 
@@ -182,7 +211,9 @@ class DepartmentDialog(QDialog):
     def _update_button_states(self):
         """Updates the enabled state of buttons based on selection and input."""
         selected_item = self.dept_list_widget.currentItem()
-        is_editing_existing = selected_item is not None and self._current_department_id is not None
+        is_editing_existing = (
+            selected_item is not None and self._current_department_id is not None
+        )
         has_text = bool(self.name_input.text().strip())
 
         self.delete_button.setEnabled(is_editing_existing)
@@ -194,18 +225,21 @@ class DepartmentDialog(QDialog):
         if is_editing_existing:
             original_name = selected_item.data(Qt.ItemDataRole.UserRole).name
 
-        is_new_mode = self._current_department_id is None and not self.name_input.isReadOnly()
+        is_new_mode = (
+            self._current_department_id is None and not self.name_input.isReadOnly()
+        )
         text_changed = self.name_input.text() != original_name
 
-        can_save = (is_new_mode and has_text) or (is_editing_existing and has_text and text_changed)
+        can_save = (is_new_mode and has_text) or (
+            is_editing_existing and has_text and text_changed
+        )
         self.save_button.setEnabled(can_save)
-
 
     @Slot()
     def _new_department(self):
         """Clears the selection and form to add a new department."""
         self.dept_list_widget.clearSelection()
-        self._current_department_id = None # Explicitly mark as new
+        self._current_department_id = None  # Explicitly mark as new
         self.name_input.clear()
         self.name_input.setReadOnly(False)
         self.name_input.setFocus()
@@ -216,90 +250,129 @@ class DepartmentDialog(QDialog):
         """Saves a new or updated department."""
         name = self.name_input.text().strip()
         if not name:
-            QMessageBox.warning(self, "Entrada Inválida", "El nombre del departamento no puede estar vacío.")
+            QMessageBox.warning(
+                self,
+                "Entrada Inválida",
+                "El nombre del departamento no puede estar vacío.",
+            )
             return
 
         try:
-            if self._current_department_id is None: # Adding new
+            if self._current_department_id is None:  # Adding new
                 # Create a Department object with None as id (will be assigned by the database)
                 # This is critical - if we provide an id when it should be auto-generated, it can cause issues
                 new_dept_data = Department(id=None, name=name)
-                print(f"Creating new department with name: {name}, type: {type(new_dept_data)}")
+                print(
+                    f"Creating new department with name: {name}, type: {type(new_dept_data)}"
+                )
                 new_dept = self.product_service.add_department(new_dept_data)
                 print(f"Department created successfully: {new_dept.id}:{new_dept.name}")
-                self._load_departments() # Reload to show the new one
+                self._load_departments()  # Reload to show the new one
                 # Optionally select the newly added item
                 for i in range(self.dept_list_widget.count()):
-                     item = self.dept_list_widget.item(i)
-                     if item.data(Qt.ItemDataRole.UserRole).id == new_dept.id:
-                         self.dept_list_widget.setCurrentItem(item)
-                         break
-                QMessageBox.information(self, "Departamento Agregado", f"Departamento '{new_dept.name}' agregado correctamente.")
+                    item = self.dept_list_widget.item(i)
+                    if item.data(Qt.ItemDataRole.UserRole).id == new_dept.id:
+                        self.dept_list_widget.setCurrentItem(item)
+                        break
+                QMessageBox.information(
+                    self,
+                    "Departamento Agregado",
+                    f"Departamento '{new_dept.name}' agregado correctamente.",
+                )
 
-            else: # Updating existing
+            else:  # Updating existing
                 # Create a Department object with ID for updating
-                updated_dept_data = Department(id=self._current_department_id, name=name)
-                print(f"Updating department {self._current_department_id} to name: {name}")
+                updated_dept_data = Department(
+                    id=self._current_department_id, name=name
+                )
+                print(
+                    f"Updating department {self._current_department_id} to name: {name}"
+                )
                 # Call update_department with just the Department object
                 updated_dept = self.product_service.update_department(updated_dept_data)
-                
+
                 # Handle the case where update_department might return None
                 if updated_dept is None:
                     print("Warning: update_department returned None")
                     updated_dept = updated_dept_data  # Use the input data as a fallback
-                
-                print(f"Department updated successfully: {updated_dept.id}:{updated_dept.name}")
+
+                print(
+                    f"Department updated successfully: {updated_dept.id}:{updated_dept.name}"
+                )
                 # Update the item text directly instead of full reload if preferred
                 selected_item = self.dept_list_widget.currentItem()
-                if selected_item and selected_item.data(Qt.ItemDataRole.UserRole).id == updated_dept.id:
+                if (
+                    selected_item
+                    and selected_item.data(Qt.ItemDataRole.UserRole).id
+                    == updated_dept.id
+                ):
                     selected_item.setText(updated_dept.name)
-                    selected_item.setData(Qt.ItemDataRole.UserRole, updated_dept) # Update stored data too
-                    self._update_button_states() # Reset save button state
-                else: # Fallback if selection somehow got lost
+                    selected_item.setData(
+                        Qt.ItemDataRole.UserRole, updated_dept
+                    )  # Update stored data too
+                    self._update_button_states()  # Reset save button state
+                else:  # Fallback if selection somehow got lost
                     self._load_departments()
-                QMessageBox.information(self, "Departamento Actualizado", f"Departamento actualizado a '{updated_dept.name}'.")
+                QMessageBox.information(
+                    self,
+                    "Departamento Actualizado",
+                    f"Departamento actualizado a '{updated_dept.name}'.",
+                )
 
-        except ValueError as e: # Catch validation errors from service
-             print(f"Error saving department: {e}")
-             QMessageBox.warning(self, "Error al Guardar", str(e))
-        except Exception as e: # Catch unexpected errors
-             print(f"Unexpected error saving department: {e}")
-             import traceback
-             traceback.print_exc()
-             QMessageBox.critical(self, "Error Inesperado", f"Ocurrió un error al guardar: {e}")
+        except ValueError as e:  # Catch validation errors from service
+            print(f"Error saving department: {e}")
+            QMessageBox.warning(self, "Error al Guardar", str(e))
+        except Exception as e:  # Catch unexpected errors
+            print(f"Unexpected error saving department: {e}")
+            import traceback
 
+            traceback.print_exc()
+            QMessageBox.critical(
+                self, "Error Inesperado", f"Ocurrió un error al guardar: {e}"
+            )
 
     @Slot()
     def _delete_department(self):
         """Deletes the selected department after confirmation."""
         selected_item = self.dept_list_widget.currentItem()
         if not selected_item or self._current_department_id is None:
-            return # Should not happen if button state is correct
+            return  # Should not happen if button state is correct
 
         department: Department = selected_item.data(Qt.ItemDataRole.UserRole)
 
-        reply = QMessageBox.question(self, "Confirmar Eliminación",
-                                     f"¿Está seguro que desea eliminar el departamento '{department.name}'?",
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                                     QMessageBox.StandardButton.No)
+        reply = QMessageBox.question(
+            self,
+            "Confirmar Eliminación",
+            f"¿Está seguro que desea eliminar el departamento '{department.name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
 
         if reply == QMessageBox.StandardButton.Yes:
             try:
                 self.product_service.delete_department(department.id)
                 # No need to clear form here, _load_departments handles it
                 self._load_departments()
-                QMessageBox.information(self, "Departamento Eliminado", f"Departamento '{department.name}' eliminado.")
-            except ValueError as e: # Catch potential service errors (e.g., department in use)
+                QMessageBox.information(
+                    self,
+                    "Departamento Eliminado",
+                    f"Departamento '{department.name}' eliminado.",
+                )
+            except (
+                ValueError
+            ) as e:  # Catch potential service errors (e.g., department in use)
                 QMessageBox.warning(self, "Error al Eliminar", str(e))
-            except Exception as e: # Catch other unexpected errors
-                QMessageBox.critical(self, "Error Inesperado", f"Ocurrió un error al eliminar: {e}")
+            except Exception as e:  # Catch other unexpected errors
+                QMessageBox.critical(
+                    self, "Error Inesperado", f"Ocurrió un error al eliminar: {e}"
+                )
 
 
 # Example of running this dialog directly (for testing)
-if __name__ == '__main__':
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     # Use the mock service for testing
     mock_service = MockProductService_Departments()
     dialog = DepartmentDialog(mock_service)
-    dialog.exec() # Use exec_() for PySide older versions if needed
-    sys.exit() # Exit after dialog closes 
+    dialog.exec()  # Use exec_() for PySide older versions if needed
+    sys.exit()  # Exit after dialog closes

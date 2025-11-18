@@ -6,7 +6,8 @@ from core.models.inventory import InventoryMovement
 from core.models.enums import InventoryMovementType
 from core.models.product import Product
 from core.services.service_base import ServiceBase
-from infrastructure.persistence.unit_of_work import UnitOfWork, unit_of_work
+from infrastructure.persistence.unit_of_work import unit_of_work
+
 
 class InventoryService(ServiceBase):
     """Provides services related to inventory management."""
@@ -23,7 +24,7 @@ class InventoryService(ServiceBase):
         quantity: Decimal,
         new_cost_price: Optional[Decimal] = None,
         notes: Optional[str] = None,
-        user_id: Optional[int] = None
+        user_id: Optional[int] = None,
     ) -> Product:
         """Adds quantity to a product's stock, logs movement, and optionally updates cost price."""
         with unit_of_work() as uow:
@@ -34,14 +35,22 @@ class InventoryService(ServiceBase):
             if not product:
                 raise ValueError(f"Product with ID {product_id} not found.")
             if not product.uses_inventory:
-                raise ValueError(f"Product {product.code} does not use inventory control.")
+                raise ValueError(
+                    f"Product {product.code} does not use inventory control."
+                )
 
             # Ensure quantity_in_stock is Decimal before adding
-            current_stock = product.quantity_in_stock if isinstance(product.quantity_in_stock, Decimal) else Decimal(str(product.quantity_in_stock))
+            current_stock = (
+                product.quantity_in_stock
+                if isinstance(product.quantity_in_stock, Decimal)
+                else Decimal(str(product.quantity_in_stock))
+            )
             new_quantity = current_stock + quantity
 
             # Update product stock (and cost if provided)
-            uow.products.update_stock(product_id, quantity, new_cost_price)  # Pass quantity change, not new total
+            uow.products.update_stock(
+                product_id, quantity, new_cost_price
+            )  # Pass quantity change, not new total
 
             # Log the movement
             movement = InventoryMovement(
@@ -49,7 +58,7 @@ class InventoryService(ServiceBase):
                 quantity=quantity,
                 movement_type=InventoryMovementType.PURCHASE,
                 description=notes,
-                user_id=user_id
+                user_id=user_id,
             )
             uow.inventory.add_movement(movement)
 
@@ -65,7 +74,7 @@ class InventoryService(ServiceBase):
         product_id: int,
         quantity: Decimal,
         reason: str,
-        user_id: Optional[int] = None
+        user_id: Optional[int] = None,
     ) -> Product:
         """Adjusts a product's stock quantity (positive or negative) and logs movement."""
         with unit_of_work() as uow:
@@ -76,10 +85,16 @@ class InventoryService(ServiceBase):
             if not product:
                 raise ValueError(f"Product with ID {product_id} not found.")
             if not product.uses_inventory:
-                raise ValueError(f"Product {product.code} does not use inventory control.")
+                raise ValueError(
+                    f"Product {product.code} does not use inventory control."
+                )
 
             # Ensure quantity_in_stock is Decimal before adding
-            current_stock = product.quantity_in_stock if isinstance(product.quantity_in_stock, Decimal) else Decimal(str(product.quantity_in_stock))
+            current_stock = (
+                product.quantity_in_stock
+                if isinstance(product.quantity_in_stock, Decimal)
+                else Decimal(str(product.quantity_in_stock))
+            )
             new_quantity = current_stock + quantity
 
             allow_negative_stock = False
@@ -97,7 +112,7 @@ class InventoryService(ServiceBase):
                 quantity=quantity,
                 movement_type=InventoryMovementType.ADJUSTMENT,
                 description=reason,
-                user_id=user_id
+                user_id=user_id,
             )
             uow.inventory.add_movement(movement)
 
@@ -111,11 +126,11 @@ class InventoryService(ServiceBase):
         product_id: int,
         quantity: Decimal,
         sale_id: int,
-        user_id: Optional[int] = None
+        user_id: Optional[int] = None,
     ) -> None:
         """
         Decreases stock for a sold item.
-        
+
         Args:
             product_id: The ID of the product
             quantity: The quantity to decrease (positive value)
@@ -128,18 +143,27 @@ class InventoryService(ServiceBase):
 
             product = uow.products.get_by_id(product_id)
             if not product:
-                raise ValueError(f"Product with ID {product_id} not found for sale item.")
+                raise ValueError(
+                    f"Product with ID {product_id} not found for sale item."
+                )
             if not product.uses_inventory:
-                raise ValueError(f"Product {product.code} does not use inventory control but was included in sale {sale_id}.")
+                raise ValueError(
+                    f"Product {product.code} does not use inventory control but was included in sale {sale_id}."
+                )
 
             # Ensure quantity_in_stock is Decimal before comparison/subtraction
-            current_stock = Decimal('0.0')  # Initialize as Decimal
-            if hasattr(product, 'quantity_in_stock') and product.quantity_in_stock is not None:
+            current_stock = Decimal("0.0")  # Initialize as Decimal
+            if (
+                hasattr(product, "quantity_in_stock")
+                and product.quantity_in_stock is not None
+            ):
                 try:
                     current_stock = Decimal(str(product.quantity_in_stock))
                 except Exception:
                     # Handle case where conversion fails, though should ideally be Decimal already
-                    raise ValueError(f"Invalid stock quantity format for product {product.code}")
+                    raise ValueError(
+                        f"Invalid stock quantity format for product {product.code}"
+                    )
 
             new_quantity = current_stock - quantity
 
@@ -159,7 +183,7 @@ class InventoryService(ServiceBase):
                 movement_type=InventoryMovementType.SALE,
                 description=f"Venta #{sale_id}",
                 related_id=sale_id,
-                user_id=user_id
+                user_id=user_id,
             )
             uow.inventory.add_movement(movement)
 
@@ -170,7 +194,9 @@ class InventoryService(ServiceBase):
         with unit_of_work() as uow:
             return uow.products.get_inventory_report()
 
-    def get_low_stock_products(self, threshold: Decimal = Decimal('10')) -> List[Product]:
+    def get_low_stock_products(
+        self, threshold: Decimal = Decimal("10")
+    ) -> List[Product]:
         """Returns products with stock below the specified threshold."""
         with unit_of_work() as uow:
             return uow.products.get_low_stock_products(threshold)
@@ -180,7 +206,7 @@ class InventoryService(ServiceBase):
         product_id: Optional[int] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
-        movement_type: Optional[str] = None
+        movement_type: Optional[str] = None,
     ) -> List[InventoryMovement]:
         """Returns inventory movements with optional filters."""
         with unit_of_work() as uow:
@@ -188,5 +214,5 @@ class InventoryService(ServiceBase):
                 product_id=product_id,
                 start_date=start_date,
                 end_date=end_date,
-                movement_type=movement_type
+                movement_type=movement_type,
             )

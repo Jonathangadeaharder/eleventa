@@ -3,7 +3,8 @@ from typing import Optional
 
 from core.services.service_base import ServiceBase
 from core.models.user import User
-from infrastructure.persistence.unit_of_work import UnitOfWork, unit_of_work
+from infrastructure.persistence.unit_of_work import unit_of_work
+
 
 class UserService(ServiceBase):
     """Handles business logic related to users."""
@@ -19,17 +20,17 @@ class UserService(ServiceBase):
         if not password:
             raise ValueError("Password cannot be empty.")
         # Encode password to bytes, generate salt, hash, then decode back to string for storage
-        password_bytes = password.encode('utf-8')
+        password_bytes = password.encode("utf-8")
         salt = bcrypt.gensalt()
         hashed_bytes = bcrypt.hashpw(password_bytes, salt)
-        return hashed_bytes.decode('utf-8')
+        return hashed_bytes.decode("utf-8")
 
     def _verify_password(self, plain_password: str, hashed_password: str) -> bool:
         """Verifies a plain text password against a stored bcrypt hash."""
         if not plain_password or not hashed_password:
             return False
-        plain_bytes = plain_password.encode('utf-8')
-        hashed_bytes = hashed_password.encode('utf-8')
+        plain_bytes = plain_password.encode("utf-8")
+        hashed_bytes = hashed_password.encode("utf-8")
         return bcrypt.checkpw(plain_bytes, hashed_bytes)
 
     def add_user(self, username: str, password: str) -> Optional[User]:
@@ -37,7 +38,7 @@ class UserService(ServiceBase):
         with unit_of_work() as uow:
             if not username:
                 raise ValueError("Username cannot be empty.")
-                
+
             # Check if username already exists
             existing_user = uow.users.get_by_username(username)
             if existing_user:
@@ -45,8 +46,10 @@ class UserService(ServiceBase):
                 raise ValueError(f"Username '{username}' already exists.")
 
             hashed_password = self._hash_password(password)
-            new_user = User(username=username, password_hash=hashed_password, is_active=True)
-            
+            new_user = User(
+                username=username, password_hash=hashed_password, is_active=True
+            )
+
             # The repository's add method should handle the actual saving
             # and return the user with an assigned ID.
             self.logger.info(f"Creating new user: {username}")
@@ -73,18 +76,22 @@ class UserService(ServiceBase):
         with unit_of_work() as uow:
             if not username or not password:
                 return None
-                
+
             user = uow.users.get_by_username(username)
-            
+
             if not user or not user.is_active:
-                self.logger.info(f"Authentication failed for username '{username}': user not found or inactive")
-                return None # User not found or inactive
+                self.logger.info(
+                    f"Authentication failed for username '{username}': user not found or inactive"
+                )
+                return None  # User not found or inactive
 
             if self._verify_password(password, user.password_hash):
                 self.logger.info(f"Authentication successful for user: {username}")
-                return user # Authentication successful
+                return user  # Authentication successful
             else:
-                self.logger.info(f"Authentication failed for username '{username}': incorrect password")
-                return None # Password incorrect
+                self.logger.info(
+                    f"Authentication failed for username '{username}': incorrect password"
+                )
+                return None  # Password incorrect
 
     # Add update/delete methods later if needed, handling password changes carefully

@@ -2,23 +2,34 @@ import sys
 from typing import Optional
 from decimal import Decimal
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QFormLayout, QLineEdit, QPushButton,
-    QDialogButtonBox, QMessageBox, QDoubleSpinBox
+    QDialog,
+    QVBoxLayout,
+    QFormLayout,
+    QLineEdit,
+    QDialogButtonBox,
+    QDoubleSpinBox,
 )
 
 # Assuming Customer model and service are available
 from core.models.customer import Customer
 from core.services.customer_service import CustomerService
+
 # Import utility functions if needed (e.g., for showing messages)
 from ..utils import show_error_message, show_info_message
+
 
 class CustomerDialog(QDialog):
     """Dialog for adding or editing customer information."""
 
-    def __init__(self, customer_service: CustomerService, customer: Optional[Customer] = None, parent=None):
+    def __init__(
+        self,
+        customer_service: CustomerService,
+        customer: Optional[Customer] = None,
+        parent=None,
+    ):
         super().__init__(parent)
         self._customer_service = customer_service
-        self._customer = customer # None if adding, existing customer if editing
+        self._customer = customer  # None if adding, existing customer if editing
 
         self.setWindowTitle("Editar Cliente" if customer else "Nuevo Cliente")
 
@@ -28,11 +39,13 @@ class CustomerDialog(QDialog):
         self.email_edit = QLineEdit()
         self.address_edit = QLineEdit()
         self.credit_limit_spin = QDoubleSpinBox()
-        self.credit_limit_spin.setRange(0, 1_000_000) # Set appropriate range
+        self.credit_limit_spin.setRange(0, 1_000_000)  # Set appropriate range
         self.credit_limit_spin.setDecimals(2)
         self.credit_limit_spin.setPrefix("$ ")
 
-        self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        self.button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
 
         # --- Layout --- (Using QFormLayout for label-field pairs)
         form_layout = QFormLayout()
@@ -54,7 +67,7 @@ class CustomerDialog(QDialog):
         if self._customer:
             self._populate_form()
 
-        self.setMinimumWidth(400) # Adjust as needed
+        self.setMinimumWidth(400)  # Adjust as needed
 
     def _populate_form(self, customer=None):
         """Fills the form fields with data from the given customer or self._customer."""
@@ -84,31 +97,46 @@ class CustomerDialog(QDialog):
         customer_data = self._get_customer_data_from_form()
 
         try:
-            if self._customer: # Editing existing customer
+            if self._customer:  # Editing existing customer
                 # Update customer without passing credit_balance parameter
                 # The service handles preserving the credit balance internally
-                self._customer_service.update_customer(self._customer.id, **customer_data)
-                show_info_message(self, "Cliente Actualizado", "Cliente actualizado correctamente.")
-            else: # Adding new customer
+                self._customer_service.update_customer(
+                    self._customer.id, **customer_data
+                )
+                show_info_message(
+                    self, "Cliente Actualizado", "Cliente actualizado correctamente."
+                )
+            else:  # Adding new customer
                 self._customer_service.add_customer(**customer_data)
-                show_info_message(self, "Cliente Agregado", "Nuevo cliente agregado correctamente.")
+                show_info_message(
+                    self, "Cliente Agregado", "Nuevo cliente agregado correctamente."
+                )
 
-            super().accept() # Close the dialog successfully
+            super().accept()  # Close the dialog successfully
 
         except ValueError as e:
             show_error_message(self, "Error de Validación", str(e))
-        except Exception as e: # Catch other potential errors (DB, etc.)
+        except Exception as e:  # Catch other potential errors (DB, etc.)
             show_error_message(self, "Error", f"Ocurrió un error inesperado: {e}")
             # Keep dialog open on unexpected errors
 
+
 # Example Usage (for testing if run directly)
-if __name__ == '__main__':
+if __name__ == "__main__":
     from PySide6.QtWidgets import QApplication
+
     # Mock CustomerService for testing
     class MockCustomerService:
-        def add_customer(self, **kwargs): print(f"Adding: {kwargs}"); return Customer(id=1, **kwargs)
-        def update_customer(self, customer_id, **kwargs): print(f"Updating {customer_id}: {kwargs}"); return Customer(id=customer_id, **kwargs)
-        def get_customer_by_id(self, id): return None # Needed by service update
+        def add_customer(self, **kwargs):
+            print(f"Adding: {kwargs}")
+            return Customer(id=1, **kwargs)
+
+        def update_customer(self, customer_id, **kwargs):
+            print(f"Updating {customer_id}: {kwargs}")
+            return Customer(id=customer_id, **kwargs)
+
+        def get_customer_by_id(self, id):
+            return None  # Needed by service update
 
     app = QApplication(sys.argv)
     service = MockCustomerService()
@@ -119,9 +147,17 @@ if __name__ == '__main__':
         print("Add Dialog Accepted")
 
     # Test Edit (with dummy data)
-    dummy_customer = Customer(id=5, name="Test Edit", phone="555", email="edit@test.com", address="Addr", credit_limit=150.0, credit_balance=20.0)
+    dummy_customer = Customer(
+        id=5,
+        name="Test Edit",
+        phone="555",
+        email="edit@test.com",
+        address="Addr",
+        credit_limit=150.0,
+        credit_balance=20.0,
+    )
     dialog_edit = CustomerDialog(service, customer=dummy_customer)
     if dialog_edit.exec():
         print("Edit Dialog Accepted")
 
-    sys.exit() # Exit without starting event loop if run directly
+    sys.exit()  # Exit without starting event loop if run directly

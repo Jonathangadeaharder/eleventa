@@ -2,46 +2,46 @@
 
 # Color constants
 COLORS = {
-    'primary': '#2980b9',
-    'primary_dark': '#1c638f',
-    'secondary': '#27ae60', 
-    'secondary_dark': '#1e8449',
-    'background': '#f5f5f5',
-    'border': '#d0d0d0',
-    'text': '#333333',
-    'text_light': '#777777',
-    'error': '#e74c3c',
-    'warning': '#f39c12',
-    'success': '#2ecc71',
-    'highlight': '#f1c40f',
+    "primary": "#2980b9",
+    "primary_dark": "#1c638f",
+    "secondary": "#27ae60",
+    "secondary_dark": "#1e8449",
+    "background": "#f5f5f5",
+    "border": "#d0d0d0",
+    "text": "#333333",
+    "text_light": "#777777",
+    "error": "#e74c3c",
+    "warning": "#f39c12",
+    "success": "#2ecc71",
+    "highlight": "#f1c40f",
 }
 
 # Fonts
 FONTS = {
-    'regular': {
-        'family': 'Segoe UI, Arial, sans-serif',
-        'size': 10,
+    "regular": {
+        "family": "Segoe UI, Arial, sans-serif",
+        "size": 10,
     },
-    'heading': {
-        'family': 'Segoe UI, Arial, sans-serif',
-        'size': 12,
-        'weight': 'bold',
+    "heading": {
+        "family": "Segoe UI, Arial, sans-serif",
+        "size": 12,
+        "weight": "bold",
     },
-    'label': {
-        'family': 'Segoe UI, Arial, sans-serif',
-        'size': 10,
-        'weight': 'normal',
+    "label": {
+        "family": "Segoe UI, Arial, sans-serif",
+        "size": 10,
+        "weight": "normal",
     },
-    'button': {
-        'family': 'Segoe UI, Arial, sans-serif',
-        'size': 10,
-        'weight': 'normal',
+    "button": {
+        "family": "Segoe UI, Arial, sans-serif",
+        "size": 10,
+        "weight": "normal",
     },
 }
 
 # Styling for specific widgets
 STYLES = {
-    'button_primary': f"""
+    "button_primary": f"""
         QPushButton {{
             background-color: {COLORS['primary']};
             color: white;
@@ -63,8 +63,7 @@ STYLES = {
             border: 1px solid #bbbbbb;
         }}
     """,
-    
-    'button_secondary': f"""
+    "button_secondary": f"""
         QPushButton {{
             background-color: white;
             color: {COLORS['text']};
@@ -85,8 +84,7 @@ STYLES = {
             border: 1px solid #dddddd;
         }}
     """,
-    
-    'text_input': f"""
+    "text_input": f"""
         QLineEdit, QTextEdit, QPlainTextEdit {{
             border: 1px solid {COLORS['border']};
             border-radius: 4px;
@@ -97,8 +95,7 @@ STYLES = {
             border: 1px solid {COLORS['primary']};
         }}
     """,
-    
-    'dropdown': f"""
+    "dropdown": f"""
         QComboBox {{
             border: 1px solid {COLORS['border']};
             border-radius: 4px;
@@ -113,8 +110,7 @@ STYLES = {
             width: 20px;
         }}
     """,
-    
-    'table_view': f"""
+    "table_view": f"""
         QTableView {{
             border: 1px solid {COLORS['border']};
             border-radius: 4px;
@@ -132,8 +128,7 @@ STYLES = {
             font-weight: bold;
         }}
     """,
-    
-    'group_box': f"""
+    "group_box": f"""
         QGroupBox {{
             font-weight: bold;
             border: 1px solid {COLORS['border']};
@@ -150,9 +145,10 @@ STYLES = {
     """,
 }
 
+
 def apply_style(widget, style_name):
     """Apply a predefined style to a widget."""
     if style_name in STYLES:
         widget.setStyleSheet(STYLES[style_name])
     else:
-        raise ValueError(f"Style '{style_name}' not found") 
+        raise ValueError(f"Style '{style_name}' not found")

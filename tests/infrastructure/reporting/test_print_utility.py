@@ -325,7 +325,7 @@ class TestPrintManager:
         """Test the _open_pdf method."""
         # Create different patch objects for each platform
         with patch('infrastructure.reporting.print_utility.platform.system') as mock_system, \
-             patch('infrastructure.reporting.print_utility.os.startfile') as mock_startfile, \
+             patch('infrastructure.reporting.print_utility.os.startfile', create=True) as mock_startfile, \
              patch('infrastructure.reporting.print_utility.subprocess.run') as mock_run:
             
             # Test Windows platform

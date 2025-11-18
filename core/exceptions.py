@@ -79,7 +79,9 @@ class ExternalServiceError(ApplicationError):
 
     def __init__(self, message="External service error", service_name=None):
         self.service_name = service_name
-        message_with_service = f"{message} (Service: {service_name})" if service_name else message
+        message_with_service = (
+            f"{message} (Service: {service_name})" if service_name else message
+        )
         super().__init__(message_with_service)
 
 
@@ -102,5 +104,9 @@ class SaleNotFoundError(ResourceNotFoundError):
     """
 
     def __init__(self, sale_id=None):
-        message = f"Sale with ID {sale_id} not found" if sale_id is not None else "Sale not found"
+        message = (
+            f"Sale with ID {sale_id} not found"
+            if sale_id is not None
+            else "Sale not found"
+        )
         super().__init__(message)

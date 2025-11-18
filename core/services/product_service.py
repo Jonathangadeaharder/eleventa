@@ -2,7 +2,6 @@
 
 from typing import List, Optional, Any
 from decimal import Decimal
-import logging
 
 from core.models.product import Product, Department
 from infrastructure.persistence.unit_of_work import UnitOfWork, unit_of_work
@@ -11,30 +10,37 @@ from core.utils.validation import (
     validate_required_field,
     validate_positive_number,
     validate_unique_field,
-    validate_exists
+    validate_exists,
 )
+
 
 class ProductService(ServiceBase):
     """Service for product and department management using Unit of Work pattern."""
-    
+
     def __init__(self):
         """
         Initialize the service.
         """
         super().__init__()  # Initialize base class with default logger
 
-    def _validate_product(self, uow: UnitOfWork, product: Product, is_update: bool = False, existing_product_id: Optional[int] = None):
+    def _validate_product(
+        self,
+        uow: UnitOfWork,
+        product: Product,
+        is_update: bool = False,
+        existing_product_id: Optional[int] = None,
+    ):
         """Common validation logic for adding/updating products using centralized validation utilities."""
         # Validate required fields
         validate_required_field(product.code, "Code")
         validate_required_field(product.description, "Description")
-        
+
         # Validate prices - must be positive and non-zero
         if product.sell_price is not None:
             validate_positive_number(product.sell_price, "Sell price")
             if product.sell_price == 0:
                 raise ValueError("Sell price cannot be zero")
-        
+
         if product.cost_price is not None:
             validate_positive_number(product.cost_price, "Cost price")
             if product.cost_price == 0:
@@ -50,20 +56,18 @@ class ProductService(ServiceBase):
         if is_update:
             # For updates, check uniqueness excluding current product
             if existing_by_code and existing_by_code.id != existing_product_id:
-                raise ValueError(f"Code '{product.code}' already exists for another record")
+                raise ValueError(
+                    f"Code '{product.code}' already exists for another record"
+                )
         else:
             # For new products, check if code exists
-            validate_unique_field(
-                existing_by_code is not None,
-                "Code",
-                product.code
-            )
+            validate_unique_field(existing_by_code is not None, "Code", product.code)
 
     def add_product(self, product_data: Product) -> Product:
         """Adds a new product after validation."""
         with unit_of_work() as uow:
             self._validate_product(uow, product_data, is_update=False)
-            
+
             self.logger.info(f"Adding product with code: {product_data.code}")
             added_product = uow.products.add(product_data)
             return added_product
@@ -73,13 +77,18 @@ class ProductService(ServiceBase):
         with unit_of_work() as uow:
             if product_update_data.id is None:
                 raise ValueError("Product ID must be provided for update.")
-            
+
             existing_product = uow.products.get_by_id(product_update_data.id)
             if not existing_product:
                 raise ValueError(f"Product with ID {product_update_data.id} not found")
 
             # Validate the incoming data, considering it's an update
-            self._validate_product(uow, product_update_data, is_update=True, existing_product_id=product_update_data.id)
+            self._validate_product(
+                uow,
+                product_update_data,
+                is_update=True,
+                existing_product_id=product_update_data.id,
+            )
 
             self.logger.info(f"Updating product with ID: {product_update_data.id}")
             return uow.products.update(product_update_data)
@@ -89,18 +98,29 @@ class ProductService(ServiceBase):
         with unit_of_work() as uow:
             product = uow.products.get_by_id(product_id)
             if product:
-                has_inventory = product.uses_inventory if hasattr(product, 'uses_inventory') else False
+                has_inventory = (
+                    product.uses_inventory
+                    if hasattr(product, "uses_inventory")
+                    else False
+                )
                 quantity_in_stock = 0
-                if hasattr(product, 'quantity_in_stock') and product.quantity_in_stock is not None:
+                if (
+                    hasattr(product, "quantity_in_stock")
+                    and product.quantity_in_stock is not None
+                ):
                     quantity_in_stock = float(product.quantity_in_stock)
-                    
+
                 if has_inventory and quantity_in_stock > 0:
-                    raise ValueError(f"Product '{product.code}' cannot be deleted because it has stock")
-                
+                    raise ValueError(
+                        f"Product '{product.code}' cannot be deleted because it has stock"
+                    )
+
                 self.logger.info(f"Deleting product with ID: {product_id}")
                 return uow.products.delete(product_id)
             else:
-                self.logger.warning(f"Attempted to delete non-existent product with ID: {product_id}")
+                self.logger.warning(
+                    f"Attempted to delete non-existent product with ID: {product_id}"
+                )
                 return None
 
     def find_product(self, search_term: Optional[str] = None) -> List[Product]:
@@ -116,14 +136,16 @@ class ProductService(ServiceBase):
     def get_all_products(self, department_id=None) -> List[Product]:
         """Gets all products, optionally filtered by department_id."""
         with unit_of_work() as uow:
-            self.logger.debug(f"Getting all products via get_all_products, department_id={department_id}")
-            
+            self.logger.debug(
+                f"Getting all products via get_all_products, department_id={department_id}"
+            )
+
             products = uow.products.get_all()
-            
+
             # Filter by department_id if provided
             if department_id is not None:
                 products = [p for p in products if p.department_id == department_id]
-                
+
             return products
 
     def get_product_by_code(self, code: str) -> Optional[Product]:
@@ -135,38 +157,42 @@ class ProductService(ServiceBase):
     def get_product_by_id(self, product_id: Any) -> Optional[Product]:
         """
         Gets a product by its ID.
-        
+
         Args:
             product_id: The ID of the product (can be int or another type)
-            
+
         Returns:
             Product object if found, None otherwise
         """
         with unit_of_work() as uow:
-            self.logger.debug(f"Getting product with ID: {product_id}, type: {type(product_id)}")
-            
+            self.logger.debug(
+                f"Getting product with ID: {product_id}, type: {type(product_id)}"
+            )
+
             product = uow.products.get_by_id(product_id)
             if not product:
                 self.logger.debug(f"Product with ID {product_id} not found")
             return product
 
-    def _validate_department(self, uow: UnitOfWork, department: Department, is_update: bool = False):
+    def _validate_department(
+        self, uow: UnitOfWork, department: Department, is_update: bool = False
+    ):
         """Common validation for department add/update."""
         if not department.name:
             raise ValueError("Name cannot be empty")
-        
+
         # Check name uniqueness
         existing = uow.departments.get_by_name(department.name)
         if existing:
             # Check if the found department is the same one being updated
             if not (is_update and existing.id == department.id):
-                 raise ValueError(f"Department name '{department.name}' already exists")
+                raise ValueError(f"Department name '{department.name}' already exists")
 
     def add_department(self, department_data: Department) -> Department:
         """Adds a new department after validation."""
         with unit_of_work() as uow:
             self._validate_department(uow, department_data, is_update=False)
-            
+
             self.logger.info(f"Adding department with name: {department_data.name}")
             added_department = uow.departments.add(department_data)
             return added_department
@@ -182,13 +208,17 @@ class ProductService(ServiceBase):
         with unit_of_work() as uow:
             department = uow.departments.get_by_id(department_id)
             if not department:
-                self.logger.warning(f"Attempted to delete non-existent department with ID: {department_id}")
+                self.logger.warning(
+                    f"Attempted to delete non-existent department with ID: {department_id}"
+                )
                 return None
 
             # Check if department is in use
             products_in_dept = uow.products.get_by_department_id(department_id)
             if products_in_dept:
-                raise ValueError(f"Department '{department.name}' cannot be deleted, it is used by {len(products_in_dept)} product(s).")
+                raise ValueError(
+                    f"Department '{department.name}' cannot be deleted, it is used by {len(products_in_dept)} product(s)."
+                )
 
             self.logger.info(f"Deleting department with ID: {department_id}")
             return uow.departments.delete(department_id)
@@ -198,34 +228,40 @@ class ProductService(ServiceBase):
         with unit_of_work() as uow:
             if department_data.id is None:
                 raise ValueError("Department ID must be provided for update.")
-                
+
             existing_department = uow.departments.get_by_id(department_data.id)
             if not existing_department:
                 raise ValueError(f"Department with ID {department_data.id} not found")
-                
+
             # Validate the incoming data, considering it's an update
             self._validate_department(uow, department_data, is_update=True)
-            
+
             self.logger.info(f"Updating department with ID: {department_data.id}")
             updated_department = uow.departments.update(department_data)
             return updated_department
 
-    def update_prices_by_percentage(self, percentage: Decimal, department_id: Optional[int] = None) -> int:
+    def update_prices_by_percentage(
+        self, percentage: Decimal, department_id: Optional[int] = None
+    ) -> int:
         """
         Updates product prices by a given percentage.
         If department_id is provided, only updates products in that department.
         Returns the number of products updated.
         """
-        if not isinstance(percentage, Decimal) or percentage <= Decimal("-100") :
+        if not isinstance(percentage, Decimal) or percentage <= Decimal("-100"):
             raise ValueError("Percentage must be a number greater than -100.")
 
         with unit_of_work() as uow:
             products_to_update: List[Product]
             if department_id is not None:
-                self.logger.info(f"Fetching products for department ID: {department_id} to update prices by {percentage}%.")
+                self.logger.info(
+                    f"Fetching products for department ID: {department_id} to update prices by {percentage}%."
+                )
                 products_to_update = uow.products.get_by_department_id(department_id)
             else:
-                self.logger.info(f"Fetching all products to update prices by {percentage}%.")
+                self.logger.info(
+                    f"Fetching all products to update prices by {percentage}%."
+                )
                 products_to_update = uow.products.get_all()
 
             if not products_to_update:
@@ -239,20 +275,32 @@ class ProductService(ServiceBase):
                     increase_amount = original_price * (percentage / Decimal("100"))
                     new_price = original_price + increase_amount
                     # Ensure price is not negative, though percentage validation should prevent this for positive prices
-                    product.sell_price = max(Decimal("0.00"), new_price.quantize(Decimal("0.01"))) 
-                    
+                    product.sell_price = max(
+                        Decimal("0.00"), new_price.quantize(Decimal("0.01"))
+                    )
+
                     # Update cost price proportionally if it exists
                     if product.cost_price is not None:
                         original_cost_price = product.cost_price
-                        cost_increase_amount = original_cost_price * (percentage / Decimal("100"))
+                        cost_increase_amount = original_cost_price * (
+                            percentage / Decimal("100")
+                        )
                         new_cost_price = original_cost_price + cost_increase_amount
-                        product.cost_price = max(Decimal("0.00"), new_cost_price.quantize(Decimal("0.01")))
+                        product.cost_price = max(
+                            Decimal("0.00"), new_cost_price.quantize(Decimal("0.01"))
+                        )
 
-                    uow.products.update(product) # Assuming update handles individual product persistence
-                    self.logger.debug(f"Updated product ID {product.id} ('{product.code}'): sell_price from {original_price} to {product.sell_price}, cost_price updated proportionally.")
+                    uow.products.update(
+                        product
+                    )  # Assuming update handles individual product persistence
+                    self.logger.debug(
+                        f"Updated product ID {product.id} ('{product.code}'): sell_price from {original_price} to {product.sell_price}, cost_price updated proportionally."
+                    )
                     updated_count += 1
-            
-            self.logger.info(f"Successfully updated prices for {updated_count} products by {percentage}%.")
+
+            self.logger.info(
+                f"Successfully updated prices for {updated_count} products by {percentage}%."
+            )
             return updated_count
 
     def get_next_available_id(self) -> int:
@@ -261,16 +309,16 @@ class ProductService(ServiceBase):
             products = uow.products.get_all()
             if not products:
                 return 1
-            
+
             # Get all existing IDs and find the next available one
             existing_ids = {p.id for p in products if p.id is not None}
             if not existing_ids:
                 return 1
-            
+
             # Find the first gap in the sequence, or return max + 1
             max_id = max(existing_ids)
             for i in range(1, max_id + 2):
                 if i not in existing_ids:
                     return i
-            
+
             return max_id + 1

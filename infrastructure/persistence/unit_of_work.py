@@ -20,18 +20,18 @@ from .sqlite.repositories import (
     SqliteCreditPaymentRepository,
     SqliteUserRepository,
     SqliteCashDrawerRepository,
-    SqliteUnitRepository
+    SqliteUnitRepository,
 )
 
 
 class UnitOfWork:
     """Unit of Work implementation for managing database transactions.
-    
+
     This class provides a centralized way to manage database sessions and
     repositories within a single transactional context. It ensures that all
     repository operations within the same unit of work share the same database
     session and are committed or rolled back together.
-    
+
     Usage:
         with UnitOfWork() as uow:
             product = uow.products.get_by_id(1)
@@ -39,12 +39,12 @@ class UnitOfWork:
             uow.products.update(product)
             # Transaction is automatically committed on successful exit
     """
-    
+
     def __init__(self):
         """Initialize the Unit of Work."""
         self.session_factory = session_scope_provider.get_session_factory()
         self.session = None
-        
+
         # Repository instances (initialized in __enter__)
         self.departments: Optional[SqliteDepartmentRepository] = None
         self.products: Optional[SqliteProductRepository] = None
@@ -56,13 +56,13 @@ class UnitOfWork:
         self.users: Optional[SqliteUserRepository] = None
         self.cash_drawer: Optional[SqliteCashDrawerRepository] = None
         self.units: Optional[SqliteUnitRepository] = None
-    
+
     def __enter__(self):
         """Enter the Unit of Work context.
-        
+
         Creates a new database session and initializes all repositories
         with the shared session.
-        
+
         Returns:
             UnitOfWork: The Unit of Work instance with initialized repositories.
         """
@@ -71,7 +71,7 @@ class UnitOfWork:
                 "No session factory has been set. Make sure to call "
                 "session_scope_provider.set_default_session_factory() first."
             )
-        
+
         try:
             # Check if we're in a test environment where get_session should be used instead
             # This allows tests to provide a pre-configured session with proper isolation
@@ -81,13 +81,17 @@ class UnitOfWork:
                 logging.debug("Using test session from session_scope_provider")
             except Exception as e:
                 # Fallback to session factory if get_session doesn't work
-                logging.debug(f"get_session failed with {type(e).__name__}: {e}, falling back to session factory")
+                logging.debug(
+                    f"get_session failed with {type(e).__name__}: {e}, falling back to session factory"
+                )
                 self.session = self.session_factory()
-                self._session_created_by_factory = True  # We created it, we should close it
+                self._session_created_by_factory = (
+                    True  # We created it, we should close it
+                )
         except Exception as e:
             logging.error(f"Failed to create database session: {e}")
             raise ValueError(f"Database connection error: {e}") from e
-        
+
         # Initialize all repositories with the shared session
         self.departments = SqliteDepartmentRepository(self.session)
         self.products = SqliteProductRepository(self.session)
@@ -100,14 +104,14 @@ class UnitOfWork:
         # Note: SQLiteCashDrawerRepository has a different interface and uses _session internally
         self.cash_drawer = SqliteCashDrawerRepository(self.session)
         self.units = SqliteUnitRepository(self.session)
-        
+
         return self
-    
+
     def __exit__(self, exc_type, exc_val, traceback):
         """Exit the Unit of Work context.
-        
+
         Handles transaction commit/rollback and session cleanup.
-        
+
         Args:
             exc_type: Exception type if an exception occurred.
             exc_val: Exception value if an exception occurred.
@@ -115,7 +119,7 @@ class UnitOfWork:
         """
         if self.session is None:
             return
-        
+
         try:
             if exc_type is not None:
                 # An exception occurred, rollback the transaction
@@ -136,12 +140,12 @@ class UnitOfWork:
         finally:
             # Don't close the session if it came from session_scope_provider (test environment)
             # In test environments, the session is managed by the test framework
-            if getattr(self, '_session_created_by_factory', True):
+            if getattr(self, "_session_created_by_factory", True):
                 try:
                     self.session.close()
                 except Exception as close_error:
                     logging.error(f"Error closing session: {close_error}")
-            
+
             # Always clear references
             self.session = None
             # Clear repository references
@@ -155,20 +159,20 @@ class UnitOfWork:
             self.users = None
             self.cash_drawer = None
             self.units = None
-    
+
     def commit(self):
         """Manually commit the current transaction.
-        
+
         This method allows for explicit transaction commits within
         the Unit of Work context. Use with caution as it may affect
         the atomicity of operations.
-        
+
         Raises:
             ValueError: If no active session exists.
         """
         if self.session is None:
             raise ValueError("No active session to commit")
-        
+
         try:
             self.session.commit()
             logging.debug("Transaction committed manually")
@@ -176,19 +180,19 @@ class UnitOfWork:
             logging.error(f"Error during manual commit: {e}")
             self.session.rollback()
             raise ValueError(f"Database commit error: {e}") from e
-    
+
     def rollback(self):
         """Manually rollback the current transaction.
-        
+
         This method allows for explicit transaction rollbacks within
         the Unit of Work context.
-        
+
         Raises:
             ValueError: If no active session exists.
         """
         if self.session is None:
             raise ValueError("No active session to rollback")
-        
+
         try:
             self.session.rollback()
             logging.debug("Transaction rolled back manually")
@@ -200,15 +204,15 @@ class UnitOfWork:
 @contextmanager
 def unit_of_work():
     """Context manager for creating a Unit of Work.
-    
+
     This is a convenience function that provides a more concise way
     to use the Unit of Work pattern.
-    
+
     Usage:
         with unit_of_work() as uow:
             product = uow.products.get_by_id(1)
             uow.products.update(product)
-    
+
     Yields:
         UnitOfWork: A configured Unit of Work instance.
     """

@@ -7,6 +7,7 @@ from core.models.enums import PaymentType
 # Assuming Product model is defined elsewhere or not needed directly for definition
 # from core.models.product import Product
 
+
 @dataclass
 class SaleItem:
     # Fields without defaults first
@@ -17,9 +18,9 @@ class SaleItem:
     # Fields with defaults next
     id: Optional[int] = None
     sale_id: Optional[int] = None
-    product_code: str = "" # Denormalized for easy display
-    product_description: str = "" # Denormalized for easy display
-    product_unit: str = "Unidad" # Unit of measure for the product
+    product_code: str = ""  # Denormalized for easy display
+    product_description: str = ""  # Denormalized for easy display
+    product_unit: str = "Unidad"  # Unit of measure for the product
 
     def __post_init__(self):
         # Ensure quantity and unit_price are always Decimal objects
@@ -40,10 +41,12 @@ class Sale:
     id: Optional[int] = None
     timestamp: datetime = field(default_factory=datetime.now)
     items: List[SaleItem] = field(default_factory=list)
-    customer_id: Optional[int] = None # Added customer ID
-    is_credit_sale: bool = False # Added credit flag
-    user_id: Optional[int] = None # User who made the sale
-    payment_type: Optional["PaymentType"] = None # e.g., 'Efectivo', 'Tarjeta', 'Crédito'
+    customer_id: Optional[int] = None  # Added customer ID
+    is_credit_sale: bool = False  # Added credit flag
+    user_id: Optional[int] = None  # User who made the sale
+    payment_type: Optional["PaymentType"] = (
+        None  # e.g., 'Efectivo', 'Tarjeta', 'Crédito'
+    )
     # status: str = "COMPLETED" # Example status
 
     @property
