@@ -41,7 +41,6 @@ def safe_currency_format(amount: float) -> str:
         return f"${amount:,.2f}"
 
 
-
 class OpenCashDrawerDialog(QDialog):
     """Dialog for opening a cash drawer with an initial amount."""
 
@@ -416,12 +415,8 @@ class CashDrawerHistoryDialog(QDialog):
         self.initial_label.setText(
             safe_currency_format(float(summary.get("initial_amount", 0)))
         )
-        self.in_label.setText(
-            safe_currency_format(float(summary.get("total_in", 0)))
-        )
-        self.out_label.setText(
-            safe_currency_format(float(summary.get("total_out", 0)))
-        )
+        self.in_label.setText(safe_currency_format(float(summary.get("total_in", 0))))
+        self.out_label.setText(safe_currency_format(float(summary.get("total_out", 0))))
         self.balance_label.setText(
             safe_currency_format(float(summary.get("current_balance", 0)))
         )
@@ -446,9 +441,7 @@ class CashDrawerHistoryDialog(QDialog):
 
             balance += entry.amount
 
-        self.initial_label.setText(
-            safe_currency_format(float(initial_amount))
-        )
+        self.initial_label.setText(safe_currency_format(float(initial_amount)))
         self.in_label.setText(safe_currency_format(float(total_in)))
         self.out_label.setText(safe_currency_format(float(total_out)))
         self.balance_label.setText(safe_currency_format(float(balance)))
