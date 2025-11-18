@@ -1,0 +1,67 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  schedule:
+    # Run security scans weekly (every Monday at 9am UTC)
+    - cron: '0 9 * * 1'
+
+jobs:
+  security:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit[toml] safety
+          pip install -r requirements.txt
+
+      - name: Run Bandit security linter
+        run: |
+          bandit -r core/ ui/ infrastructure/ -c pyproject.toml -f json -o bandit-report.json
+          bandit -r core/ ui/ infrastructure/ -c pyproject.toml
+        continue-on-error: true
+
+      - name: Run Safety vulnerability check
+        run: |
+          safety check --json --output safety-report.json || true
+          safety check --output text
+        continue-on-error: true
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-security-report
+          path: bandit-report.json
+
+      - name: Upload Safety report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety-vulnerability-report
+          path: safety-report.json
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Security scans completed. Check artifacts for detailed reports." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bandit**: Static security analysis" >> $GITHUB_STEP_SUMMARY
+          echo "- **Safety**: Known vulnerability check" >> $GITHUB_STEP_SUMMARY

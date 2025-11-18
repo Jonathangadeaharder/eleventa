@@ -43,9 +43,12 @@ jobs:
         run: |
           pytest --cov=core --cov=infrastructure --cov-report=xml --cov-report=term
 
-      - name: Upload coverage to Codecov (optional)
-        if: false  # Enable when Codecov is set up
+      - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml
           fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: unittests
+          name: codecov-eleventa
+          verbose: true

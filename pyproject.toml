@@ -2,4 +2,15 @@
 test = "pytest:main"
 test-unit = "pytest:main -m unit"
 test-integration = "pytest:main -m integration"
-test-ui = "pytest:main --ui" 
+test-ui = "pytest:main --ui"
+
+[tool.bandit]
+# Bandit security scanner configuration
+exclude_dirs = [
+    "/tests/",
+    "/.venv/",
+    "/build/",
+    "/dist/",
+    "/alembic/",
+]
+skips = ["B101"]  # B101 = assert_used (we use asserts in tests)

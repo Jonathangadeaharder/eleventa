@@ -1,0 +1,25 @@
+# Bandit configuration for security scanning
+# See https://bandit.readthedocs.io/en/latest/config.html
+
+[tool.bandit]
+# Exclude test directories and third-party code
+exclude_dirs = [
+    "/tests/",
+    "/.venv/",
+    "/build/",
+    "/dist/",
+    "/alembic/",
+]
+
+# Skip specific tests (if needed)
+# B101 = assert_used (we use asserts in tests)
+# B601 = paramiko_calls (if using paramiko)
+skips = ["B101"]
+
+# Set confidence level
+# LOW, MEDIUM, HIGH
+confidence = "MEDIUM"
+
+# Set severity level
+# LOW, MEDIUM, HIGH
+severity = "MEDIUM"

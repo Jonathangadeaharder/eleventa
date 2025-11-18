@@ -57,11 +57,27 @@ repos:
       # Detect private keys
       - id: detect-private-key
 
-  # MyPy - Optional static type checking (can be enabled later)
-  # - repo: https://github.com/pre-commit/mirrors-mypy
-  #   rev: v1.13.0
-  #   hooks:
-  #     - id: mypy
-  #       args: [--ignore-missing-imports, --no-error-summary]
-  #       additional_dependencies: [types-all]
-  #       exclude: ^(tests/|alembic/|\.venv/)
+  # MyPy - Static type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        args: [--ignore-missing-imports, --no-error-summary, --check-untyped-defs]
+        additional_dependencies: [types-all, pydantic, sqlalchemy]
+        exclude: ^(tests/|alembic/|\.venv/|build/|dist/)
+
+  # Bandit - Security linter
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.10
+    hooks:
+      - id: bandit
+        args: ['-c', 'pyproject.toml']
+        additional_dependencies: ['bandit[toml]']
+        exclude: ^(tests/|\.venv/|build/|dist/)
+
+  # Safety - Check for known security vulnerabilities in dependencies
+  - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
+    rev: v1.3.3
+    hooks:
+      - id: python-safety-dependencies-check
+        args: ['--ignore=70612']  # Ignore jinja2 vulnerability (fixed in newer versions)
