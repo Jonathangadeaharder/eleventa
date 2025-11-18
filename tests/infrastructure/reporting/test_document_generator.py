@@ -252,9 +252,9 @@ class TestDocumentPdfGenerator:
     
     def test_invalid_output_path(self, generator, sample_invoice_data):
         """Test handling of invalid output path."""
-        # Use a path with invalid characters that will definitely fail on Windows
-        invalid_path = "C:\\invalid\\path\\with<invalid>chars\\file.pdf"
-        
+        # Use a path with null byte which is invalid on all platforms
+        invalid_path = "/tmp/test\x00invalid.pdf"
+
         # Should return False on error
         result = generator.generate_invoice_pdf(sample_invoice_data, sample_invoice_data["items"], invalid_path)
         assert result is False

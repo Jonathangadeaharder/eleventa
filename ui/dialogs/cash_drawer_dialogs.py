@@ -25,7 +25,21 @@ from core.services.cash_drawer_service import CashDrawerService
 from ui.models.cash_drawer_model import CashDrawerTableModel
 
 # Configure locale for currency formatting
-locale.setlocale(locale.LC_ALL, "")
+try:
+    locale.setlocale(locale.LC_ALL, "")
+except (locale.Error, ValueError):
+    # Fallback to C locale if system locale is not available
+    locale.setlocale(locale.LC_ALL, "C")
+
+
+def safe_currency_format(amount: float) -> str:
+    """Safely format currency, falling back to simple format if locale fails."""
+    try:
+        return locale.currency(amount, grouping=True)
+    except (ValueError, locale.Error):
+        # Fallback to simple format if locale doesn't support currency
+        return f"${amount:,.2f}"
+
 
 
 class OpenCashDrawerDialog(QDialog):
@@ -103,7 +117,7 @@ class OpenCashDrawerDialog(QDialog):
             QMessageBox.information(
                 self,
                 "Éxito",
-                f"Caja abierta exitosamente con un monto inicial de {locale.currency(float(initial_amount), grouping=True)}",
+                f"Caja abierta exitosamente con un monto inicial de {safe_currency_format(float(initial_amount))}",
             )
 
             super().accept()
@@ -173,7 +187,7 @@ class AddRemoveCashDialog(QDialog):
                     self.cash_drawer_service.repository.get_current_balance()
                 )
                 balance_label = QLabel(
-                    f"Balance actual: {locale.currency(float(current_balance), grouping=True)}"
+                    f"Balance actual: {safe_currency_format(float(current_balance))}"
                 )
                 form_layout.addRow("", balance_label)
             except (ValueError, TypeError, locale.Error, AttributeError):
@@ -218,7 +232,7 @@ class AddRemoveCashDialog(QDialog):
             QMessageBox.information(
                 self,
                 "Éxito",
-                f"Se ha {operation} {locale.currency(float(amount), grouping=True)} de la caja.",
+                f"Se ha {operation} {safe_currency_format(float(amount))} de la caja.",
             )
 
             super().accept()
@@ -400,16 +414,16 @@ class CashDrawerHistoryDialog(QDialog):
     def update_summary_display(self, summary):
         """Update summary display with summary data."""
         self.initial_label.setText(
-            locale.currency(float(summary.get("initial_amount", 0)), grouping=True)
+            safe_currency_format(float(summary.get("initial_amount", 0)))
         )
         self.in_label.setText(
-            locale.currency(float(summary.get("total_in", 0)), grouping=True)
+            safe_currency_format(float(summary.get("total_in", 0)))
         )
         self.out_label.setText(
-            locale.currency(float(summary.get("total_out", 0)), grouping=True)
+            safe_currency_format(float(summary.get("total_out", 0)))
         )
         self.balance_label.setText(
-            locale.currency(float(summary.get("current_balance", 0)), grouping=True)
+            safe_currency_format(float(summary.get("current_balance", 0)))
         )
 
     def update_summary_from_entries(self, entries):
@@ -433,11 +447,11 @@ class CashDrawerHistoryDialog(QDialog):
             balance += entry.amount
 
         self.initial_label.setText(
-            locale.currency(float(initial_amount), grouping=True)
+            safe_currency_format(float(initial_amount))
         )
-        self.in_label.setText(locale.currency(float(total_in), grouping=True))
-        self.out_label.setText(locale.currency(float(total_out), grouping=True))
-        self.balance_label.setText(locale.currency(float(balance), grouping=True))
+        self.in_label.setText(safe_currency_format(float(total_in)))
+        self.out_label.setText(safe_currency_format(float(total_out)))
+        self.balance_label.setText(safe_currency_format(float(balance)))
 
 
 class CloseCashDrawerDialog(QDialog):
@@ -517,7 +531,7 @@ class CloseCashDrawerDialog(QDialog):
             QMessageBox.information(
                 self,
                 "Éxito",
-                f"Caja cerrada exitosamente con un monto de {locale.currency(float(actual_amount), grouping=True)}.",
+                f"Caja cerrada exitosamente con un monto de {safe_currency_format(float(actual_amount))}.",
             )
             super().accept()
 
