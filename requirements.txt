@@ -9,3 +9,4 @@ pydantic-settings
 reportlab
 alembic
 numpy<2
+pandas

@@ -82,7 +82,7 @@ def test_external_service_error_with_name():
     message = "Timeout connecting"
     service = "PaymentGateway"
     # Escape regex special characters like parentheses
-    expected_full_message_regex = f"{message} \(Service: {service}\)"
+    expected_full_message_regex = rf"{message} \(Service: {service}\)"
     with pytest.raises(ExternalServiceError, match=expected_full_message_regex) as excinfo:
         raise ExternalServiceError(message, service_name=service)
     assert isinstance(excinfo.value, ApplicationError)
