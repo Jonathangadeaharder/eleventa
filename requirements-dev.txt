@@ -9,7 +9,6 @@ ruff
 pytest-timeout
 # Type checking and security
 mypy
-types-all
 bandit[toml]
 safety
 # Pre-commit hooks
