@@ -210,7 +210,6 @@ class ReportsView(QWidget):
         today = QDate.currentDate()
 
         # Hide/show date range controls based on selection
-        custom_period = index == 7  # "Período personalizado" is the last option
 
         # Set date range based on selection
         if index == 0:  # Hoy

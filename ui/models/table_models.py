@@ -13,9 +13,6 @@ except locale.Error:
     except locale.Error:
         locale.setlocale(locale.LC_ALL, "")  # Use default locale
 
-# Assuming core.models.product.Product exists, but we'll mock it for now
-# from core.models.product import Product
-from dataclasses import dataclass
 from core.models.product import Product
 from core.models.sale import SaleItem
 from core.models.customer import Customer
@@ -24,29 +21,6 @@ from core.models.invoice import Invoice
 # from core.models.supplier import Supplier # Removed
 # from core.models.purchase import PurchaseOrder, PurchaseOrderItem # Removed
 from core.models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
-
-
-# Mock Product class until TASK-004 is properly integrated
-@dataclass
-class Product:
-    id: int
-    code: str
-    description: str
-    cost_price: float
-    sell_price: float
-    department_id: Optional[int] = None
-    department: Optional["Department"] = None
-    quantity_in_stock: float = 0.0
-    min_stock: float = 0.0
-    uses_inventory: bool = True
-    unit: str = "U"
-
-
-# Add mock Department class for completeness
-@dataclass
-class Department:
-    id: Optional[int] = None
-    name: str = ""
 
 
 class ProductTableModel(QAbstractTableModel):

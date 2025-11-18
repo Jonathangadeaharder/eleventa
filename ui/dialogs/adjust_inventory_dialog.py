@@ -173,7 +173,7 @@ class AdjustInventoryDialog(QDialog):
         try:
             # Use current user ID if available
             user_id = self.current_user.id if self.current_user else None
-            updated_product = self.inventory_service.adjust_inventory(
+            self.inventory_service.adjust_inventory(
                 product_id=self.product.id,
                 quantity=quantity,
                 reason=reason,

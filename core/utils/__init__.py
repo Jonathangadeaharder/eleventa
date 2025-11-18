@@ -2,3 +2,5 @@
 from infrastructure.persistence.utils import session_scope
 
 # This file makes the core.utils directory a Python package
+
+__all__ = ["session_scope"]

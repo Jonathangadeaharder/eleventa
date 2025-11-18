@@ -277,7 +277,6 @@ if __name__ == "__main__":
     update_call_args = {}
 
     def mock_update_prices_by_percentage(percentage, department_id=None):
-        update_call_args = {"percentage": percentage, "department_id": department_id}
         print(
             f"Mock ProductService: update_prices_by_percentage called with {percentage=}, {department_id=}"
         )

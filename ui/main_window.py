@@ -250,14 +250,14 @@ class MainWindow(QMainWindow):
             self.status_bar.addPermanentWidget(self.user_label)
 
     def _create_menu_bar(self):
-        menu_bar = self.menuBar()
+        self.menuBar()
 
     @Slot(int)
     def switch_view(self, index: int):
         """Switches the central widget to the view at the given index."""
         if 0 <= index < self.stacked_widget.count():
             self.stacked_widget.setCurrentIndex(index)
-            current_widget = self.stacked_widget.widget(index)
+            self.stacked_widget.widget(index)
             view_name = "Unknown"
 
             # Find the name of the current view

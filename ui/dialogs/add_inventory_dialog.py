@@ -108,7 +108,7 @@ class AddInventoryDialog(QDialog):
         try:
             # Use current user ID if available
             user_id = self.current_user.id if self.current_user else None
-            updated_product = self.inventory_service.add_inventory(
+            self.inventory_service.add_inventory(
                 product_id=self.product.id,
                 quantity=quantity,
                 new_cost_price=cost_to_update,

@@ -308,8 +308,8 @@ class InventoryView(QWidget):
         """Fetches low stock products and updates the corresponding table."""
         try:
             # Get the selected department ID (if any)
-            department_id = self.department_filter.get_selected_value()
-            search_text = self.search_input.text().strip()
+            self.department_filter.get_selected_value()
+            self.search_input.text().strip()
 
             # Get low stock products without department_id parameter
             low_stock_products = self.inventory_service.get_low_stock_products()
@@ -439,15 +439,12 @@ if __name__ == "__main__":
             return []
 
     class MockProductService:
-        def get_all_products(self):
+        def get_all_products(self, department_id=None):
+            # Returns empty list or can simulate products if needed
             return []
 
         def find_product(self, search_term=None):
             return self.get_all_products()
-
-        def get_all_products(self, department_id=None):
-            # Devuelve una lista vacía o puedes simular productos si lo deseas
-            return []
 
     # Add dummy resource file for icons (replace with actual resource handling)
     # Create a dummy resources_rc.py if needed, or remove QIcon usage for test

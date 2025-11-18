@@ -16,6 +16,8 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from PySide6.QtCore import Qt
+
+# ruff: noqa: E402 - imports after sys.path manipulation
 from PySide6.QtWidgets import QLineEdit, QPushButton, QDialog, QMessageBox
 
 # Import the actual LoginDialog class

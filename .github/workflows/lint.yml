@@ -1,0 +1,53 @@
+name: Lint & Format Check
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  lint:
+    name: Lint Python Code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install black ruff
+          pip install -r requirements.txt
+
+      - name: Check code formatting with Black
+        run: |
+          black --check core/ ui/ infrastructure/
+
+      - name: Lint with Ruff
+        run: |
+          ruff check core/ ui/ infrastructure/ --output-format=github
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Linting Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Black check
+          if black --check core/ ui/ infrastructure/; then
+            echo "✅ **Black formatting**: PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Black formatting**: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Ruff check
+          ERROR_COUNT=$(ruff check core/ ui/ infrastructure/ --output-format=concise 2>&1 | grep -c ":" || true)
+          echo "📊 **Ruff errors**: $ERROR_COUNT" >> $GITHUB_STEP_SUMMARY

@@ -247,7 +247,7 @@ class CustomersView(QWidget):
 
             try:
                 # Call the customer service to apply the payment
-                payment_log = self._customer_service.apply_payment(
+                self._customer_service.apply_payment(
                     customer_id=selected_customer.id,
                     amount=amount,
                     notes=notes,
@@ -301,7 +301,7 @@ class CustomersView(QWidget):
 
             try:
                 # Call the customer service to apply the balance adjustment
-                adjustment_log = self._customer_service.adjust_balance(
+                self._customer_service.adjust_balance(
                     customer_id=selected_customer.id,
                     amount=amount,
                     is_increase=is_increase,

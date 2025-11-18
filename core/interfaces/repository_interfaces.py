@@ -9,11 +9,11 @@ from core.models.user import User  # Moved User import outside try/except
 try:
     from ..models.product import Product, Department
     from ..models.inventory import InventoryMovement
-    from ..models.sale import Sale, SaleItem
+    from ..models.sale import Sale, SaleItem  # noqa: F401 - used in type hints
     from ..models.customer import Customer
     from ..models.credit_payment import CreditPayment
     from ..models.invoice import Invoice  # Add Invoice model import
-    from ..models.cash_drawer import CashDrawerEntry, CashDrawerEntryType
+    from ..models.cash_drawer import CashDrawerEntry, CashDrawerEntryType  # noqa: F401
     from ..models.unit import Unit
 except ImportError:
     # Fallback for different import contexts

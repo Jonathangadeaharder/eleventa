@@ -7,7 +7,7 @@ This package contains Qt resources files and compiled resources.
 
 try:
     # Try to import the resources module directly
-    from . import resources
+    from . import resources  # noqa: F401 - Qt resources
 except ImportError:
     # If it fails, log a message but don't crash
     import sys

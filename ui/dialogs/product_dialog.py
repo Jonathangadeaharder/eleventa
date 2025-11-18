@@ -1,4 +1,3 @@
-import sys
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -20,16 +19,7 @@ from PySide6.QtCore import Slot, Signal
 from PySide6.QtGui import QIcon
 from typing import Optional
 
-# Assuming models and service are available (using mocks initially)
-# Need Product and Department definitions
-# Using definitions from other modules for consistency during development
-from ui.models.table_models import Product
-from ui.dialogs.department_dialog import Department
-
-# Using the combined mock service from products_view for testing
-# In real app, would import from core.services.product_service
-# Ensure MockProductService has necessary methods (add_product, update_product, get_all_departments)
-# We defined these in products_view.py earlier
+# Import models from core (canonical source)
 from core.models.product import Product, Department
 from core.services.unit_service import UnitService
 
@@ -420,7 +410,7 @@ class ProductDialog(QDialog):
                 self.product_service.update_product(product_obj)
                 show_info_message(self, "Éxito", "Producto modificado correctamente")
             else:
-                new_product = self.product_service.add_product(product_obj)
+                self.product_service.add_product(product_obj)
                 show_info_message(self, "Éxito", "Producto agregado correctamente")
 
             super().accept()  # Close dialog successfully
@@ -461,7 +451,7 @@ class ProductDialog(QDialog):
 
 
 # Example of running this dialog directly (for testing)
-#if __name__ == "__main__":
+# if __name__ == "__main__":
 #    # Note: MockProductService needs to be implemented for this test code to work
 #    # TODO: Create MockProductService or use actual service for testing
 #    pass

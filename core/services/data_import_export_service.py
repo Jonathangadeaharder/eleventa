@@ -9,7 +9,7 @@ import pandas as pd
 
 try:
     import openpyxl
-    from openpyxl.styles import Font, Alignment
+    from openpyxl.styles import Font, Alignment  # noqa: F401 - optional dependency
 
     EXCEL_AVAILABLE = True
 except ImportError:
@@ -180,7 +180,7 @@ class DataImportExportService(ServiceBase):
                 }
 
                 # Leer headers (primera fila)
-                headers = [cell.value for cell in ws[1]]
+                [cell.value for cell in ws[1]]
 
                 # Procesar cada fila de datos
                 for row_num, row in enumerate(

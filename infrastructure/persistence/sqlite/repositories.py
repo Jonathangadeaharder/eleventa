@@ -516,7 +516,7 @@ class SqliteProductRepository(IProductRepository):
         stmt = select(ProductOrm).options(joinedload(ProductOrm.department))
 
         # Only include products that use inventory
-        stmt = stmt.where(ProductOrm.uses_inventory == True)
+        stmt = stmt.where(ProductOrm.uses_inventory)
 
         if threshold is not None:
             stmt = stmt.where(ProductOrm.quantity_in_stock <= threshold)
@@ -525,7 +525,7 @@ class SqliteProductRepository(IProductRepository):
             stmt = stmt.where(
                 and_(
                     ProductOrm.min_stock
-                    != None,  # Only products with min_stock configured
+                    is not None,  # Only products with min_stock configured
                     ProductOrm.quantity_in_stock <= ProductOrm.min_stock,
                 )
             )
@@ -543,7 +543,7 @@ class SqliteProductRepository(IProductRepository):
     def get_inventory_report(self) -> List[Product]:
         """Returns all products with inventory information."""
         stmt = select(ProductOrm).options(joinedload(ProductOrm.department))
-        stmt = stmt.where(ProductOrm.uses_inventory == True)
+        stmt = stmt.where(ProductOrm.uses_inventory)
         stmt = stmt.order_by(ProductOrm.description)
         results_orm = self.session.scalars(stmt).all()
         return [ModelMapper.product_orm_to_domain(prod) for prod in results_orm]
@@ -559,7 +559,7 @@ class SqliteProductRepository(IProductRepository):
         if product_orm:
             try:
                 # Ensure quantity_in_stock is treated as Decimal if it comes from DB as Numeric
-                current_stock = (
+                (
                     product_orm.quantity_in_stock
                     if isinstance(product_orm.quantity_in_stock, Decimal)
                     else Decimal(str(product_orm.quantity_in_stock))
@@ -1669,7 +1669,7 @@ class SqliteUnitRepository(IUnitRepository):
         """Retrieves all units, optionally filtered by active status."""
         stmt = select(UnitOrm).order_by(UnitOrm.name)
         if active_only:
-            stmt = stmt.where(UnitOrm.is_active == True)
+            stmt = stmt.where(UnitOrm.is_active)
         units_orm = self.session.scalars(stmt).all()
         return [ModelMapper.unit_orm_to_domain(unit) for unit in units_orm]
 
