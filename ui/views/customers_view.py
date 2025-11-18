@@ -1,22 +1,35 @@
 import sys
 from decimal import Decimal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit,
-    QTableView, QMessageBox, QAbstractItemView, QHeaderView, QLabel
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QLineEdit,
+    QTableView,
+    QAbstractItemView,
+    QHeaderView,
 )
-from PySide6.QtCore import Qt, Slot # Import Slot
-from PySide6.QtGui import QKeySequence, QShortcut, QIcon # For shortcuts and icons
-import os
+from PySide6.QtCore import Qt, Slot  # Import Slot
+from PySide6.QtGui import QKeySequence, QShortcut  # For shortcuts and icons
 
 # Assuming Table Model, Dialog, and Service are available
 from ..models.table_models import CustomerTableModel
 from ..dialogs.customer_dialog import CustomerDialog
-from ..dialogs.register_payment_dialog import RegisterPaymentDialog # Added payment dialog
+from ..dialogs.register_payment_dialog import (
+    RegisterPaymentDialog,
+)  # Added payment dialog
 from ..dialogs.adjust_balance_dialog import AdjustBalanceDialog
 from core.services.customer_service import CustomerService
+
 # Import utility functions
-from ..utils import show_error_message, show_info_message # Corrected import, removed show_warning_message and format_currency
+from ..utils import (
+    show_error_message,
+    show_info_message,
+    ask_confirmation,
+)  # Corrected import, removed show_warning_message and format_currency
 from core.models.credit_payment import CreditPayment
+
 
 class CustomersView(QWidget):
     """View for managing customers."""
@@ -24,18 +37,24 @@ class CustomersView(QWidget):
     def __init__(self, customer_service: CustomerService, user_id: int, parent=None):
         super().__init__(parent)
         self._customer_service = customer_service
-        self.user_id = user_id # Store user_id
+        self.user_id = user_id  # Store user_id
 
         self.setWindowTitle("Clientes")
 
         # --- Widgets ---
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Buscar por nombre...")
-        self.refresh_button = QPushButton("Refrescar") # Added Refresh
-        self.add_button = QPushButton("&Nuevo Cliente (F5)") # Added shortcut hint
-        self.modify_button = QPushButton("&Modificar Cliente (F6)") # Added shortcut hint
-        self.delete_button = QPushButton("&Eliminar Cliente (Supr)") # Added shortcut hint
-        self.register_payment_button = QPushButton("Registrar &Pago") # Renombrado para coincidir con el test
+        self.refresh_button = QPushButton("Refrescar")  # Added Refresh
+        self.add_button = QPushButton("&Nuevo Cliente (F5)")  # Added shortcut hint
+        self.modify_button = QPushButton(
+            "&Modificar Cliente (F6)"
+        )  # Added shortcut hint
+        self.delete_button = QPushButton(
+            "&Eliminar Cliente (Supr)"
+        )  # Added shortcut hint
+        self.register_payment_button = QPushButton(
+            "Registrar &Pago"
+        )  # Renombrado para coincidir con el test
         self.adjust_balance_button = QPushButton("Ajustar Saldo")
         self.adjust_balance_button.setEnabled(False)
 
@@ -44,17 +63,22 @@ class CustomersView(QWidget):
         self.table_view.setModel(self.table_model)
 
         # Table View Setup
-        self.table_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table_view.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.table_view.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
         self.table_view.verticalHeader().setVisible(False)
         self.table_view.horizontalHeader().setStretchLastSection(True)
         self.table_view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table_view.setSortingEnabled(True) # Enable sorting by clicking headers
+        self.table_view.setSortingEnabled(True)  # Enable sorting by clicking headers
         # Resize columns to contents initially
-        self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.table_view.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
         # Allow Description to stretch
         # self.table_view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-
 
         # --- Layout ---
         toolbar_layout = QHBoxLayout()
@@ -77,24 +101,34 @@ class CustomersView(QWidget):
         self.add_button.clicked.connect(self.add_new_customer)
         self.modify_button.clicked.connect(self.modify_selected_customer)
         self.delete_button.clicked.connect(self.delete_selected_customer)
-        self.register_payment_button.clicked.connect(self.register_payment) # Conectar el botón renombrado
+        self.register_payment_button.clicked.connect(
+            self.register_payment
+        )  # Conectar el botón renombrado
         self.table_view.doubleClicked.connect(self.modify_selected_customer)
         self.adjust_balance_button.clicked.connect(self.adjust_balance)
 
         # Connect selection changes to update button states
-        self.table_view.selectionModel().selectionChanged.connect(self._update_buttons_state)
+        self.table_view.selectionModel().selectionChanged.connect(
+            self._update_buttons_state
+        )
 
         # --- Shortcuts ---
         QShortcut(QKeySequence(Qt.Key.Key_F5), self, self.add_new_customer)
         QShortcut(QKeySequence(Qt.Key.Key_F6), self, self.modify_selected_customer)
         QShortcut(QKeySequence(Qt.Key.Key_Delete), self, self.delete_selected_customer)
-        QShortcut(QKeySequence(Qt.Key.Key_F12), self, self.refresh_customers) # Example: F12 to refresh
-        QShortcut(QKeySequence(Qt.Key.Key_Escape), self.search_edit, self.search_edit.clear) # Esc clears search
-        QShortcut(QKeySequence(Qt.Key.Key_F7), self, self.register_payment) # Consider adding a shortcut for payment, e.g., F7
+        QShortcut(
+            QKeySequence(Qt.Key.Key_F12), self, self.refresh_customers
+        )  # Example: F12 to refresh
+        QShortcut(
+            QKeySequence(Qt.Key.Key_Escape), self.search_edit, self.search_edit.clear
+        )  # Esc clears search
+        QShortcut(
+            QKeySequence(Qt.Key.Key_F7), self, self.register_payment
+        )  # Consider adding a shortcut for payment, e.g., F7
 
         # --- Initial Data Load ---
         self.refresh_customers()
-        
+
         # Initial button state
         self._update_buttons_state()
 
@@ -112,19 +146,23 @@ class CustomersView(QWidget):
             self.table_view.resizeColumnsToContents()
             # self.table_view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         except Exception as e:
-            show_error_message(self, "Error al Cargar Clientes", f"No se pudieron cargar los clientes: {e}")
+            show_error_message(
+                self,
+                "Error al Cargar Clientes",
+                f"No se pudieron cargar los clientes: {e}",
+            )
 
     @Slot()
     def filter_customers(self):
         """Filters customers based on the search term (triggers refresh)."""
-        self.refresh_customers() # Re-uses refresh logic which now includes search
+        self.refresh_customers()  # Re-uses refresh logic which now includes search
 
     @Slot()
     def add_new_customer(self):
         """Opens the dialog to add a new customer."""
         dialog = CustomerDialog(self._customer_service, parent=self)
         if dialog.exec():
-            self.refresh_customers() # Refresh list after adding
+            self.refresh_customers()  # Refresh list after adding
 
     def _get_selected_customer(self):
         """Helper to get the selected customer object from the table."""
@@ -132,7 +170,7 @@ class CustomersView(QWidget):
         if not selected_indexes:
             return None
         # Use the model's method to get the underlying data object
-        model_index = selected_indexes[0] # We use SingleSelection
+        model_index = selected_indexes[0]  # We use SingleSelection
         customer = self.table_model.get_customer_at_row(model_index.row())
         return customer
 
@@ -141,33 +179,51 @@ class CustomersView(QWidget):
         """Opens the dialog to modify the selected customer."""
         selected_customer = self._get_selected_customer()
         if not selected_customer:
-            show_error_message(self, "Selección Requerida", "Por favor, seleccione un cliente para modificar.")
+            show_error_message(
+                self,
+                "Selección Requerida",
+                "Por favor, seleccione un cliente para modificar.",
+            )
             return
 
-        dialog = CustomerDialog(self._customer_service, customer=selected_customer, parent=self)
+        dialog = CustomerDialog(
+            self._customer_service, customer=selected_customer, parent=self
+        )
         if dialog.exec():
-            self.refresh_customers() # Refresh list after modification
+            self.refresh_customers()  # Refresh list after modification
 
     @Slot()
     def delete_selected_customer(self):
         """Deletes the selected customer after confirmation."""
         selected_customer = self._get_selected_customer()
         if not selected_customer:
-            show_error_message(self, "Selección Requerida", "Por favor, seleccione un cliente para eliminar.")
+            show_error_message(
+                self,
+                "Selección Requerida",
+                "Por favor, seleccione un cliente para eliminar.",
+            )
             return
 
-        if ask_confirmation(self, "Confirmar Eliminación", f"¿Está seguro de que desea eliminar al cliente '{selected_customer.name}'?"):
+        if ask_confirmation(
+            self,
+            "Confirmar Eliminación",
+            f"¿Está seguro de que desea eliminar al cliente '{selected_customer.name}'?",
+        ):
             try:
                 deleted = self._customer_service.delete_customer(selected_customer.id)
                 if deleted:
-                    self.refresh_customers() # Refresh list after deleting
+                    self.refresh_customers()  # Refresh list after deleting
                 else:
                     # This case might not happen if service raises error on failure
-                    show_error_message(self, "Error al Eliminar", "No se pudo eliminar el cliente.")
-            except ValueError as e: # Catch specific service validation errors
-                 show_error_message(self, "Error al Eliminar", str(e))
+                    show_error_message(
+                        self, "Error al Eliminar", "No se pudo eliminar el cliente."
+                    )
+            except ValueError as e:  # Catch specific service validation errors
+                show_error_message(self, "Error al Eliminar", str(e))
             except Exception as e:
-                show_error_message(self, "Error al Eliminar", f"Ocurrió un error inesperado: {e}")
+                show_error_message(
+                    self, "Error al Eliminar", f"Ocurrió un error inesperado: {e}"
+                )
 
     # --- New Slot for Payment --- #
     @Slot()
@@ -175,7 +231,11 @@ class CustomersView(QWidget):
         """Opens a dialog to register a payment for the selected customer."""
         selected_customer = self._get_selected_customer()
         if not selected_customer:
-            show_error_message(self, "Selección Requerida", "Por favor, seleccione un cliente para registrar un pago.")
+            show_error_message(
+                self,
+                "Selección Requerida",
+                "Por favor, seleccione un cliente para registrar un pago.",
+            )
             return
 
         # Open the payment dialog
@@ -191,14 +251,22 @@ class CustomersView(QWidget):
                     customer_id=selected_customer.id,
                     amount=amount,
                     notes=notes,
-                    user_id=self.user_id # Pass the stored user_id
+                    user_id=self.user_id,  # Pass the stored user_id
                 )
-                show_info_message(self, "Pago Registrado", f"Pago de $ {amount:.2f} registrado para {selected_customer.name}.")
-                self.refresh_customers() # Refresh the view to show updated balance
+                show_info_message(
+                    self,
+                    "Pago Registrado",
+                    f"Pago de $ {amount:.2f} registrado para {selected_customer.name}.",
+                )
+                self.refresh_customers()  # Refresh the view to show updated balance
             except ValueError as ve:
                 show_error_message(self, "Error al Registrar Pago", str(ve))
             except Exception as e:
-                show_error_message(self, "Error Inesperado", f"Ocurrió un error al registrar el pago: {e}")
+                show_error_message(
+                    self,
+                    "Error Inesperado",
+                    f"Ocurrió un error al registrar el pago: {e}",
+                )
                 print(f"Unexpected error during payment registration: {e}")
 
     # --- New Slot for Balance Adjustment --- #
@@ -207,13 +275,20 @@ class CustomersView(QWidget):
         """Opens a dialog to directly adjust a customer's balance."""
         selected_customer = self._get_selected_customer()
         if not selected_customer:
-            show_error_message(self, "Selección Requerida", "Por favor, seleccione un cliente para ajustar su saldo.")
+            show_error_message(
+                self,
+                "Selección Requerida",
+                "Por favor, seleccione un cliente para ajustar su saldo.",
+            )
             return
 
         if self.user_id is None:
             self.logger.warning("adjust_balance called but self.user_id is None.")
-            show_error_message(self, "Error de Usuario", 
-                               "No se ha podido identificar al usuario actual. No se puede ajustar el saldo.")
+            show_error_message(
+                self,
+                "Error de Usuario",
+                "No se ha podido identificar al usuario actual. No se puede ajustar el saldo.",
+            )
             return
 
         # Open the balance adjustment dialog
@@ -223,7 +298,7 @@ class CustomersView(QWidget):
             amount = dialog.adjustment_amount
             notes = dialog.adjustment_notes
             is_increase = dialog.is_increase
-            
+
             try:
                 # Call the customer service to apply the balance adjustment
                 adjustment_log = self._customer_service.adjust_balance(
@@ -231,21 +306,25 @@ class CustomersView(QWidget):
                     amount=amount,
                     is_increase=is_increase,
                     notes=notes,
-                    user_id=self.user_id # Pass the logged-in user's ID
+                    user_id=self.user_id,  # Pass the logged-in user's ID
                 )
-                
+
                 # Determine the message based on adjustment type
-                action_type = "incrementó" if is_increase else "decrementó" 
+                action_type = "incrementó" if is_increase else "decrementó"
                 show_info_message(
-                    self, 
-                    "Saldo Ajustado", 
-                    f"Saldo {action_type} en $ {amount:.2f} para {selected_customer.name}."
+                    self,
+                    "Saldo Ajustado",
+                    f"Saldo {action_type} en $ {amount:.2f} para {selected_customer.name}.",
                 )
-                self.refresh_customers() # Refresh the view to show updated balance
+                self.refresh_customers()  # Refresh the view to show updated balance
             except ValueError as ve:
                 show_error_message(self, "Error al Ajustar Saldo", str(ve))
             except Exception as e:
-                show_error_message(self, "Error Inesperado", f"Ocurrió un error al ajustar el saldo: {e}")
+                show_error_message(
+                    self,
+                    "Error Inesperado",
+                    f"Ocurrió un error al ajustar el saldo: {e}",
+                )
                 print(f"Unexpected error during balance adjustment: {e}")
 
     def _update_buttons_state(self):
@@ -256,53 +335,122 @@ class CustomersView(QWidget):
         self.register_payment_button.setEnabled(has_selection)
         self.adjust_balance_button.setEnabled(has_selection)
 
+
 # Example Usage (for testing if run directly)
-if __name__ == '__main__':
+if __name__ == "__main__":
     from PySide6.QtWidgets import QApplication
-    from core.models.customer import Customer # Need Customer for mock
-    from decimal import Decimal # Added Decimal for mock
+    from core.models.customer import Customer  # Need Customer for mock
+    from decimal import Decimal  # Added Decimal for mock
 
     # Mock CustomerService for standalone testing
     class MockCustomerService:
         _customers = [
-            Customer(id=1, name="Alice Wonderland", phone="111", email="alice@wonder.land", address="Tea Party Lane", credit_limit=100, credit_balance=10),
-            Customer(id=2, name="Bob The Builder", phone="222", email="bob@build.it", address="Fixit Ave", credit_limit=500, credit_balance=-50),
-            Customer(id=3, name="Charlie Chaplin", phone="333", email=None, address="Silent Street", credit_limit=0, credit_balance=0),
+            Customer(
+                id=1,
+                name="Alice Wonderland",
+                phone="111",
+                email="alice@wonder.land",
+                address="Tea Party Lane",
+                credit_limit=100,
+                credit_balance=10,
+            ),
+            Customer(
+                id=2,
+                name="Bob The Builder",
+                phone="222",
+                email="bob@build.it",
+                address="Fixit Ave",
+                credit_limit=500,
+                credit_balance=-50,
+            ),
+            Customer(
+                id=3,
+                name="Charlie Chaplin",
+                phone="333",
+                email=None,
+                address="Silent Street",
+                credit_limit=0,
+                credit_balance=0,
+            ),
         ]
-        def get_all_customers(self): print("Mock: get_all"); return self._customers
-        def find_customer(self, term): print(f"Mock: find '{term}'"); return [c for c in self._customers if term.lower() in (c.name or "").lower()]
-        def add_customer(self, **kwargs): print(f"Mock: add {kwargs}"); new_id = max(c.id for c in self._customers) + 1; new_c = Customer(id=new_id, **kwargs); self._customers.append(new_c); return new_c
-        def update_customer(self, customer_id, **kwargs): print(f"Mock: update {customer_id} with {kwargs}"); cust = self.get_customer_by_id(customer_id); cust.name=kwargs['name']; cust.phone=kwargs['phone']; cust.email=kwargs['email']; cust.address=kwargs['address']; cust.credit_limit=kwargs['credit_limit']; return cust
+
+        def get_all_customers(self):
+            print("Mock: get_all")
+            return self._customers
+
+        def find_customer(self, term):
+            print(f"Mock: find '{term}'")
+            return [
+                c for c in self._customers if term.lower() in (c.name or "").lower()
+            ]
+
+        def add_customer(self, **kwargs):
+            print(f"Mock: add {kwargs}")
+            new_id = max(c.id for c in self._customers) + 1
+            new_c = Customer(id=new_id, **kwargs)
+            self._customers.append(new_c)
+            return new_c
+
+        def update_customer(self, customer_id, **kwargs):
+            print(f"Mock: update {customer_id} with {kwargs}")
+            cust = self.get_customer_by_id(customer_id)
+            cust.name = kwargs["name"]
+            cust.phone = kwargs["phone"]
+            cust.email = kwargs["email"]
+            cust.address = kwargs["address"]
+            cust.credit_limit = kwargs["credit_limit"]
+            return cust
+
         def delete_customer(self, customer_id):
             print(f"Mock: delete {customer_id}")
             cust = self.get_customer_by_id(customer_id)
-            if cust and cust.credit_balance is not None and Decimal(str(cust.credit_balance)) > Decimal('0.01'):
+            if (
+                cust
+                and cust.credit_balance is not None
+                and Decimal(str(cust.credit_balance)) > Decimal("0.01")
+            ):
                 # Compare as Decimal to avoid potential float issues
-                raise ValueError(f"Cannot delete customer {cust.name} with balance {cust.credit_balance:.2f}")
+                raise ValueError(
+                    f"Cannot delete customer {cust.name} with balance {cust.credit_balance:.2f}"
+                )
             # Filter out the customer to be deleted
             self._customers = [c for c in self._customers if c.id != customer_id]
-            return True # Indicate success
-        def get_customer_by_id(self, id): return next((c for c in self._customers if c.id == id), None)
+            return True  # Indicate success
+
+        def get_customer_by_id(self, id):
+            return next((c for c in self._customers if c.id == id), None)
+
         def apply_payment(self, customer_id, amount, notes=None, user_id=None):
-            print(f"Mock: apply payment for {customer_id}, Amount: {amount}, Notes: {notes}")
+            print(
+                f"Mock: apply payment for {customer_id}, Amount: {amount}, Notes: {notes}"
+            )
             cust = self.get_customer_by_id(customer_id)
             if cust:
-                cust.credit_balance -= Decimal(str(amount)) # Simulate payment decreasing debt
+                cust.credit_balance -= Decimal(
+                    str(amount)
+                )  # Simulate payment decreasing debt
             # Return a dummy CreditPayment object if needed
             return CreditPayment(id=999, customer_id=customer_id, amount=amount)
+
         def adjust_balance(self, customer_id, amount, is_increase, notes, user_id=None):
-            print(f"Mock: adjust balance for {customer_id}, Amount: {amount}, Increase: {is_increase}, Notes: {notes}")
+            print(
+                f"Mock: adjust balance for {customer_id}, Amount: {amount}, Increase: {is_increase}, Notes: {notes}"
+            )
             cust = self.get_customer_by_id(customer_id)
             if cust:
                 if is_increase:
-                    cust.credit_balance += Decimal(str(amount)) # Increase debt
+                    cust.credit_balance += Decimal(str(amount))  # Increase debt
                 else:
-                    cust.credit_balance -= Decimal(str(amount)) # Decrease debt
+                    cust.credit_balance -= Decimal(str(amount))  # Decrease debt
             # Return a dummy CreditPayment object
-            return CreditPayment(id=998, customer_id=customer_id, amount=amount if is_increase else -amount)
+            return CreditPayment(
+                id=998,
+                customer_id=customer_id,
+                amount=amount if is_increase else -amount,
+            )
 
     app = QApplication(sys.argv)
     service = MockCustomerService()
-    view = CustomersView(service, user_id=1) # Example user_id for testing
+    view = CustomersView(service, user_id=1)  # Example user_id for testing
     view.show()
     sys.exit(app.exec())

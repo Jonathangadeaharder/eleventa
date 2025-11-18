@@ -3,10 +3,11 @@ from decimal import Decimal
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
+
 @dataclass
 class Invoice:
     """Invoice model representing an invoice in the system."""
-    
+
     sale_id: int
     id: Optional[int] = None
     customer_id: Optional[int] = None

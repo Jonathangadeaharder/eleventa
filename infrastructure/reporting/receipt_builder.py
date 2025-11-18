@@ -1,14 +1,12 @@
 """
 Receipt PDF generation module using ReportLab.
 """
-from datetime import datetime
 import os
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.pdfgen import canvas
 
 
 def format_currency(amount):

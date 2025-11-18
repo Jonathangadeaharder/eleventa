@@ -1,20 +1,26 @@
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QComboBox, 
-    QDateEdit, QPushButton, QFrame, QVBoxLayout, QSizePolicy
+    QWidget,
+    QHBoxLayout,
+    QLabel,
+    QComboBox,
+    QDateEdit,
+    QPushButton,
+    QFrame,
 )
-from PySide6.QtCore import Qt, QDate, Signal, Slot, Property
+from PySide6.QtCore import QDate, Signal, Slot
 from PySide6.QtGui import QIcon
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from ui.utils import style_dropdown, style_secondary_button, style_primary_button
-from ui.resources import resources  # Import the compiled resources
 
 # Ensure style functions have __name__ for shiboken support
-for func, name in [(style_dropdown, 'style_dropdown'),
-                   (style_secondary_button, 'style_secondary_button'),
-                   (style_primary_button, 'style_primary_button')]:
-    if not hasattr(func, '__name__'):
-        setattr(func, '__name__', name)
+for func, name in [
+    (style_dropdown, "style_dropdown"),
+    (style_secondary_button, "style_secondary_button"),
+    (style_primary_button, "style_primary_button"),
+]:
+    if not hasattr(func, "__name__"):
+        setattr(func, "__name__", name)
 
 
 class PeriodFilterWidget(QWidget):
@@ -22,54 +28,57 @@ class PeriodFilterWidget(QWidget):
     A reusable widget for filtering by time period that includes:
     - A dropdown for common period options (Today, Yesterday, This Week, etc.)
     - Optional date pickers for custom period selection
-    
+
     Emits a periodChanged signal with start and end datetime objects when selection changes.
     """
-    
+
     periodChanged = Signal(datetime, datetime)
     filter_applied = Signal()
-    
+
     def __init__(self, label_text="Mostrar:", parent=None):
         super().__init__(parent)
         self.label_text = label_text
         self._init_ui()
-        
+
         # Set default period (Today)
         self._on_period_changed(0)
-    
+
     def _init_ui(self):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
-        
+
         # Label
         self.label = QLabel(self.label_text)
         self.label.setStyleSheet("font-weight: bold;")
         layout.addWidget(self.label)
-        
+
         # Period dropdown
         self.period_combo = QComboBox()
-        self.period_combo.addItems([
-            "Hoy", 
-            "Ayer", 
-            "Esta semana", 
-            "Semana pasada",
-            "Este mes", 
-            "Mes pasado", 
-            "Este año", 
-            "Año pasado",
-            "Personalizado"
-        ])
+        self.period_combo.addItems(
+            [
+                "Hoy",
+                "Ayer",
+                "Esta semana",
+                "Semana pasada",
+                "Este mes",
+                "Mes pasado",
+                "Este año",
+                "Año pasado",
+                "Personalizado",
+            ]
+        )
         self.period_combo.setMinimumWidth(150)
         style_dropdown(self.period_combo)
         layout.addWidget(self.period_combo)
-        
+
         # Custom date controls (initially hidden)
         self.start_date_edit = QDateEdit()
         self.start_date_edit.setDate(QDate.currentDate().addDays(-7))
         self.start_date_edit.setCalendarPopup(True)
         self.start_date_edit.setMinimumHeight(28)
-        self.start_date_edit.setStyleSheet("""
+        self.start_date_edit.setStyleSheet(
+            """
             QDateEdit {
                 border: 1px solid #cccccc;
                 border-radius: 4px;
@@ -79,13 +88,15 @@ class PeriodFilterWidget(QWidget):
             QDateEdit:focus {
                 border: 1px solid #2c6ba5;
             }
-        """)
-        
+        """
+        )
+
         self.end_date_edit = QDateEdit()
         self.end_date_edit.setDate(QDate.currentDate())
         self.end_date_edit.setCalendarPopup(True)
         self.end_date_edit.setMinimumHeight(28)
-        self.end_date_edit.setStyleSheet("""
+        self.end_date_edit.setStyleSheet(
+            """
             QDateEdit {
                 border: 1px solid #cccccc;
                 border-radius: 4px;
@@ -95,30 +106,31 @@ class PeriodFilterWidget(QWidget):
             QDateEdit:focus {
                 border: 1px solid #2c6ba5;
             }
-        """)
-        
+        """
+        )
+
         # Add aliases for test compatibility
         self.start_date = self.start_date_edit
         self.end_date = self.end_date_edit
-        
+
         self.date_from_label = QLabel("Desde:")
         self.date_to_label = QLabel("Hasta:")
         self.apply_btn = QPushButton("Aplicar")
         style_secondary_button(self.apply_btn)
         self.apply_btn.setIcon(QIcon(":/icons/icons/save.png"))
-        
+
         layout.addWidget(self.date_from_label)
         layout.addWidget(self.start_date_edit)
         layout.addWidget(self.date_to_label)
         layout.addWidget(self.end_date_edit)
         layout.addWidget(self.apply_btn)
-        
+
         # Hide custom date controls initially
         self._toggle_custom_date_controls(False)
-        
+
         # Add stretch to prevent widget from expanding too much
         layout.addStretch()
-        
+
         # Connect signals
         self.period_combo.currentIndexChanged.connect(self._on_period_changed)
         self.apply_btn.clicked.connect(self._on_custom_dates_applied)
@@ -126,7 +138,7 @@ class PeriodFilterWidget(QWidget):
         self._programmatic_change = False
         self.start_date_edit.dateChanged.connect(self._on_date_changed_internal)
         self.end_date_edit.dateChanged.connect(self._on_date_changed_internal)
-    
+
     def _toggle_custom_date_controls(self, show):
         """Show or hide the custom date selection controls."""
         self.date_from_label.setVisible(show)
@@ -134,25 +146,25 @@ class PeriodFilterWidget(QWidget):
         self.date_to_label.setVisible(show)
         self.end_date_edit.setVisible(show)
         self.apply_btn.setVisible(show)
-    
+
     @Slot(int)
     def _on_period_changed(self, index):
         """Handle selection of a different period in the combobox."""
         today = QDate.currentDate()
-        show_custom = (index == 8)  # "Personalizado" is the last option
-        
+        show_custom = index == 8  # "Personalizado" is the last option
+
         self._toggle_custom_date_controls(show_custom)
-        
+
         # Enable/disable date controls based on selection
         self.start_date_edit.setEnabled(show_custom)
         self.end_date_edit.setEnabled(show_custom)
-        
+
         if not show_custom:
             # Set date range based on selection and emit signal
             # Initialize default values
             start_date = today
             end_date = today
-            
+
             if index == 0:  # Hoy
                 start_date = today
                 end_date = today
@@ -183,7 +195,9 @@ class PeriodFilterWidget(QWidget):
                 start_date = first_day
                 end_date = last_day
             elif index == 5:  # Mes pasado
-                first_day_last_month = QDate(today.year(), today.month(), 1).addMonths(-1)
+                first_day_last_month = QDate(today.year(), today.month(), 1).addMonths(
+                    -1
+                )
                 last_day_last_month = QDate(today.year(), today.month(), 1).addDays(-1)
                 start_date = first_day_last_month
                 end_date = last_day_last_month
@@ -196,80 +210,82 @@ class PeriodFilterWidget(QWidget):
                 last_day_last_year = QDate(today.year() - 1, 12, 31)
                 start_date = first_day_last_year
                 end_date = last_day_last_year
-            
+
             # Update the date edit controls (even if hidden) - prevent signal emission
             self._programmatic_change = True
             self.start_date_edit.setDate(start_date)
             self.end_date_edit.setDate(end_date)
             self._programmatic_change = False
-            
+
             # Emit the period change with start/end datetime objects
             self._emit_period_change(start_date, end_date)
-            
+
         # Emit filter applied signal
         self.filter_applied.emit()
-    
+
     @Slot()
     def _on_custom_dates_applied(self):
         """Handle when the user clicks Apply after setting custom dates."""
         start_date = self.start_date_edit.date()
         end_date = self.end_date_edit.date()
-        
+
         if start_date > end_date:
             # Handle invalid date range (could show error message)
             temp = start_date
             start_date = end_date
             end_date = temp
-            
+
             # Update the controls
         self.start_date_edit.setDate(start_date)
         self.end_date_edit.setDate(end_date)
-        
+
         # Emit the period change with start/end datetime objects
         self._emit_period_change(start_date, end_date)
-    
+
     def _emit_period_change(self, start_date, end_date):
         """Convert QDates to datetime objects and emit the signal."""
         # Convert QDate to Python date, then to datetime with time = 00:00:00 for start_date
         start_datetime = datetime.combine(start_date.toPython(), datetime.min.time())
-        
+
         # Convert QDate to Python date, then to datetime with time = 23:59:59 for end_date
         end_datetime = datetime.combine(end_date.toPython(), datetime.max.time())
-        
+
         # Emit the signal with the datetime objects
         self.periodChanged.emit(start_datetime, end_datetime)
-    
+
     def get_period_range(self):
         """Return the current selected period range as a tuple of datetimes."""
         start_date = self.start_date_edit.date()
         end_date = self.end_date_edit.date()
-        
+
         start_datetime = datetime.combine(start_date.toPython(), datetime.min.time())
         end_datetime = datetime.combine(end_date.toPython(), datetime.max.time())
-        
+
         return start_datetime, end_datetime
-    
+
     def get_date_range(self):
         """Return the current selected period range as a tuple of date objects."""
         start_qdate = self.start_date_edit.date()
         end_qdate = self.end_date_edit.date()
-        
+
         # Ensure proper order
         if start_qdate > end_qdate:
             start_qdate, end_qdate = end_qdate, start_qdate
             # Update the controls to reflect the corrected order
             self.start_date_edit.setDate(start_qdate)
             self.end_date_edit.setDate(end_qdate)
-        
+
         return start_qdate.toPython(), end_qdate.toPython()
-    
+
     @Slot()
     def _on_date_changed_internal(self):
         """Internal handler for date changes to avoid double emissions."""
         # Only emit signal if we're in custom period mode and not programmatically changing
-        if self.period_combo.currentIndex() == 8 and not self._programmatic_change:  # Personalizado
+        if (
+            self.period_combo.currentIndex() == 8 and not self._programmatic_change
+        ):  # Personalizado
             self.filter_applied.emit()
-    
+
     def on_date_changed(self):
         """Public method for date field changes (for test compatibility)."""
         # Only emit signal if we're in custom period mode
@@ -282,40 +298,44 @@ class FilterBoxWidget(QFrame):
     A styled frame containing multiple filter widgets, typically used at the top of report views.
     Organizes filter controls in a horizontal layout with proper spacing and visual separation.
     """
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFrameShape(QFrame.StyledPanel)
         self.setFrameShadow(QFrame.Raised)
-        self.setStyleSheet("""
+        self.setStyleSheet(
+            """
             FilterBoxWidget {
                 background-color: #f8f8f8; 
                 border: 1px solid #ddd; 
                 border-radius: 6px;
                 padding: 8px;
             }
-        """)
-        
+        """
+        )
+
         self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(15, 12, 15, 12)
         self.layout.setSpacing(15)
-    
+
     def add_widget(self, widget):
         """Add a widget to the filter box layout."""
         self.layout.addWidget(widget)
-    
+
     def add_separator(self):
         """Add a vertical separator line between filter controls."""
         separator = QFrame()
         separator.setFrameShape(QFrame.VLine)
         separator.setFrameShadow(QFrame.Sunken)
-        separator.setStyleSheet("""
+        separator.setStyleSheet(
+            """
             background-color: #dddddd;
             min-width: 1px;
             max-width: 1px;
-        """)
+        """
+        )
         self.layout.addWidget(separator)
-    
+
     def add_stretch(self):
         """Add stretch to push filters to the left."""
         self.layout.addStretch()
@@ -326,34 +346,34 @@ class FilterDropdown(QWidget):
     A simple filter widget combining a label and dropdown.
     Used for department, customer, register selections, etc.
     """
-    
+
     selectionChanged = Signal(object)  # Emits the selected value/id
-    
+
     def __init__(self, label_text, items=None, parent=None):
         super().__init__(parent)
         self.label_text = label_text
-        
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
-        
+
         self.label = QLabel(label_text)
         self.label.setStyleSheet("font-weight: bold;")
-        
+
         self.combo = QComboBox()
         self.combo.setMinimumWidth(150)
         style_dropdown(self.combo)
-        
+
         layout.addWidget(self.label)
         layout.addWidget(self.combo)
-        
+
         # Add items if provided
         if items:
             self.set_items(items)
-        
+
         # Connect signals
         self.combo.currentIndexChanged.connect(self._on_selection_changed)
-    
+
     def set_items(self, items):
         """
         Set the dropdown items.
@@ -363,28 +383,28 @@ class FilterDropdown(QWidget):
         - A list of objects with a 'name' and 'id' attribute (like Department, Customer)
         """
         self.combo.clear()
-        
+
         for item in items:
             if isinstance(item, tuple) and len(item) == 2:
                 # Tuple of (display_text, value)
                 self.combo.addItem(str(item[0]), item[1])
-            elif hasattr(item, 'name') and hasattr(item, 'id'):
+            elif hasattr(item, "name") and hasattr(item, "id"):
                 # Object with name and id attributes
                 self.combo.addItem(item.name, item.id)
             else:
                 # Simple string or other object
                 self.combo.addItem(str(item))
-    
+
     @Slot(int)
     def _on_selection_changed(self, index):
         """Emit the selected value when changed."""
         value = self.combo.itemData(index)
         self.selectionChanged.emit(value)
-    
+
     def get_selected_value(self):
         """Return the currently selected value."""
         return self.combo.currentData()
-    
+
     def get_selected_text(self):
         """Return the currently selected text."""
         return self.combo.currentText()

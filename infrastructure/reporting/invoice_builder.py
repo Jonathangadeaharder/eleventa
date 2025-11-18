@@ -1,22 +1,20 @@
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch, mm, cm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-from reportlab.pdfgen import canvas
-import os
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from datetime import datetime
 import locale
 from decimal import Decimal
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 # Set locale for date and currency formatting
 try:
     locale.setlocale(locale.LC_ALL, 'es_AR.UTF-8')
-except:
+except locale.Error:
     try:
         locale.setlocale(locale.LC_ALL, 'es_ES.UTF-8')  # Fallback
-    except:
+    except locale.Error:
         locale.setlocale(locale.LC_ALL, '')  # Use default locale
 
 class InvoiceBuilder:

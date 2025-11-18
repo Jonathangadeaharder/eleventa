@@ -3,11 +3,15 @@ from .inventory import InventoryMovement
 from .sale import Sale, SaleItem
 from .customer import Customer
 from .credit_payment import CreditPayment
+
 # from .supplier import Supplier  # Removed
 # from .purchase import PurchaseOrder, PurchaseOrderItem  # Removed
 from .user import User
 from .invoice import Invoice
-from .cash_drawer import CashDrawerEntry, CashDrawerEntryType # Removed CashDrawerState, CashDrawerSummary
+from .cash_drawer import (
+    CashDrawerEntry,
+    CashDrawerEntryType,
+)  # Removed CashDrawerState, CashDrawerSummary
 
 __all__ = [
     "Department",
