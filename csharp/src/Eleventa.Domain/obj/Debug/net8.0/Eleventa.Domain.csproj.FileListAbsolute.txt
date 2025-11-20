@@ -1,0 +1,11 @@
+/home/user/eleventa/csharp/src/Eleventa.Domain/obj/Debug/net8.0/Eleventa.Domain.GeneratedMSBuildEditorConfig.editorconfig
+/home/user/eleventa/csharp/src/Eleventa.Domain/obj/Debug/net8.0/Eleventa.Domain.AssemblyInfoInputs.cache
+/home/user/eleventa/csharp/src/Eleventa.Domain/obj/Debug/net8.0/Eleventa.Domain.AssemblyInfo.cs
+/home/user/eleventa/csharp/src/Eleventa.Domain/obj/Debug/net8.0/Eleventa.Domain.csproj.CoreCompileInputs.cache
+/home/user/eleventa/csharp/src/Eleventa.Domain/bin/Debug/net8.0/Eleventa.Domain.deps.json
+/home/user/eleventa/csharp/src/Eleventa.Domain/bin/Debug/net8.0/Eleventa.Domain.dll
+/home/user/eleventa/csharp/src/Eleventa.Domain/bin/Debug/net8.0/Eleventa.Domain.pdb
+/home/user/eleventa/csharp/src/Eleventa.Domain/obj/Debug/net8.0/Eleventa.Domain.dll
+/home/user/eleventa/csharp/src/Eleventa.Domain/obj/Debug/net8.0/refint/Eleventa.Domain.dll
+/home/user/eleventa/csharp/src/Eleventa.Domain/obj/Debug/net8.0/Eleventa.Domain.pdb
+/home/user/eleventa/csharp/src/Eleventa.Domain/obj/Debug/net8.0/ref/Eleventa.Domain.dll
