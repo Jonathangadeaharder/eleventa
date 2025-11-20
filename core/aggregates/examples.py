@@ -193,10 +193,11 @@ class Order(AggregateRoot):
         if not self.items:
             return Money.zero(self.currency)
 
-        return sum(
-            (item.subtotal for item in self.items),
-            start=Money.zero(self.currency)
-        )
+        # Calculate total using Money.add() method
+        total = Money.zero(self.currency)
+        for item in self.items:
+            total = total.add(item.subtotal)
+        return total
 
     @property
     def item_count(self) -> int:
