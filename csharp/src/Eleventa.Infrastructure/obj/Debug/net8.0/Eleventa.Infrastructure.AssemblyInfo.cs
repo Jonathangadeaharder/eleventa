@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Eleventa.Infrastructure")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ee28b4e9a2b883e44fa6844b0448d35d464008ac")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7f979ec57043ab2ce21d0abbf915e78f35c0df21")]
 [assembly: System.Reflection.AssemblyProductAttribute("Eleventa.Infrastructure")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Eleventa.Infrastructure")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
