@@ -13,7 +13,7 @@ Examples:
 """
 
 from abc import ABC
-from typing import Any, Tuple
+from typing import Any, Tuple, Optional
 
 
 class ValueObject(ABC):
@@ -99,7 +99,7 @@ class ValueObjectError(Exception):
 class ValidationError(ValueObjectError):
     """Raised when value object validation fails."""
 
-    def __init__(self, message: str, field: str = None):
+    def __init__(self, message: str, field: Optional[str] = None):
         self.message = message
         self.field = field
         super().__init__(message)
@@ -202,7 +202,7 @@ def validate_length(
 
 
 def validate_regex(
-    value: str, pattern: str, field_name: str, message: str = None
+    value: str, pattern: str, field_name: str, message: Optional[str] = None
 ) -> None:
     """
     Validate string against regex pattern.

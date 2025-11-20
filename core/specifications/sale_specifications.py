@@ -37,7 +37,7 @@ class SaleByDateRangeSpecification(ParameterizedSpecification[Sale]):
 
     def is_satisfied_by(self, sale: Sale) -> bool:
         """Check if sale is within date range."""
-        return self.start_date <= sale.created_at <= self.end_date
+        return self.start_date <= sale.timestamp <= self.end_date
 
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
@@ -45,7 +45,7 @@ class SaleByDateRangeSpecification(ParameterizedSpecification[Sale]):
         from sqlalchemy import and_
 
         return and_(
-            SaleOrm.created_at >= self.start_date, SaleOrm.created_at <= self.end_date
+            SaleOrm.timestamp >= self.start_date, SaleOrm.timestamp <= self.end_date
         )
 
     def __repr__(self) -> str:

@@ -161,6 +161,8 @@ class ProductPriceRangeSpecification(ParameterizedSpecification[Product]):
 
     def is_satisfied_by(self, product: Product) -> bool:
         """Check if product price is within range."""
+        if product.sell_price is None:
+            return False
         if self.min_price is not None and product.sell_price < self.min_price:
             return False
         if self.max_price is not None and product.sell_price > self.max_price:
@@ -290,7 +292,7 @@ class ProductActiveSpecification(Specification[Product]):
         )
 
         # Assuming is_active field exists
-        return ProductOrm.is_active == True
+        return ProductOrm.is_active
 
     def __repr__(self) -> str:
         return "ProductActive"
@@ -315,7 +317,7 @@ class ProductUsesInventorySpecification(Specification[Product]):
             Product as ProductOrm,
         )
 
-        return ProductOrm.uses_inventory == True
+        return ProductOrm.uses_inventory
 
     def __repr__(self) -> str:
         return "ProductUsesInventory"
