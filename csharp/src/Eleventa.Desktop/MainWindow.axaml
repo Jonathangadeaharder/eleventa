@@ -1,0 +1,81 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Eleventa.Desktop.ViewModels"
+        xmlns:views="using:Eleventa.Desktop.Views"
+        x:Class="Eleventa.Desktop.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="Eleventa POS System"
+        Width="1280" Height="800"
+        MinWidth="800" MinHeight="600">
+
+  <Design.DataContext>
+    <vm:MainWindowViewModel/>
+  </Design.DataContext>
+
+  <Grid RowDefinitions="Auto,*">
+
+    <!-- Navigation Bar -->
+    <Border Grid.Row="0" Background="#343A40" Padding="16,12">
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <TextBlock Text="ELEVENTA POS"
+                   Foreground="White"
+                   FontSize="18"
+                   FontWeight="Bold"
+                   VerticalAlignment="Center"
+                   Margin="0,0,24,0"/>
+
+        <Button Content="Sales"
+                Classes="nav-button"
+                Command="{Binding ShowSalesCommand}"/>
+
+        <Button Content="Products"
+                Classes="nav-button"
+                Command="{Binding ShowProductsCommand}"/>
+
+        <Button Content="Customers"
+                Classes="nav-button"
+                Command="{Binding ShowCustomersCommand}"/>
+
+        <Button Content="Inventory"
+                Classes="nav-button"
+                Command="{Binding ShowInventoryCommand}"/>
+      </StackPanel>
+    </Border>
+
+    <!-- Content Area -->
+    <ContentControl Grid.Row="1"
+                    Content="{Binding CurrentView}"
+                    Margin="0">
+      <ContentControl.DataTemplates>
+        <DataTemplate DataType="vm:ProductListViewModel">
+          <views:ProductListView/>
+        </DataTemplate>
+        <DataTemplate DataType="vm:SalesViewModel">
+          <views:SalesView/>
+        </DataTemplate>
+        <DataTemplate DataType="vm:CustomerListViewModel">
+          <views:CustomerListView/>
+        </DataTemplate>
+        <DataTemplate DataType="vm:InventoryViewModel">
+          <views:InventoryView/>
+        </DataTemplate>
+      </ContentControl.DataTemplates>
+    </ContentControl>
+
+  </Grid>
+
+  <Window.Styles>
+    <Style Selector="Button.nav-button">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="16,8"/>
+      <Setter Property="FontSize" Value="14"/>
+    </Style>
+    <Style Selector="Button.nav-button:pointerover">
+      <Setter Property="Background" Value="#495057"/>
+    </Style>
+  </Window.Styles>
+
+</Window>
