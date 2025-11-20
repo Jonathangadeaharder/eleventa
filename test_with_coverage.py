@@ -113,9 +113,10 @@ run_test("PhoneNumber: Create", lambda: PhoneNumber('+15551234567'))
 run_test("PhoneNumber: Format international", lambda: PhoneNumber('+15551234567').format('international'))
 run_test("PhoneNumber: From parts", lambda: PhoneNumber.from_parts('555', '123', '4567'))
 
-# TaxId tests (using a valid CUIT format)
-run_test("TaxId: Create", lambda: TaxId('20-12345678-9'))
-run_test("TaxId: Format", lambda: TaxId('20123456789').format())
+# TaxId tests (using valid CUIT format with correct check digits)
+# CUIT 20-12345678-6 has valid check digit calculated using official algorithm
+run_test("TaxId: Create", lambda: TaxId('20-12345678-6'))
+run_test("TaxId: Format", lambda: TaxId('20123456786').format())
 
 # ============================================================================
 # SPECIFICATIONS TESTS
