@@ -27,12 +27,13 @@ import logging
 
 
 # Type variables for request and response
-TRequest = TypeVar('TRequest')
-TResponse = TypeVar('TResponse')
+TRequest = TypeVar("TRequest")
+TResponse = TypeVar("TResponse")
 
 
 class UseCaseStatus(Enum):
     """Status of use case execution."""
+
     SUCCESS = "success"
     FAILURE = "failure"
     VALIDATION_ERROR = "validation_error"
@@ -59,6 +60,7 @@ class UseCaseResult(Generic[TResponse]):
             status=UseCaseStatus.NOT_FOUND
         )
     """
+
     status: UseCaseStatus
     data: Optional[TResponse] = None
     error: Optional[str] = None
@@ -75,7 +77,7 @@ class UseCaseResult(Generic[TResponse]):
         return not self.is_success
 
     @classmethod
-    def success(cls, data: TResponse) -> 'UseCaseResult[TResponse]':
+    def success(cls, data: TResponse) -> "UseCaseResult[TResponse]":
         """Create a success result."""
         return cls(status=UseCaseStatus.SUCCESS, data=data)
 
@@ -84,35 +86,29 @@ class UseCaseResult(Generic[TResponse]):
         cls,
         error: str,
         status: UseCaseStatus = UseCaseStatus.FAILURE,
-        errors: Optional[dict] = None
-    ) -> 'UseCaseResult':
+        errors: Optional[dict] = None,
+    ) -> "UseCaseResult":
         """Create a failure result."""
         return cls(status=status, error=error, errors=errors)
 
     @classmethod
-    def validation_error(cls, errors: dict) -> 'UseCaseResult':
+    def validation_error(cls, errors: dict) -> "UseCaseResult":
         """Create a validation error result."""
         return cls(
             status=UseCaseStatus.VALIDATION_ERROR,
             error="Validation failed",
-            errors=errors
+            errors=errors,
         )
 
     @classmethod
-    def not_found(cls, resource: str) -> 'UseCaseResult':
+    def not_found(cls, resource: str) -> "UseCaseResult":
         """Create a not found result."""
-        return cls(
-            status=UseCaseStatus.NOT_FOUND,
-            error=f"{resource} not found"
-        )
+        return cls(status=UseCaseStatus.NOT_FOUND, error=f"{resource} not found")
 
     @classmethod
-    def conflict(cls, message: str) -> 'UseCaseResult':
+    def conflict(cls, message: str) -> "UseCaseResult":
         """Create a conflict result (e.g., duplicate key)."""
-        return cls(
-            status=UseCaseStatus.CONFLICT,
-            error=message
-        )
+        return cls(status=UseCaseStatus.CONFLICT, error=message)
 
 
 class UseCase(ABC, Generic[TRequest, TResponse]):
@@ -161,21 +157,15 @@ class UseCase(ABC, Generic[TRequest, TResponse]):
 
     def _log_execution(self, request: TRequest) -> None:
         """Log use case execution."""
-        self.logger.info(
-            f"Executing {self.__class__.__name__} with request: {request}"
-        )
+        self.logger.info(f"Executing {self.__class__.__name__} with request: {request}")
 
     def _log_success(self, result: Any) -> None:
         """Log successful execution."""
-        self.logger.debug(
-            f"{self.__class__.__name__} completed successfully"
-        )
+        self.logger.debug(f"{self.__class__.__name__} completed successfully")
 
     def _log_failure(self, error: str) -> None:
         """Log failed execution."""
-        self.logger.warning(
-            f"{self.__class__.__name__} failed: {error}"
-        )
+        self.logger.warning(f"{self.__class__.__name__} failed: {error}")
 
 
 class QueryUseCase(ABC, Generic[TRequest, TResponse]):
@@ -230,6 +220,7 @@ class CommandUseCase(UseCase[TRequest, TResponse]):
 
 # Decorator for use case middleware
 
+
 def log_use_case_execution(func):
     """
     Decorator to log use case execution.
@@ -240,6 +231,7 @@ def log_use_case_execution(func):
             def execute(self, request):
                 # ...
     """
+
     def wrapper(self, request):
         self.logger.info(f"Executing {self.__class__.__name__}")
         try:
@@ -247,16 +239,14 @@ def log_use_case_execution(func):
             if result.is_success:
                 self.logger.debug(f"{self.__class__.__name__} succeeded")
             else:
-                self.logger.warning(
-                    f"{self.__class__.__name__} failed: {result.error}"
-                )
+                self.logger.warning(f"{self.__class__.__name__} failed: {result.error}")
             return result
         except Exception as e:
             self.logger.error(
-                f"{self.__class__.__name__} raised exception: {e}",
-                exc_info=True
+                f"{self.__class__.__name__} raised exception: {e}", exc_info=True
             )
             raise
+
     return wrapper
 
 
@@ -277,11 +267,14 @@ def validate_request(validator_func):
                 # Validation already done
                 # ...
     """
+
     def decorator(func):
         def wrapper(self, request):
             errors = validator_func(request)
             if errors:
                 return UseCaseResult.validation_error(errors)
             return func(self, request)
+
         return wrapper
+
     return decorator

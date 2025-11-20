@@ -60,7 +60,7 @@ from core.aggregates.base import AggregateRoot, Entity
 from core.aggregates.repository import IAggregateRepository
 
 __all__ = [
-    'AggregateRoot',
-    'Entity',
-    'IAggregateRepository',
+    "AggregateRoot",
+    "Entity",
+    "IAggregateRepository",
 ]

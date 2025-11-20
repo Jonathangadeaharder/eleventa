@@ -23,11 +23,7 @@ Usage:
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Union
-from core.value_objects.base import (
-    ValueObject,
-    ValidationError,
-    validate_range
-)
+from core.value_objects.base import ValueObject, ValidationError, validate_range
 
 
 @dataclass(frozen=True)
@@ -65,10 +61,10 @@ class Percentage(ValueObject):
         """Validate percentage on creation."""
         # Ensure value is Decimal
         if not isinstance(self.value, Decimal):
-            object.__setattr__(self, 'value', Decimal(str(self.value)))
+            object.__setattr__(self, "value", Decimal(str(self.value)))
 
         # Validate range (0-100)
-        validate_range(self.value, Decimal('0'), Decimal('100'), "Percentage")
+        validate_range(self.value, Decimal("0"), Decimal("100"), "Percentage")
 
     def as_decimal(self) -> Decimal:
         """
@@ -84,7 +80,7 @@ class Percentage(ValueObject):
             >>> Percentage(Decimal('100')).as_decimal()
             Decimal('1.0')
         """
-        return self.value / Decimal('100')
+        return self.value / Decimal("100")
 
     def as_fraction(self) -> str:
         """
@@ -128,7 +124,7 @@ class Percentage(ValueObject):
             Money(amount=Decimal('8.5'), currency='USD')
         """
         # Handle Money value objects
-        if hasattr(amount, 'multiply'):
+        if hasattr(amount, "multiply"):
             return amount.multiply(self.as_decimal())
 
         # Handle numeric values
@@ -158,7 +154,7 @@ class Percentage(ValueObject):
             Money(amount=Decimal('108'), currency='USD')
         """
         # Handle Money value objects
-        if hasattr(amount, 'add') and hasattr(amount, 'multiply'):
+        if hasattr(amount, "add") and hasattr(amount, "multiply"):
             return amount.add(amount.multiply(self.as_decimal()))
 
         # Handle numeric values
@@ -188,7 +184,7 @@ class Percentage(ValueObject):
             Money(amount=Decimal('80'), currency='USD')
         """
         # Handle Money value objects
-        if hasattr(amount, 'subtract') and hasattr(amount, 'multiply'):
+        if hasattr(amount, "subtract") and hasattr(amount, "multiply"):
             return amount.subtract(amount.multiply(self.as_decimal()))
 
         # Handle numeric values
@@ -197,7 +193,7 @@ class Percentage(ValueObject):
 
         return amount - (amount * self.as_decimal())
 
-    def add(self, other: 'Percentage') -> 'Percentage':
+    def add(self, other: "Percentage") -> "Percentage":
         """
         Add two percentages.
 
@@ -218,12 +214,10 @@ class Percentage(ValueObject):
         """
         result = self.value + other.value
         if result > 100:
-            raise ValidationError(
-                f"Percentage sum cannot exceed 100% (got {result}%)"
-            )
+            raise ValidationError(f"Percentage sum cannot exceed 100% (got {result}%)")
         return Percentage(result)
 
-    def subtract(self, other: 'Percentage') -> 'Percentage':
+    def subtract(self, other: "Percentage") -> "Percentage":
         """
         Subtract percentage.
 
@@ -244,12 +238,10 @@ class Percentage(ValueObject):
         """
         result = self.value - other.value
         if result < 0:
-            raise ValidationError(
-                f"Percentage cannot be negative (got {result}%)"
-            )
+            raise ValidationError(f"Percentage cannot be negative (got {result}%)")
         return Percentage(result)
 
-    def multiply(self, multiplier: Union[Decimal, int, float]) -> 'Percentage':
+    def multiply(self, multiplier: Union[Decimal, int, float]) -> "Percentage":
         """
         Multiply percentage by scalar.
 
@@ -271,9 +263,7 @@ class Percentage(ValueObject):
 
         result = self.value * multiplier
         if result > 100:
-            raise ValidationError(
-                f"Percentage cannot exceed 100% (got {result}%)"
-            )
+            raise ValidationError(f"Percentage cannot exceed 100% (got {result}%)")
         return Percentage(result)
 
     def is_zero(self) -> bool:
@@ -308,19 +298,19 @@ class Percentage(ValueObject):
 
     # Comparison operators
 
-    def __lt__(self, other: 'Percentage') -> bool:
+    def __lt__(self, other: "Percentage") -> bool:
         """Less than comparison."""
         return self.value < other.value
 
-    def __le__(self, other: 'Percentage') -> bool:
+    def __le__(self, other: "Percentage") -> bool:
         """Less than or equal comparison."""
         return self.value <= other.value
 
-    def __gt__(self, other: 'Percentage') -> bool:
+    def __gt__(self, other: "Percentage") -> bool:
         """Greater than comparison."""
         return self.value > other.value
 
-    def __ge__(self, other: 'Percentage') -> bool:
+    def __ge__(self, other: "Percentage") -> bool:
         """Greater than or equal comparison."""
         return self.value >= other.value
 
@@ -353,7 +343,7 @@ class Percentage(ValueObject):
         return f"Percentage(value={self.value!r})"
 
     @classmethod
-    def zero(cls) -> 'Percentage':
+    def zero(cls) -> "Percentage":
         """
         Create zero percentage.
 
@@ -364,10 +354,10 @@ class Percentage(ValueObject):
             >>> Percentage.zero()
             Percentage(value=Decimal('0'))
         """
-        return cls(Decimal('0'))
+        return cls(Decimal("0"))
 
     @classmethod
-    def full(cls) -> 'Percentage':
+    def full(cls) -> "Percentage":
         """
         Create 100% percentage.
 
@@ -378,10 +368,10 @@ class Percentage(ValueObject):
             >>> Percentage.full()
             Percentage(value=Decimal('100'))
         """
-        return cls(Decimal('100'))
+        return cls(Decimal("100"))
 
     @classmethod
-    def from_decimal(cls, decimal_value: Union[Decimal, float]) -> 'Percentage':
+    def from_decimal(cls, decimal_value: Union[Decimal, float]) -> "Percentage":
         """
         Create percentage from decimal form.
 
@@ -401,11 +391,13 @@ class Percentage(ValueObject):
         if not isinstance(decimal_value, Decimal):
             decimal_value = Decimal(str(decimal_value))
 
-        percentage_value = decimal_value * Decimal('100')
+        percentage_value = decimal_value * Decimal("100")
         return cls(percentage_value)
 
     @classmethod
-    def from_ratio(cls, numerator: Union[int, Decimal], denominator: Union[int, Decimal]) -> 'Percentage':
+    def from_ratio(
+        cls, numerator: Union[int, Decimal], denominator: Union[int, Decimal]
+    ) -> "Percentage":
         """
         Create percentage from ratio.
 
@@ -431,5 +423,5 @@ class Percentage(ValueObject):
         if not isinstance(denominator, Decimal):
             denominator = Decimal(str(denominator))
 
-        percentage_value = (numerator / denominator) * Decimal('100')
+        percentage_value = (numerator / denominator) * Decimal("100")
         return cls(percentage_value)

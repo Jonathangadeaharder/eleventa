@@ -77,24 +77,24 @@ from core.cqrs.read_models import (
 
 __all__ = [
     # Commands
-    'Command',
-    'CreateProductCommand',
-    'UpdateProductCommand',
-    'DeleteProductCommand',
-    'ProcessSaleCommand',
+    "Command",
+    "CreateProductCommand",
+    "UpdateProductCommand",
+    "DeleteProductCommand",
+    "ProcessSaleCommand",
     # Queries
-    'Query',
-    'GetProductByIdQuery',
-    'GetProductByCodeQuery',
-    'SearchProductsQuery',
-    'GetLowStockProductsQuery',
-    'GetSalesByDateRangeQuery',
+    "Query",
+    "GetProductByIdQuery",
+    "GetProductByCodeQuery",
+    "SearchProductsQuery",
+    "GetLowStockProductsQuery",
+    "GetSalesByDateRangeQuery",
     # Handlers
-    'CommandHandler',
-    'QueryHandler',
+    "CommandHandler",
+    "QueryHandler",
     # Read Models
-    'ProductReadModel',
-    'ProductListItemReadModel',
-    'SaleReadModel',
-    'SaleSummaryReadModel',
+    "ProductReadModel",
+    "ProductListItemReadModel",
+    "SaleReadModel",
+    "SaleSummaryReadModel",
 ]

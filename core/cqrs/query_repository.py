@@ -23,17 +23,14 @@ Usage:
 """
 
 from typing import List, Optional
-from decimal import Decimal
 from datetime import datetime
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 
 from core.cqrs.read_models import (
     ProductReadModel,
     ProductListItemReadModel,
     SaleReadModel,
     SaleSummaryReadModel,
-    CustomerReadModel,
     DashboardSummaryReadModel,
 )
 
@@ -91,7 +88,7 @@ class ProductQueryRepository:
         department_id: Optional[str] = None,
         in_stock_only: bool = False,
         limit: int = 100,
-        offset: int = 0
+        offset: int = 0,
     ) -> List[ProductListItemReadModel]:
         """
         Search products with optimized query.
@@ -127,8 +124,7 @@ class ProductQueryRepository:
         pass
 
     def get_low_stock_products(
-        self,
-        department_id: Optional[str] = None
+        self, department_id: Optional[str] = None
     ) -> List[ProductListItemReadModel]:
         """
         Get products with low stock.
@@ -171,7 +167,7 @@ class SaleQueryRepository:
         start_date: datetime,
         end_date: datetime,
         customer_id: Optional[str] = None,
-        payment_type: Optional[str] = None
+        payment_type: Optional[str] = None,
     ) -> List[SaleSummaryReadModel]:
         """
         Get sales within date range with filters.
@@ -203,10 +199,7 @@ class SaleQueryRepository:
         pass
 
     def get_sales_summary(
-        self,
-        start_date: datetime,
-        end_date: datetime,
-        group_by: str = "day"
+        self, start_date: datetime, end_date: datetime, group_by: str = "day"
     ) -> dict:
         """
         Get aggregated sales summary.
@@ -242,7 +235,9 @@ class DashboardQueryRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def get_dashboard_summary(self, date: Optional[datetime] = None) -> DashboardSummaryReadModel:
+    def get_dashboard_summary(
+        self, date: Optional[datetime] = None
+    ) -> DashboardSummaryReadModel:
         """
         Get dashboard summary data.
 
@@ -273,6 +268,7 @@ class DashboardQueryRepository:
 
 
 # Event Handler Integration
+
 
 class ReadModelUpdater:
     """
@@ -352,6 +348,7 @@ class ReadModelUpdater:
 
 # Cache Strategy
 
+
 class CacheStrategy:
     """
     Caching strategy for read models.
@@ -401,4 +398,5 @@ class CacheStrategy:
         def invalidate_product_cache(event):
             cache.delete(f"product:{event.product_id}")
     """
+
     pass

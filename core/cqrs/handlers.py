@@ -17,9 +17,9 @@ from core.cqrs.queries import Query
 from core.use_cases.base import UseCaseResult
 
 
-TCommand = TypeVar('TCommand', bound=Command)
-TQuery = TypeVar('TQuery', bound=Query)
-TResult = TypeVar('TResult')
+TCommand = TypeVar("TCommand", bound=Command)
+TQuery = TypeVar("TQuery", bound=Query)
+TResult = TypeVar("TResult")
 
 
 class CommandHandler(ABC, Generic[TCommand, TResult]):
@@ -73,7 +73,7 @@ class CommandHandler(ABC, Generic[TCommand, TResult]):
 
     def _log_success(self, result: TResult) -> None:
         """Log successful command execution."""
-        self.logger.debug(f"Command completed successfully")
+        self.logger.debug("Command completed successfully")
 
     def _log_failure(self, error: str) -> None:
         """Log failed command execution."""
@@ -164,12 +164,11 @@ class CreateProductCommandHandler(CommandHandler[CreateProductCommand, UUID]):
                 quantity_in_stock=command.quantity_in_stock,
                 min_stock=command.min_stock,
                 max_stock=command.max_stock,
-                unit_id=command.unit_id
+                unit_id=command.unit_id,
             )
 
             created_product = self.product_service.add_product(
-                product,
-                user_id=command.user_id
+                product, user_id=command.user_id
             )
 
             self._log_success(created_product.id)
@@ -190,16 +189,16 @@ class CreateProductCommandHandler(CommandHandler[CreateProductCommand, UUID]):
         errors = {}
 
         if not command.code or not command.code.strip():
-            errors['code'] = 'Product code is required'
+            errors["code"] = "Product code is required"
 
         if not command.description or not command.description.strip():
-            errors['description'] = 'Description is required'
+            errors["description"] = "Description is required"
 
         if command.sell_price <= 0:
-            errors['sell_price'] = 'Sell price must be greater than zero'
+            errors["sell_price"] = "Sell price must be greater than zero"
 
         if command.cost_price is not None and command.cost_price < 0:
-            errors['cost_price'] = 'Cost price cannot be negative'
+            errors["cost_price"] = "Cost price cannot be negative"
 
         return errors if errors else None
 
@@ -226,7 +225,9 @@ class UpdateProductCommandHandler(CommandHandler[UpdateProductCommand, UUID]):
 
         try:
             # Get existing product
-            existing_product = self.product_service.get_product_by_id(command.product_id)
+            existing_product = self.product_service.get_product_by_id(
+                command.product_id
+            )
             if not existing_product:
                 return UseCaseResult.not_found("Product")
 
@@ -248,8 +249,7 @@ class UpdateProductCommandHandler(CommandHandler[UpdateProductCommand, UUID]):
 
             # Update via service
             updated_product = self.product_service.update_product(
-                existing_product,
-                user_id=command.user_id
+                existing_product, user_id=command.user_id
             )
 
             self._log_success(updated_product.id)
@@ -268,13 +268,13 @@ class UpdateProductCommandHandler(CommandHandler[UpdateProductCommand, UUID]):
         errors = {}
 
         if command.code is not None and not command.code.strip():
-            errors['code'] = 'Product code cannot be empty'
+            errors["code"] = "Product code cannot be empty"
 
         if command.description is not None and not command.description.strip():
-            errors['description'] = 'Description cannot be empty'
+            errors["description"] = "Description cannot be empty"
 
         if command.sell_price is not None and command.sell_price <= 0:
-            errors['sell_price'] = 'Sell price must be greater than zero'
+            errors["sell_price"] = "Sell price must be greater than zero"
 
         return errors if errors else None
 
@@ -282,8 +282,12 @@ class UpdateProductCommandHandler(CommandHandler[UpdateProductCommand, UUID]):
 # Example Query Handlers (Concrete Implementations)
 
 from typing import List
-from core.cqrs.queries import GetProductByIdQuery, GetProductByCodeQuery, SearchProductsQuery
-from core.cqrs.read_models import ProductReadModel, ProductListItemReadModel
+from core.cqrs.queries import (
+    GetProductByIdQuery,
+    GetProductByCodeQuery,
+    SearchProductsQuery,
+)
+from core.cqrs.read_models import ProductListItemReadModel
 
 
 class GetProductByIdQueryHandler(QueryHandler[GetProductByIdQuery, ProductReadModel]):
@@ -329,16 +333,18 @@ class GetProductByIdQueryHandler(QueryHandler[GetProductByIdQuery, ProductReadMo
             unit_name=None,  # Would be denormalized in real impl
             in_stock=product.quantity_in_stock > 0,
             is_low_stock=(
-                product.min_stock is not None and
-                product.quantity_in_stock < product.min_stock
+                product.min_stock is not None
+                and product.quantity_in_stock < product.min_stock
             ),
             stock_value=(
-                product.quantity_in_stock * (product.cost_price or Decimal('0'))
-            )
+                product.quantity_in_stock * (product.cost_price or Decimal("0"))
+            ),
         )
 
 
-class GetProductByCodeQueryHandler(QueryHandler[GetProductByCodeQuery, ProductReadModel]):
+class GetProductByCodeQueryHandler(
+    QueryHandler[GetProductByCodeQuery, ProductReadModel]
+):
     """Handler for GetProductByCodeQuery."""
 
     def __init__(self, product_service: ProductService):
@@ -359,7 +365,9 @@ class GetProductByCodeQueryHandler(QueryHandler[GetProductByCodeQuery, ProductRe
         return handler._to_read_model(product)
 
 
-class SearchProductsQueryHandler(QueryHandler[SearchProductsQuery, List[ProductListItemReadModel]]):
+class SearchProductsQueryHandler(
+    QueryHandler[SearchProductsQuery, List[ProductListItemReadModel]]
+):
     """
     Handler for SearchProductsQuery.
 
@@ -383,7 +391,8 @@ class SearchProductsQueryHandler(QueryHandler[SearchProductsQuery, List[ProductL
         if query.search_term:
             search_lower = query.search_term.lower()
             products = [
-                p for p in products
+                p
+                for p in products
                 if search_lower in p.code.lower()
                 or search_lower in p.description.lower()
             ]
@@ -416,7 +425,7 @@ class SearchProductsQueryHandler(QueryHandler[SearchProductsQuery, List[ProductL
             department_name=None,  # Would be denormalized
             in_stock=product.quantity_in_stock > 0,
             is_low_stock=(
-                product.min_stock is not None and
-                product.quantity_in_stock < product.min_stock
-            )
+                product.min_stock is not None
+                and product.quantity_in_stock < product.min_stock
+            ),
         )

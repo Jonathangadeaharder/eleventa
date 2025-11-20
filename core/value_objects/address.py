@@ -28,9 +28,8 @@ from dataclasses import dataclass
 from typing import Optional
 from core.value_objects.base import (
     ValueObject,
-    ValidationError,
     validate_not_empty,
-    validate_length
+    validate_length,
 )
 
 
@@ -90,16 +89,16 @@ class Address(ValueObject):
             validate_length(self.apartment, 1, 50, "Apartment")
 
         # Normalize fields
-        object.__setattr__(self, 'street', self.street.strip())
-        object.__setattr__(self, 'city', self.city.strip())
-        object.__setattr__(self, 'postal_code', self.postal_code.strip())
-        object.__setattr__(self, 'country', self.country.strip())
+        object.__setattr__(self, "street", self.street.strip())
+        object.__setattr__(self, "city", self.city.strip())
+        object.__setattr__(self, "postal_code", self.postal_code.strip())
+        object.__setattr__(self, "country", self.country.strip())
 
         if self.state:
-            object.__setattr__(self, 'state', self.state.strip())
+            object.__setattr__(self, "state", self.state.strip())
 
         if self.apartment:
-            object.__setattr__(self, 'apartment', self.apartment.strip())
+            object.__setattr__(self, "apartment", self.apartment.strip())
 
     def __str__(self) -> str:
         """
@@ -221,12 +220,8 @@ class Address(ValueObject):
 
     @classmethod
     def create_simple(
-        cls,
-        street: str,
-        city: str,
-        postal_code: str,
-        country: str = 'USA'
-    ) -> 'Address':
+        cls, street: str, city: str, postal_code: str, country: str = "USA"
+    ) -> "Address":
         """
         Create a simple address without state/apartment.
 
@@ -254,5 +249,5 @@ class Address(ValueObject):
             postal_code=postal_code,
             country=country,
             state=None,
-            apartment=None
+            apartment=None,
         )

@@ -27,7 +27,7 @@ from core.value_objects.base import (
     ValueObject,
     ValidationError,
     validate_not_empty,
-    validate_length
+    validate_length,
 )
 
 
@@ -57,9 +57,7 @@ class Email(ValueObject):
     value: str
 
     # Email validation regex (simplified but reasonable)
-    EMAIL_REGEX = re.compile(
-        r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    )
+    EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
     def __post_init__(self):
         """Validate email on creation."""
@@ -68,7 +66,7 @@ class Email(ValueObject):
 
         # Normalize to lowercase
         normalized = self.value.strip().lower()
-        object.__setattr__(self, 'value', normalized)
+        object.__setattr__(self, "value", normalized)
 
         # Check length
         validate_length(self.value, 3, 254, "Email")
@@ -76,23 +74,20 @@ class Email(ValueObject):
         # Validate format
         if not self.EMAIL_REGEX.match(self.value):
             raise ValidationError(
-                f"Invalid email format: '{self.value}'",
-                field="email"
+                f"Invalid email format: '{self.value}'", field="email"
             )
 
         # Additional validations
-        local, domain = self.value.rsplit('@', 1)
+        local, domain = self.value.rsplit("@", 1)
 
         if len(local) > 64:
             raise ValidationError(
-                "Email local part cannot exceed 64 characters",
-                field="email"
+                "Email local part cannot exceed 64 characters", field="email"
             )
 
-        if '..' in self.value:
+        if ".." in self.value:
             raise ValidationError(
-                "Email cannot contain consecutive dots",
-                field="email"
+                "Email cannot contain consecutive dots", field="email"
             )
 
     @property
@@ -107,7 +102,7 @@ class Email(ValueObject):
             >>> Email('john.doe@example.com').local_part
             'john.doe'
         """
-        return self.value.split('@')[0]
+        return self.value.split("@")[0]
 
     @property
     def domain(self) -> str:
@@ -121,7 +116,7 @@ class Email(ValueObject):
             >>> Email('john@example.com').domain
             'example.com'
         """
-        return self.value.split('@')[1]
+        return self.value.split("@")[1]
 
     def is_from_domain(self, domain: str) -> bool:
         """

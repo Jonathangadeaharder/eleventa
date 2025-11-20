@@ -36,10 +36,12 @@ class Query(ABC):
     Queries represent requests for data and are named as questions
     (Get, Find, Search, List).
     """
+
     pass
 
 
 # Product Queries
+
 
 @dataclass(frozen=True)
 class GetProductByIdQuery(Query):
@@ -48,6 +50,7 @@ class GetProductByIdQuery(Query):
 
     Returns: ProductReadModel or None
     """
+
     product_id: UUID
 
 
@@ -58,6 +61,7 @@ class GetProductByCodeQuery(Query):
 
     Returns: ProductReadModel or None
     """
+
     code: str
 
 
@@ -73,6 +77,7 @@ class SearchProductsQuery(Query):
     - Indexed filters
     - Denormalized department names
     """
+
     search_term: Optional[str] = None
     department_id: Optional[UUID] = None
     in_stock_only: bool = False
@@ -93,6 +98,7 @@ class GetLowStockProductsQuery(Query):
     - Pre-calculated low stock flags
     - Indexed quantity fields
     """
+
     department_id: Optional[UUID] = None
 
 
@@ -105,6 +111,7 @@ class GetProductsWithPriceChangesQuery(Query):
 
     This uses a denormalized price history view.
     """
+
     days: int = 7
     department_id: Optional[UUID] = None
 
@@ -120,10 +127,12 @@ class GetProductInventoryValueQuery(Query):
     - Pre-calculated stock values
     - Aggregated by department
     """
+
     department_id: Optional[UUID] = None
 
 
 # Sale Queries
+
 
 @dataclass(frozen=True)
 class GetSaleByIdQuery(Query):
@@ -132,6 +141,7 @@ class GetSaleByIdQuery(Query):
 
     Returns: SaleReadModel or None
     """
+
     sale_id: UUID
 
 
@@ -144,6 +154,7 @@ class GetSalesByDateRangeQuery(Query):
 
     Optimized for reporting with denormalized data.
     """
+
     start_date: datetime
     end_date: datetime
     customer_id: Optional[UUID] = None
@@ -165,6 +176,7 @@ class GetSalesSummaryQuery(Query):
     - By payment type
     - By time period
     """
+
     start_date: datetime
     end_date: datetime
     group_by: str = "day"  # day, week, month
@@ -179,6 +191,7 @@ class GetTopSellingProductsQuery(Query):
 
     Uses denormalized sales data aggregated by product.
     """
+
     start_date: datetime
     end_date: datetime
     limit: int = 10
@@ -187,6 +200,7 @@ class GetTopSellingProductsQuery(Query):
 
 # Customer Queries
 
+
 @dataclass(frozen=True)
 class GetCustomerByIdQuery(Query):
     """
@@ -194,6 +208,7 @@ class GetCustomerByIdQuery(Query):
 
     Returns: CustomerReadModel or None
     """
+
     customer_id: UUID
 
 
@@ -204,6 +219,7 @@ class SearchCustomersQuery(Query):
 
     Returns: List[CustomerListItemReadModel]
     """
+
     search_term: Optional[str] = None
     has_balance: Optional[bool] = None
     limit: int = 100
@@ -219,6 +235,7 @@ class GetCustomersWithCreditQuery(Query):
 
     Optimized for credit management.
     """
+
     min_balance: Optional[Decimal] = None
     over_limit: bool = False
 
@@ -235,11 +252,13 @@ class GetCustomerPurchaseHistoryQuery(Query):
     - Total spent
     - Favorite products
     """
+
     customer_id: UUID
     limit: int = 50
 
 
 # Dashboard/Analytics Queries
+
 
 @dataclass(frozen=True)
 class GetDashboardSummaryQuery(Query):
@@ -256,6 +275,7 @@ class GetDashboardSummaryQuery(Query):
 
     This is heavily cached and uses denormalized views.
     """
+
     date: Optional[datetime] = None
 
 
@@ -272,6 +292,7 @@ class GetInventoryReportQuery(Query):
     - Low stock items
     - Fast/slow movers
     """
+
     department_id: Optional[UUID] = None
     include_zero_stock: bool = False
 
@@ -289,6 +310,7 @@ class GetSalesReportQuery(Query):
     - Payment types breakdown
     - User performance
     """
+
     start_date: datetime
     end_date: datetime
     group_by: str = "day"

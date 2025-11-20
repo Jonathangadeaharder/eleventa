@@ -20,8 +20,7 @@ from core.services.product_service import ProductService
 from core.services.sale_service import SaleService
 from core.services.customer_service import CustomerService
 from core.services.inventory_service import InventoryService
-from core.models.sale import Sale, SaleItem, PaymentType
-from core.models.product import Product
+from core.models.sale import Sale, SaleItem
 from core.events.sale_events import SaleStarted, SaleItemAdded, SaleCompleted
 from infrastructure.persistence.unit_of_work import unit_of_work
 
@@ -76,7 +75,7 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
         sale_service: SaleService,
         product_service: ProductService,
         customer_service: Optional[CustomerService] = None,
-        inventory_service: Optional[InventoryService] = None
+        inventory_service: Optional[InventoryService] = None,
     ):
         """
         Initialize the use case with required services.
@@ -115,8 +114,7 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
         # Step 2: Validate customer (if credit sale)
         if request.payment_type == "credit" and request.customer_id:
             customer_validation = self._validate_customer_credit(
-                request.customer_id,
-                self._calculate_total(request.items)
+                request.customer_id, self._calculate_total(request.items)
             )
             if customer_validation:
                 return UseCaseResult.failure(customer_validation)
@@ -133,9 +131,7 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
 
         # Step 5: Validate payment
         payment_validation = self._validate_payment(
-            total_amount,
-            request.paid_amount,
-            request.payment_type
+            total_amount, request.paid_amount, request.payment_type
         )
         if payment_validation:
             return UseCaseResult.failure(payment_validation)
@@ -143,9 +139,7 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
         # Step 6: Process the sale (transactional)
         try:
             sale_result = self._process_sale_transaction(
-                request,
-                sale_items,
-                total_amount
+                request, sale_items, total_amount
             )
 
             if sale_result.is_failure:
@@ -162,30 +156,28 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
         errors = {}
 
         if not request.items:
-            errors['items'] = 'At least one item is required'
+            errors["items"] = "At least one item is required"
 
-        if request.payment_type not in ['cash', 'credit', 'card']:
-            errors['payment_type'] = 'Invalid payment type'
+        if request.payment_type not in ["cash", "credit", "card"]:
+            errors["payment_type"] = "Invalid payment type"
 
-        if request.payment_type == 'credit' and not request.customer_id:
-            errors['customer_id'] = 'Customer is required for credit sales'
+        if request.payment_type == "credit" and not request.customer_id:
+            errors["customer_id"] = "Customer is required for credit sales"
 
         if request.paid_amount < 0:
-            errors['paid_amount'] = 'Paid amount cannot be negative'
+            errors["paid_amount"] = "Paid amount cannot be negative"
 
         # Validate individual items
         for idx, item in enumerate(request.items):
             if not item.product_code:
-                errors[f'items.{idx}.product_code'] = 'Product code is required'
+                errors[f"items.{idx}.product_code"] = "Product code is required"
             if item.quantity <= 0:
-                errors[f'items.{idx}.quantity'] = 'Quantity must be greater than zero'
+                errors[f"items.{idx}.quantity"] = "Quantity must be greater than zero"
 
         return errors if errors else None
 
     def _validate_customer_credit(
-        self,
-        customer_id: UUID,
-        sale_amount: Decimal
+        self, customer_id: UUID, sale_amount: Decimal
     ) -> Optional[str]:
         """
         Validate customer credit limit.
@@ -210,10 +202,7 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
 
         return None
 
-    def _prepare_sale_items(
-        self,
-        item_requests: List[SaleItemRequest]
-    ) -> tuple:
+    def _prepare_sale_items(self, item_requests: List[SaleItemRequest]) -> tuple:
         """
         Validate products and prepare sale items.
 
@@ -221,15 +210,17 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
             Tuple of (sale_items, total_amount) or (UseCaseResult, None) on error
         """
         sale_items = []
-        total_amount = Decimal('0')
+        total_amount = Decimal("0")
 
         for item_request in item_requests:
             # Get product
-            product = self.product_service.get_product_by_code(item_request.product_code)
+            product = self.product_service.get_product_by_code(
+                item_request.product_code
+            )
             if not product:
                 return (
                     UseCaseResult.not_found(f"Product {item_request.product_code}"),
-                    None
+                    None,
                 )
 
             # Determine price
@@ -244,7 +235,7 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
                 quantity=item_request.quantity,
                 unit_price=unit_price,
                 subtotal=subtotal,
-                cost_price=product.cost_price or Decimal('0')
+                cost_price=product.cost_price or Decimal("0"),
             )
 
             sale_items.append(sale_item)
@@ -253,8 +244,7 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
         return sale_items, total_amount
 
     def _check_inventory_availability(
-        self,
-        sale_items: List[SaleItem]
+        self, sale_items: List[SaleItem]
     ) -> Optional[str]:
         """
         Check if all products have sufficient inventory.
@@ -276,10 +266,7 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
         return None
 
     def _validate_payment(
-        self,
-        total_amount: Decimal,
-        paid_amount: Decimal,
-        payment_type: str
+        self, total_amount: Decimal, paid_amount: Decimal, payment_type: str
     ) -> Optional[str]:
         """
         Validate payment amount.
@@ -287,7 +274,7 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
         Returns:
             Error message if payment invalid, None if valid
         """
-        if payment_type == 'cash':
+        if payment_type == "cash":
             if paid_amount < total_amount:
                 return (
                     f"Insufficient payment. Total: ${total_amount}, "
@@ -298,9 +285,11 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
 
     def _calculate_total(self, item_requests: List[SaleItemRequest]) -> Decimal:
         """Calculate total amount for items."""
-        total = Decimal('0')
+        total = Decimal("0")
         for item_request in item_requests:
-            product = self.product_service.get_product_by_code(item_request.product_code)
+            product = self.product_service.get_product_by_code(
+                item_request.product_code
+            )
             if product:
                 price = item_request.unit_price or product.sell_price
                 total += price * item_request.quantity
@@ -310,7 +299,7 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
         self,
         request: ProcessSaleRequest,
         sale_items: List[SaleItem],
-        total_amount: Decimal
+        total_amount: Decimal,
     ) -> UseCaseResult[SaleResponse]:
         """
         Process the sale within a transaction.
@@ -320,7 +309,11 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
         with unit_of_work() as uow:
             # Create sale
             sale_id = uuid4()
-            change_amount = request.paid_amount - total_amount if request.payment_type == 'cash' else Decimal('0')
+            change_amount = (
+                request.paid_amount - total_amount
+                if request.payment_type == "cash"
+                else Decimal("0")
+            )
 
             sale = Sale(
                 id=sale_id,
@@ -331,29 +324,33 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
                 change_amount=change_amount,
                 items=sale_items,
                 created_at=datetime.utcnow(),
-                user_id=request.user_id
+                user_id=request.user_id,
             )
 
             # Save sale
             created_sale = uow.sales.add(sale)
 
             # Publish SaleStarted event
-            uow.add_event(SaleStarted(
-                sale_id=sale_id,
-                customer_id=request.customer_id,
-                user_id=request.user_id or UUID(int=0)
-            ))
+            uow.add_event(
+                SaleStarted(
+                    sale_id=sale_id,
+                    customer_id=request.customer_id,
+                    user_id=request.user_id or UUID(int=0),
+                )
+            )
 
             # Publish SaleItemAdded events
             for item in sale_items:
-                uow.add_event(SaleItemAdded(
-                    sale_id=sale_id,
-                    product_id=item.product_id,
-                    product_code=item.product_code,
-                    quantity=item.quantity,
-                    unit_price=item.unit_price,
-                    subtotal=item.subtotal
-                ))
+                uow.add_event(
+                    SaleItemAdded(
+                        sale_id=sale_id,
+                        product_id=item.product_id,
+                        product_code=item.product_code,
+                        quantity=item.quantity,
+                        unit_price=item.unit_price,
+                        subtotal=item.subtotal,
+                    )
+                )
 
             # Update inventory (if inventory service available)
             if self.inventory_service:
@@ -365,16 +362,18 @@ class ProcessSaleUseCase(UseCase[ProcessSaleRequest, SaleResponse]):
                         pass
 
             # Publish SaleCompleted event
-            uow.add_event(SaleCompleted(
-                sale_id=sale_id,
-                customer_id=request.customer_id,
-                total_amount=total_amount,
-                payment_type=request.payment_type,
-                paid_amount=request.paid_amount,
-                change_amount=change_amount,
-                user_id=request.user_id or UUID(int=0),
-                has_credit=request.payment_type == 'credit'
-            ))
+            uow.add_event(
+                SaleCompleted(
+                    sale_id=sale_id,
+                    customer_id=request.customer_id,
+                    total_amount=total_amount,
+                    payment_type=request.payment_type,
+                    paid_amount=request.paid_amount,
+                    change_amount=change_amount,
+                    user_id=request.user_id or UUID(int=0),
+                    has_credit=request.payment_type == "credit",
+                )
+            )
 
             # Events will be published automatically after commit
 

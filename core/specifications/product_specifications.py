@@ -30,7 +30,10 @@ class ProductInStockSpecification(Specification[Product]):
 
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
-        from infrastructure.persistence.sqlite.models_mapping import Product as ProductOrm
+        from infrastructure.persistence.sqlite.models_mapping import (
+            Product as ProductOrm,
+        )
+
         return ProductOrm.quantity_in_stock > 0
 
     def __repr__(self) -> str:
@@ -54,7 +57,10 @@ class ProductOutOfStockSpecification(Specification[Product]):
 
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
-        from infrastructure.persistence.sqlite.models_mapping import Product as ProductOrm
+        from infrastructure.persistence.sqlite.models_mapping import (
+            Product as ProductOrm,
+        )
+
         return ProductOrm.quantity_in_stock <= 0
 
     def __repr__(self) -> str:
@@ -80,11 +86,14 @@ class ProductLowStockSpecification(Specification[Product]):
 
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
-        from infrastructure.persistence.sqlite.models_mapping import Product as ProductOrm
+        from infrastructure.persistence.sqlite.models_mapping import (
+            Product as ProductOrm,
+        )
         from sqlalchemy import and_
+
         return and_(
             ProductOrm.min_stock.isnot(None),
-            ProductOrm.quantity_in_stock < ProductOrm.min_stock
+            ProductOrm.quantity_in_stock < ProductOrm.min_stock,
         )
 
     def __repr__(self) -> str:
@@ -115,7 +124,10 @@ class ProductInDepartmentSpecification(ParameterizedSpecification[Product]):
 
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
-        from infrastructure.persistence.sqlite.models_mapping import Product as ProductOrm
+        from infrastructure.persistence.sqlite.models_mapping import (
+            Product as ProductOrm,
+        )
+
         return ProductOrm.department_id == self.department_id
 
     def __repr__(self) -> str:
@@ -135,9 +147,7 @@ class ProductPriceRangeSpecification(ParameterizedSpecification[Product]):
     """
 
     def __init__(
-        self,
-        min_price: Optional[Decimal] = None,
-        max_price: Optional[Decimal] = None
+        self, min_price: Optional[Decimal] = None, max_price: Optional[Decimal] = None
     ):
         """
         Initialize specification.
@@ -159,7 +169,9 @@ class ProductPriceRangeSpecification(ParameterizedSpecification[Product]):
 
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
-        from infrastructure.persistence.sqlite.models_mapping import Product as ProductOrm
+        from infrastructure.persistence.sqlite.models_mapping import (
+            Product as ProductOrm,
+        )
         from sqlalchemy import and_
 
         conditions = []
@@ -200,14 +212,18 @@ class ProductCodeLikeSpecification(ParameterizedSpecification[Product]):
     def is_satisfied_by(self, product: Product) -> bool:
         """Check if product code matches pattern."""
         # Simple pattern matching (% = wildcard)
-        pattern = self.pattern.replace('%', '.*')
+        pattern = self.pattern.replace("%", ".*")
         import re
+
         return bool(re.search(pattern, product.code.lower()))
 
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
-        from infrastructure.persistence.sqlite.models_mapping import Product as ProductOrm
+        from infrastructure.persistence.sqlite.models_mapping import (
+            Product as ProductOrm,
+        )
         from sqlalchemy import func
+
         return func.lower(ProductOrm.code).like(self.pattern)
 
     def __repr__(self) -> str:
@@ -234,14 +250,18 @@ class ProductDescriptionLikeSpecification(ParameterizedSpecification[Product]):
 
     def is_satisfied_by(self, product: Product) -> bool:
         """Check if product description matches pattern."""
-        pattern = self.pattern.replace('%', '.*')
+        pattern = self.pattern.replace("%", ".*")
         import re
+
         return bool(re.search(pattern, product.description.lower()))
 
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
-        from infrastructure.persistence.sqlite.models_mapping import Product as ProductOrm
+        from infrastructure.persistence.sqlite.models_mapping import (
+            Product as ProductOrm,
+        )
         from sqlalchemy import func
+
         return func.lower(ProductOrm.description).like(self.pattern)
 
     def __repr__(self) -> str:
@@ -261,11 +281,14 @@ class ProductActiveSpecification(Specification[Product]):
 
     def is_satisfied_by(self, product: Product) -> bool:
         """Check if product is active."""
-        return getattr(product, 'is_active', True)  # Default to True if not present
+        return getattr(product, "is_active", True)  # Default to True if not present
 
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
-        from infrastructure.persistence.sqlite.models_mapping import Product as ProductOrm
+        from infrastructure.persistence.sqlite.models_mapping import (
+            Product as ProductOrm,
+        )
+
         # Assuming is_active field exists
         return ProductOrm.is_active == True
 
@@ -288,7 +311,10 @@ class ProductUsesInventorySpecification(Specification[Product]):
 
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
-        from infrastructure.persistence.sqlite.models_mapping import Product as ProductOrm
+        from infrastructure.persistence.sqlite.models_mapping import (
+            Product as ProductOrm,
+        )
+
         return ProductOrm.uses_inventory == True
 
     def __repr__(self) -> str:
@@ -296,6 +322,7 @@ class ProductUsesInventorySpecification(Specification[Product]):
 
 
 # Convenience factory functions
+
 
 def products_in_stock() -> ProductInStockSpecification:
     """Create specification for in-stock products."""
@@ -318,8 +345,7 @@ def products_in_department(department_id: UUID) -> ProductInDepartmentSpecificat
 
 
 def products_in_price_range(
-    min_price: Optional[Decimal] = None,
-    max_price: Optional[Decimal] = None
+    min_price: Optional[Decimal] = None, max_price: Optional[Decimal] = None
 ) -> ProductPriceRangeSpecification:
     """Create specification for products in a price range."""
     return ProductPriceRangeSpecification(min_price, max_price)

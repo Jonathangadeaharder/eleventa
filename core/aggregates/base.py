@@ -16,8 +16,7 @@ Key Differences from Entities:
 """
 
 from abc import ABC
-from typing import List, Any, Optional
-from uuid import UUID
+from typing import List, Any
 from datetime import datetime
 
 
@@ -287,7 +286,7 @@ def ensure_aggregate_invariants(aggregate: AggregateRoot) -> None:
                 if self.total <= 0:
                     raise DomainError("Order total must be positive")
     """
-    if hasattr(aggregate, '_check_invariants'):
+    if hasattr(aggregate, "_check_invariants"):
         aggregate._check_invariants()
 
 
@@ -314,10 +313,10 @@ def create_aggregate_snapshot(aggregate: AggregateRoot) -> dict:
     # This is a simplified version - real implementation would use
     # proper serialization
     return {
-        'type': aggregate.__class__.__name__,
-        'id': aggregate.id,
-        'version': aggregate.version,
-        'state': aggregate.__dict__.copy()
+        "type": aggregate.__class__.__name__,
+        "id": aggregate.id,
+        "version": aggregate.version,
+        "state": aggregate.__dict__.copy(),
     }
 
 

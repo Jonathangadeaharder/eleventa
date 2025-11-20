@@ -7,9 +7,13 @@ providing a clean API for the presentation layer.
 
 from decimal import Decimal
 from typing import Optional
-from uuid import UUID
 
-from core.use_cases.base import UseCase, UseCaseResult, QueryUseCase, log_use_case_execution
+from core.use_cases.base import (
+    UseCase,
+    UseCaseResult,
+    QueryUseCase,
+    log_use_case_execution,
+)
 from core.use_cases.dtos import (
     CreateProductRequest,
     UpdateProductRequest,
@@ -78,8 +82,7 @@ class CreateProductUseCase(UseCase[CreateProductRequest, ProductResponse]):
         try:
             domain_product = request.to_domain()
             created_product = self.product_service.add_product(
-                domain_product,
-                user_id=request.user_id
+                domain_product, user_id=request.user_id
             )
 
             # Convert to response DTO
@@ -107,19 +110,19 @@ class CreateProductUseCase(UseCase[CreateProductRequest, ProductResponse]):
         errors = {}
 
         if not request.code or not request.code.strip():
-            errors['code'] = 'Product code is required'
+            errors["code"] = "Product code is required"
 
         if not request.description or not request.description.strip():
-            errors['description'] = 'Description is required'
+            errors["description"] = "Description is required"
 
         if request.sell_price is None or request.sell_price <= 0:
-            errors['sell_price'] = 'Sell price must be greater than zero'
+            errors["sell_price"] = "Sell price must be greater than zero"
 
         if request.cost_price is not None and request.cost_price < 0:
-            errors['cost_price'] = 'Cost price cannot be negative'
+            errors["cost_price"] = "Cost price cannot be negative"
 
         if request.quantity_in_stock < 0:
-            errors['quantity_in_stock'] = 'Quantity cannot be negative'
+            errors["quantity_in_stock"] = "Quantity cannot be negative"
 
         return errors if errors else None
 
@@ -145,7 +148,9 @@ class UpdateProductUseCase(UseCase[UpdateProductRequest, ProductResponse]):
 
         try:
             # Get existing product
-            existing_product = self.product_service.get_product_by_id(request.product_id)
+            existing_product = self.product_service.get_product_by_id(
+                request.product_id
+            )
             if not existing_product:
                 return UseCaseResult.not_found("Product")
 
@@ -163,8 +168,7 @@ class UpdateProductUseCase(UseCase[UpdateProductRequest, ProductResponse]):
 
             # Update via service
             updated_product = self.product_service.update_product(
-                existing_product,
-                user_id=request.user_id
+                existing_product, user_id=request.user_id
             )
 
             response = ProductResponse.from_domain(updated_product)
@@ -182,16 +186,16 @@ class UpdateProductUseCase(UseCase[UpdateProductRequest, ProductResponse]):
         errors = {}
 
         if not request.product_id:
-            errors['product_id'] = 'Product ID is required'
+            errors["product_id"] = "Product ID is required"
 
         if request.code is not None and not request.code.strip():
-            errors['code'] = 'Product code cannot be empty'
+            errors["code"] = "Product code cannot be empty"
 
         if request.description is not None and not request.description.strip():
-            errors['description'] = 'Description cannot be empty'
+            errors["description"] = "Description cannot be empty"
 
         if request.sell_price is not None and request.sell_price <= 0:
-            errors['sell_price'] = 'Sell price must be greater than zero'
+            errors["sell_price"] = "Sell price must be greater than zero"
 
         return errors if errors else None
 
@@ -207,10 +211,12 @@ class GetProductByCodeUseCase(QueryUseCase[GetProductByCodeRequest, ProductRespo
         super().__init__()
         self.product_service = product_service
 
-    def execute(self, request: GetProductByCodeRequest) -> UseCaseResult[ProductResponse]:
+    def execute(
+        self, request: GetProductByCodeRequest
+    ) -> UseCaseResult[ProductResponse]:
         """Execute the get product by code query."""
         if not request.code:
-            return UseCaseResult.validation_error({'code': 'Product code is required'})
+            return UseCaseResult.validation_error({"code": "Product code is required"})
 
         product = self.product_service.get_product_by_code(request.code)
 
@@ -232,7 +238,9 @@ class SearchProductsUseCase(QueryUseCase[SearchProductsRequest, ProductListRespo
         super().__init__()
         self.product_service = product_service
 
-    def execute(self, request: SearchProductsRequest) -> UseCaseResult[ProductListResponse]:
+    def execute(
+        self, request: SearchProductsRequest
+    ) -> UseCaseResult[ProductListResponse]:
         """Execute the search products query."""
         try:
             # Get products based on filters
@@ -244,26 +252,21 @@ class SearchProductsUseCase(QueryUseCase[SearchProductsRequest, ProductListRespo
             if request.search_term:
                 search_lower = request.search_term.lower()
                 products = [
-                    p for p in products
+                    p
+                    for p in products
                     if search_lower in p.code.lower()
                     or search_lower in p.description.lower()
                 ]
 
             # Apply stock filter
             if request.in_stock_only:
-                products = [
-                    p for p in products
-                    if p.quantity_in_stock > 0
-                ]
+                products = [p for p in products if p.quantity_in_stock > 0]
 
             # Convert to response DTOs
-            product_responses = [
-                ProductResponse.from_domain(p) for p in products
-            ]
+            product_responses = [ProductResponse.from_domain(p) for p in products]
 
             response = ProductListResponse(
-                products=product_responses,
-                total_count=len(product_responses)
+                products=product_responses, total_count=len(product_responses)
             )
 
             return UseCaseResult.success(response)
@@ -273,7 +276,9 @@ class SearchProductsUseCase(QueryUseCase[SearchProductsRequest, ProductListRespo
             return UseCaseResult.failure(f"Search failed: {str(e)}")
 
 
-class BulkUpdateProductPricesUseCase(UseCase[BulkPriceUpdateRequest, BulkPriceUpdateResponse]):
+class BulkUpdateProductPricesUseCase(
+    UseCase[BulkPriceUpdateRequest, BulkPriceUpdateResponse]
+):
     """
     Use case for bulk updating product prices.
 
@@ -285,7 +290,9 @@ class BulkUpdateProductPricesUseCase(UseCase[BulkPriceUpdateRequest, BulkPriceUp
         self.product_service = product_service
 
     @log_use_case_execution
-    def execute(self, request: BulkPriceUpdateRequest) -> UseCaseResult[BulkPriceUpdateResponse]:
+    def execute(
+        self, request: BulkPriceUpdateRequest
+    ) -> UseCaseResult[BulkPriceUpdateResponse]:
         """Execute the bulk price update."""
         # Validation
         validation_errors = self._validate_request(request)
@@ -297,12 +304,11 @@ class BulkUpdateProductPricesUseCase(UseCase[BulkPriceUpdateRequest, BulkPriceUp
             updated_count = self.product_service.update_prices_by_percentage(
                 percentage=request.percentage,
                 department_id=request.department_id,
-                user_id=request.user_id
+                user_id=request.user_id,
             )
 
             response = BulkPriceUpdateResponse(
-                updated_count=updated_count,
-                failed_products=[]
+                updated_count=updated_count, failed_products=[]
             )
 
             return UseCaseResult.success(response)
@@ -319,8 +325,8 @@ class BulkUpdateProductPricesUseCase(UseCase[BulkPriceUpdateRequest, BulkPriceUp
         errors = {}
 
         if request.percentage is None:
-            errors['percentage'] = 'Percentage is required'
-        elif request.percentage <= Decimal('-100'):
-            errors['percentage'] = 'Percentage must be greater than -100'
+            errors["percentage"] = "Percentage is required"
+        elif request.percentage <= Decimal("-100"):
+            errors["percentage"] = "Percentage must be greater than -100"
 
         return errors if errors else None

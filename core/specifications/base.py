@@ -6,10 +6,10 @@ base classes and composite specifications.
 """
 
 from abc import ABC, abstractmethod
-from typing import TypeVar, Generic, Union
+from typing import TypeVar, Generic
 
 
-T = TypeVar('T')  # The entity type (Product, Sale, etc.)
+T = TypeVar("T")  # The entity type (Product, Sale, etc.)
 
 
 class Specification(ABC, Generic[T]):
@@ -63,7 +63,7 @@ class Specification(ABC, Generic[T]):
         """
         pass
 
-    def and_(self, other: 'Specification[T]') -> 'AndSpecification[T]':
+    def and_(self, other: "Specification[T]") -> "AndSpecification[T]":
         """
         Create an AND specification.
 
@@ -79,7 +79,7 @@ class Specification(ABC, Generic[T]):
         """
         return AndSpecification(self, other)
 
-    def or_(self, other: 'Specification[T]') -> 'OrSpecification[T]':
+    def or_(self, other: "Specification[T]") -> "OrSpecification[T]":
         """
         Create an OR specification.
 
@@ -95,7 +95,7 @@ class Specification(ABC, Generic[T]):
         """
         return OrSpecification(self, other)
 
-    def not_(self) -> 'NotSpecification[T]':
+    def not_(self) -> "NotSpecification[T]":
         """
         Create a NOT specification.
 
@@ -108,7 +108,7 @@ class Specification(ABC, Generic[T]):
         """
         return NotSpecification(self)
 
-    def __and__(self, other: 'Specification[T]') -> 'AndSpecification[T]':
+    def __and__(self, other: "Specification[T]") -> "AndSpecification[T]":
         """
         Python & operator support.
 
@@ -117,7 +117,7 @@ class Specification(ABC, Generic[T]):
         """
         return self.and_(other)
 
-    def __or__(self, other: 'Specification[T]') -> 'OrSpecification[T]':
+    def __or__(self, other: "Specification[T]") -> "OrSpecification[T]":
         """
         Python | operator support.
 
@@ -126,7 +126,7 @@ class Specification(ABC, Generic[T]):
         """
         return self.or_(other)
 
-    def __invert__(self) -> 'NotSpecification[T]':
+    def __invert__(self) -> "NotSpecification[T]":
         """
         Python ~ operator support.
 
@@ -143,6 +143,7 @@ class CompositeSpecification(Specification[T], ABC):
     Composite specifications combine multiple specifications
     using logical operators (AND, OR, NOT).
     """
+
     pass
 
 
@@ -181,9 +182,8 @@ class AndSpecification(CompositeSpecification[T]):
         Returns:
             True if BOTH specifications are satisfied
         """
-        return (
-            self.left.is_satisfied_by(candidate) and
-            self.right.is_satisfied_by(candidate)
+        return self.left.is_satisfied_by(candidate) and self.right.is_satisfied_by(
+            candidate
         )
 
     def to_sqlalchemy_filter(self):
@@ -194,10 +194,8 @@ class AndSpecification(CompositeSpecification[T]):
             SQLAlchemy AND expression
         """
         from sqlalchemy import and_
-        return and_(
-            self.left.to_sqlalchemy_filter(),
-            self.right.to_sqlalchemy_filter()
-        )
+
+        return and_(self.left.to_sqlalchemy_filter(), self.right.to_sqlalchemy_filter())
 
     def __repr__(self) -> str:
         return f"({self.left} AND {self.right})"
@@ -238,9 +236,8 @@ class OrSpecification(CompositeSpecification[T]):
         Returns:
             True if EITHER specification is satisfied
         """
-        return (
-            self.left.is_satisfied_by(candidate) or
-            self.right.is_satisfied_by(candidate)
+        return self.left.is_satisfied_by(candidate) or self.right.is_satisfied_by(
+            candidate
         )
 
     def to_sqlalchemy_filter(self):
@@ -251,10 +248,8 @@ class OrSpecification(CompositeSpecification[T]):
             SQLAlchemy OR expression
         """
         from sqlalchemy import or_
-        return or_(
-            self.left.to_sqlalchemy_filter(),
-            self.right.to_sqlalchemy_filter()
-        )
+
+        return or_(self.left.to_sqlalchemy_filter(), self.right.to_sqlalchemy_filter())
 
     def __repr__(self) -> str:
         return f"({self.left} OR {self.right})"
@@ -303,6 +298,7 @@ class NotSpecification(CompositeSpecification[T]):
             SQLAlchemy NOT expression
         """
         from sqlalchemy import not_
+
         return not_(self.spec.to_sqlalchemy_filter())
 
     def __repr__(self) -> str:
@@ -324,4 +320,5 @@ class ParameterizedSpecification(Specification[T], ABC):
             def to_sqlalchemy_filter(self):
                 return Product.department_id == self.department_id
     """
+
     pass

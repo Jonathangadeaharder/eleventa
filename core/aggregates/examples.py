@@ -16,7 +16,6 @@ These examples demonstrate:
 - How to handle internal entities
 """
 
-from dataclasses import dataclass
 from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID, uuid4
@@ -33,6 +32,7 @@ from core.value_objects.address import Address
 # ============================================================================
 
 # Domain Events for Order
+
 
 class OrderCreated(DomainEvent):
     """Event raised when order is created."""
@@ -78,6 +78,7 @@ class OrderCancelled(DomainEvent):
 
 # Order Line Item (Entity within Order aggregate)
 
+
 class OrderItem(Entity):
     """
     Order line item entity.
@@ -87,11 +88,7 @@ class OrderItem(Entity):
     """
 
     def __init__(
-        self,
-        product_id: UUID,
-        product_name: str,
-        quantity: int,
-        unit_price: Money
+        self, product_id: UUID, product_name: str, quantity: int, unit_price: Money
     ):
         """
         Create order item.
@@ -128,10 +125,13 @@ class OrderItem(Entity):
         self.quantity = new_quantity
 
     def __repr__(self) -> str:
-        return f"OrderItem(id={self.id}, product={self.product_name}, qty={self.quantity})"
+        return (
+            f"OrderItem(id={self.id}, product={self.product_name}, qty={self.quantity})"
+        )
 
 
 # Order Aggregate Root
+
 
 class Order(AggregateRoot):
     """
@@ -151,15 +151,15 @@ class Order(AggregateRoot):
     """
 
     # Order statuses
-    STATUS_DRAFT = 'draft'
-    STATUS_SUBMITTED = 'submitted'
-    STATUS_CANCELLED = 'cancelled'
+    STATUS_DRAFT = "draft"
+    STATUS_SUBMITTED = "submitted"
+    STATUS_CANCELLED = "cancelled"
 
     # Business rules
-    MINIMUM_ORDER_AMOUNT = Money(Decimal('10'), 'USD')
+    MINIMUM_ORDER_AMOUNT = Money(Decimal("10"), "USD")
     MAX_ITEMS = 100
 
-    def __init__(self, customer_id: UUID, currency: str = 'USD'):
+    def __init__(self, customer_id: UUID, currency: str = "USD"):
         """
         Create new order.
 
@@ -234,11 +234,7 @@ class Order(AggregateRoot):
     # Command methods (enforce business rules)
 
     def add_item(
-        self,
-        product_id: UUID,
-        product_name: str,
-        quantity: int,
-        unit_price: Money
+        self, product_id: UUID, product_name: str, quantity: int, unit_price: Money
     ) -> OrderItem:
         """
         Add item to order.
@@ -262,15 +258,11 @@ class Order(AggregateRoot):
         """
         # Enforce: can only add items to draft orders
         if self.status != self.STATUS_DRAFT:
-            raise DomainError(
-                f"Cannot add items to {self.status} order"
-            )
+            raise DomainError(f"Cannot add items to {self.status} order")
 
         # Enforce: maximum items limit
         if len(self.items) >= self.MAX_ITEMS:
-            raise DomainError(
-                f"Order cannot exceed {self.MAX_ITEMS} items"
-            )
+            raise DomainError(f"Order cannot exceed {self.MAX_ITEMS} items")
 
         # Enforce: currency consistency
         if unit_price.currency != self.currency:
@@ -297,9 +289,7 @@ class Order(AggregateRoot):
         self.items.append(item)
 
         # Raise domain event
-        self.add_domain_event(
-            OrderItemAdded(self.id, product_id, quantity, unit_price)
-        )
+        self.add_domain_event(OrderItemAdded(self.id, product_id, quantity, unit_price))
 
         return item
 
@@ -315,9 +305,7 @@ class Order(AggregateRoot):
         """
         # Enforce: can only remove from draft orders
         if self.status != self.STATUS_DRAFT:
-            raise DomainError(
-                f"Cannot remove items from {self.status} order"
-            )
+            raise DomainError(f"Cannot remove items from {self.status} order")
 
         # Find and remove item
         for i, item in enumerate(self.items):
@@ -341,9 +329,7 @@ class Order(AggregateRoot):
         """
         # Enforce: can only modify draft orders
         if self.status != self.STATUS_DRAFT:
-            raise DomainError(
-                f"Cannot modify {self.status} order"
-            )
+            raise DomainError(f"Cannot modify {self.status} order")
 
         # Find item
         item = self.get_item(item_id)
@@ -367,15 +353,11 @@ class Order(AggregateRoot):
         """
         # Enforce: must be draft
         if self.status != self.STATUS_DRAFT:
-            raise DomainError(
-                f"Cannot submit {self.status} order"
-            )
+            raise DomainError(f"Cannot submit {self.status} order")
 
         # Enforce: must have items
         if not self.items:
-            raise DomainError(
-                "Cannot submit order with no items"
-            )
+            raise DomainError("Cannot submit order with no items")
 
         # Enforce: minimum order amount
         if self.total < self.MINIMUM_ORDER_AMOUNT:
@@ -436,6 +418,7 @@ class Order(AggregateRoot):
 # ============================================================================
 # SHOPPING CART AGGREGATE EXAMPLE
 # ============================================================================
+
 
 class CartItemAdded(DomainEvent):
     """Event raised when item added to cart."""
@@ -534,6 +517,7 @@ class ShoppingCart(AggregateRoot):
 # CUSTOMER AGGREGATE EXAMPLE (Demonstrates value object integration)
 # ============================================================================
 
+
 class CustomerRegistered(DomainEvent):
     """Event raised when customer registers."""
 
@@ -584,7 +568,9 @@ class Customer(AggregateRoot):
 
         self.add_domain_event(CustomerRegistered(self.id, str(email)))
 
-    def add_address(self, address: Address, make_default: bool = False) -> CustomerAddress:
+    def add_address(
+        self, address: Address, make_default: bool = False
+    ) -> CustomerAddress:
         """
         Add address to customer.
 

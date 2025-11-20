@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, TypeVar, Generic, List
 from core.aggregates.base import AggregateRoot, DomainEvent
 
-T = TypeVar('T', bound=AggregateRoot)
+T = TypeVar("T", bound=AggregateRoot)
 
 
 class IAggregateRepository(ABC, Generic[T]):
@@ -375,6 +375,7 @@ class AggregateRepositoryBase(IAggregateRepository[T], Generic[T]):
 
 
 # In-memory repository for testing
+
 
 class InMemoryAggregateRepository(IAggregateRepository[T], Generic[T]):
     """

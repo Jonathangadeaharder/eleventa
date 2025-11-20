@@ -26,7 +26,6 @@ from core.value_objects.base import (
     ValueObject,
     ValidationError,
     validate_not_empty,
-    validate_length
 )
 
 
@@ -60,9 +59,7 @@ class PhoneNumber(ValueObject):
 
     # Phone number validation regex (allows various formats)
     # Accepts: +1234567890, 1234567890, +1-234-567-890, etc.
-    PHONE_REGEX = re.compile(
-        r'^\+?[\d\s\-\(\)\.]+$'
-    )
+    PHONE_REGEX = re.compile(r"^\+?[\d\s\-\(\)\.]+$")
 
     def __post_init__(self):
         """Validate phone number on creation."""
@@ -75,30 +72,28 @@ class PhoneNumber(ValueObject):
         # Validate format
         if not self.PHONE_REGEX.match(test_value):
             raise ValidationError(
-                f"Invalid phone number format: '{test_value}'",
-                field="phone_number"
+                f"Invalid phone number format: '{test_value}'", field="phone_number"
             )
 
         # Normalize: keep only digits and +
-        normalized = re.sub(r'[^\d+]', '', test_value)
+        normalized = re.sub(r"[^\d+]", "", test_value)
 
         # Validate length (min 7, max 15 digits per E.164)
-        digit_count = len(normalized.replace('+', ''))
+        digit_count = len(normalized.replace("+", ""))
         if digit_count < 7 or digit_count > 15:
             raise ValidationError(
                 f"Phone number must have 7-15 digits (got {digit_count})",
-                field="phone_number"
+                field="phone_number",
             )
 
         # Ensure + only at start
-        if '+' in normalized and not normalized.startswith('+'):
+        if "+" in normalized and not normalized.startswith("+"):
             raise ValidationError(
-                "'+' can only appear at the beginning",
-                field="phone_number"
+                "'+' can only appear at the beginning", field="phone_number"
             )
 
         # Store normalized value
-        object.__setattr__(self, 'value', normalized)
+        object.__setattr__(self, "value", normalized)
 
     @property
     def digits(self) -> str:
@@ -112,7 +107,7 @@ class PhoneNumber(ValueObject):
             >>> PhoneNumber('+15551234567').digits
             '15551234567'
         """
-        return self.value.replace('+', '')
+        return self.value.replace("+", "")
 
     @property
     def country_code(self) -> Optional[str]:
@@ -128,7 +123,7 @@ class PhoneNumber(ValueObject):
             >>> PhoneNumber('5551234567').country_code is None
             True
         """
-        if not self.value.startswith('+'):
+        if not self.value.startswith("+"):
             return None
 
         # Common country code lengths: 1-3 digits
@@ -142,7 +137,7 @@ class PhoneNumber(ValueObject):
         else:
             return None
 
-    def format(self, style: str = 'international') -> str:
+    def format(self, style: str = "international") -> str:
         """
         Format phone number for display.
 
@@ -163,27 +158,27 @@ class PhoneNumber(ValueObject):
             >>> phone.format('compact')
             '+15551234567'
         """
-        if style == 'compact':
+        if style == "compact":
             return self.value
 
         digits = self.digits
 
         # Handle different lengths
         if len(digits) == 10:  # US number without country code
-            if style == 'international':
+            if style == "international":
                 return f"+1-{digits[0:3]}-{digits[3:6]}-{digits[6:]}"
             else:  # national
                 return f"({digits[0:3]}) {digits[3:6]}-{digits[6:]}"
 
         elif len(digits) == 11:  # Number with country code
-            if style == 'international':
+            if style == "international":
                 return f"+{digits[0]}-{digits[1:4]}-{digits[4:7]}-{digits[7:]}"
             else:  # national (remove country code)
                 return f"({digits[1:4]}) {digits[4:7]}-{digits[7:]}"
 
         else:
             # Generic formatting
-            if self.value.startswith('+'):
+            if self.value.startswith("+"):
                 return self.value
             else:
                 return f"+{self.value}"
@@ -234,12 +229,8 @@ class PhoneNumber(ValueObject):
 
     @classmethod
     def from_parts(
-        cls,
-        area_code: str,
-        exchange: str,
-        number: str,
-        country_code: str = '1'
-    ) -> 'PhoneNumber':
+        cls, area_code: str, exchange: str, number: str, country_code: str = "1"
+    ) -> "PhoneNumber":
         """
         Create phone number from parts.
 

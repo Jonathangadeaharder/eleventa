@@ -6,7 +6,6 @@ Concrete specifications for sale queries.
 
 from decimal import Decimal
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from core.specifications.base import Specification, ParameterizedSpecification
@@ -44,9 +43,9 @@ class SaleByDateRangeSpecification(ParameterizedSpecification[Sale]):
         """Convert to SQLAlchemy filter."""
         from infrastructure.persistence.sqlite.models_mapping import Sale as SaleOrm
         from sqlalchemy import and_
+
         return and_(
-            SaleOrm.created_at >= self.start_date,
-            SaleOrm.created_at <= self.end_date
+            SaleOrm.created_at >= self.start_date, SaleOrm.created_at <= self.end_date
         )
 
     def __repr__(self) -> str:
@@ -78,6 +77,7 @@ class SaleByCustomerSpecification(ParameterizedSpecification[Sale]):
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
         from infrastructure.persistence.sqlite.models_mapping import Sale as SaleOrm
+
         return SaleOrm.customer_id == self.customer_id
 
     def __repr__(self) -> str:
@@ -109,6 +109,7 @@ class SaleByPaymentTypeSpecification(ParameterizedSpecification[Sale]):
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
         from infrastructure.persistence.sqlite.models_mapping import Sale as SaleOrm
+
         return SaleOrm.payment_type == self.payment_type
 
     def __repr__(self) -> str:
@@ -140,6 +141,7 @@ class SaleAboveAmountSpecification(ParameterizedSpecification[Sale]):
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
         from infrastructure.persistence.sqlite.models_mapping import Sale as SaleOrm
+
         return SaleOrm.total > self.amount
 
     def __repr__(self) -> str:
@@ -171,6 +173,7 @@ class SaleBelowAmountSpecification(ParameterizedSpecification[Sale]):
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
         from infrastructure.persistence.sqlite.models_mapping import Sale as SaleOrm
+
         return SaleOrm.total < self.amount
 
     def __repr__(self) -> str:
@@ -190,12 +193,13 @@ class SaleCreditSaleSpecification(Specification[Sale]):
 
     def is_satisfied_by(self, sale: Sale) -> bool:
         """Check if sale is a credit sale."""
-        return sale.payment_type == 'credit'
+        return sale.payment_type == "credit"
 
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
         from infrastructure.persistence.sqlite.models_mapping import Sale as SaleOrm
-        return SaleOrm.payment_type == 'credit'
+
+        return SaleOrm.payment_type == "credit"
 
     def __repr__(self) -> str:
         return "SaleCreditSale"
@@ -226,6 +230,7 @@ class SaleByUserSpecification(ParameterizedSpecification[Sale]):
     def to_sqlalchemy_filter(self):
         """Convert to SQLAlchemy filter."""
         from infrastructure.persistence.sqlite.models_mapping import Sale as SaleOrm
+
         return SaleOrm.user_id == self.user_id
 
     def __repr__(self) -> str:
@@ -234,7 +239,10 @@ class SaleByUserSpecification(ParameterizedSpecification[Sale]):
 
 # Convenience factory functions
 
-def sales_by_date_range(start_date: datetime, end_date: datetime) -> SaleByDateRangeSpecification:
+
+def sales_by_date_range(
+    start_date: datetime, end_date: datetime
+) -> SaleByDateRangeSpecification:
     """Create specification for sales in date range."""
     return SaleByDateRangeSpecification(start_date, end_date)
 
@@ -266,9 +274,9 @@ def credit_sales() -> SaleCreditSaleSpecification:
 
 def cash_sales() -> SaleByPaymentTypeSpecification:
     """Create specification for cash sales."""
-    return SaleByPaymentTypeSpecification('cash')
+    return SaleByPaymentTypeSpecification("cash")
 
 
 def card_sales() -> SaleByPaymentTypeSpecification:
     """Create specification for card sales."""
-    return SaleByPaymentTypeSpecification('card')
+    return SaleByPaymentTypeSpecification("card")

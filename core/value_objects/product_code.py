@@ -27,7 +27,7 @@ from core.value_objects.base import (
     ValueObject,
     ValidationError,
     validate_not_empty,
-    validate_length
+    validate_length,
 )
 
 
@@ -63,7 +63,7 @@ class ProductCode(ValueObject):
     value: str
 
     # Product code pattern: alphanumeric, hyphens, underscores
-    CODE_PATTERN = re.compile(r'^[A-Z0-9\-_]+$')
+    CODE_PATTERN = re.compile(r"^[A-Z0-9\-_]+$")
 
     def __post_init__(self):
         """Validate product code on creation."""
@@ -80,25 +80,24 @@ class ProductCode(ValueObject):
         if not self.CODE_PATTERN.match(normalized):
             raise ValidationError(
                 f"Product code can only contain letters, numbers, hyphens, and underscores (got '{self.value}')",
-                field="product_code"
+                field="product_code",
             )
 
         # Validate doesn't start/end with separator
-        if normalized.startswith(('-', '_')) or normalized.endswith(('-', '_')):
+        if normalized.startswith(("-", "_")) or normalized.endswith(("-", "_")):
             raise ValidationError(
-                "Product code cannot start or end with separator",
-                field="product_code"
+                "Product code cannot start or end with separator", field="product_code"
             )
 
         # Validate no consecutive separators
-        if '--' in normalized or '__' in normalized:
+        if "--" in normalized or "__" in normalized:
             raise ValidationError(
                 "Product code cannot contain consecutive separators",
-                field="product_code"
+                field="product_code",
             )
 
         # Store normalized value
-        object.__setattr__(self, 'value', normalized)
+        object.__setattr__(self, "value", normalized)
 
     @property
     def prefix(self) -> str:
@@ -114,7 +113,7 @@ class ProductCode(ValueObject):
             >>> ProductCode('SIMPLE').prefix
             'SIMPLE'
         """
-        for sep in ['-', '_']:
+        for sep in ["-", "_"]:
             if sep in self.value:
                 return self.value.split(sep)[0]
         return self.value
@@ -133,7 +132,7 @@ class ProductCode(ValueObject):
             >>> ProductCode('SIMPLE').suffix
             'SIMPLE'
         """
-        for sep in ['-', '_']:
+        for sep in ["-", "_"]:
             if sep in self.value:
                 return self.value.split(sep)[-1]
         return self.value
@@ -219,7 +218,7 @@ class ProductCode(ValueObject):
         return f"ProductCode('{self.value}')"
 
     @classmethod
-    def generate_sku(cls, prefix: str, number: int, suffix: str = '') -> 'ProductCode':
+    def generate_sku(cls, prefix: str, number: int, suffix: str = "") -> "ProductCode":
         """
         Generate a product code from components.
 
@@ -244,7 +243,7 @@ class ProductCode(ValueObject):
         if suffix:
             parts.append(suffix)
 
-        sku = '-'.join(parts)
+        sku = "-".join(parts)
         return cls(sku)
 
     @classmethod

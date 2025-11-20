@@ -38,6 +38,7 @@ from datetime import datetime
 
 # Product Read Models
 
+
 @dataclass(frozen=True)
 class ProductReadModel:
     """
@@ -49,6 +50,7 @@ class ProductReadModel:
     - Stock status (computed)
     - Unit name (denormalized)
     """
+
     id: UUID
     code: str
     description: str
@@ -82,6 +84,7 @@ class ProductListItemReadModel:
 
     Optimized for displaying lists with minimal data.
     """
+
     id: UUID
     code: str
     description: str
@@ -99,6 +102,7 @@ class ProductPriceHistoryReadModel:
 
     Denormalized view from price change events.
     """
+
     product_id: UUID
     product_code: str
     product_description: str
@@ -112,9 +116,11 @@ class ProductPriceHistoryReadModel:
 
 # Sale Read Models
 
+
 @dataclass(frozen=True)
 class SaleItemReadModel:
     """Read model for a sale item."""
+
     product_id: UUID
     product_code: str
     product_description: str
@@ -130,6 +136,7 @@ class SaleReadModel:
 
     Denormalized with customer and user information.
     """
+
     id: UUID
     sale_number: Optional[str]  # Human-readable sale number
     total: Decimal
@@ -161,6 +168,7 @@ class SaleSummaryReadModel:
 
     Excludes items for performance.
     """
+
     id: UUID
     sale_number: Optional[str]
     total: Decimal
@@ -178,6 +186,7 @@ class TopProductReadModel:
 
     Aggregated from sales data.
     """
+
     product_id: UUID
     product_code: str
     product_description: str
@@ -189,6 +198,7 @@ class TopProductReadModel:
 
 # Customer Read Models
 
+
 @dataclass(frozen=True)
 class CustomerReadModel:
     """
@@ -196,6 +206,7 @@ class CustomerReadModel:
 
     Includes purchase statistics.
     """
+
     id: UUID
     name: str
     email: Optional[str]
@@ -220,6 +231,7 @@ class CustomerReadModel:
 @dataclass(frozen=True)
 class CustomerListItemReadModel:
     """Lightweight customer read model for lists."""
+
     id: UUID
     name: str
     phone: Optional[str]
@@ -235,6 +247,7 @@ class CustomerCreditReadModel:
 
     Optimized for accounts receivable.
     """
+
     customer_id: UUID
     customer_name: str
     customer_phone: Optional[str]
@@ -247,6 +260,7 @@ class CustomerCreditReadModel:
 
 # Dashboard/Analytics Read Models
 
+
 @dataclass(frozen=True)
 class DashboardSummaryReadModel:
     """
@@ -254,6 +268,7 @@ class DashboardSummaryReadModel:
 
     Heavily cached, updated periodically.
     """
+
     # Today's metrics
     today_sales_total: Decimal
     today_sales_count: int
@@ -286,6 +301,7 @@ class InventoryValueReadModel:
 
     Can be broken down by department.
     """
+
     total_products: int
     total_quantity: Decimal
     total_value: Decimal
@@ -298,6 +314,7 @@ class SalesSummaryReadModel:
     """
     Aggregated sales summary for a time period.
     """
+
     period: str  # "2024-01-15" or "2024-W03" or "2024-01"
     total_sales: Decimal
     sales_count: int
@@ -312,6 +329,7 @@ class InventoryReportReadModel:
     """
     Comprehensive inventory report.
     """
+
     total_products: int
     total_inventory_value: Decimal
     low_stock_items: List[ProductListItemReadModel]
@@ -325,6 +343,7 @@ class SalesReportReadModel:
     """
     Comprehensive sales report.
     """
+
     start_date: datetime
     end_date: datetime
     total_sales: Decimal
@@ -340,6 +359,7 @@ class CustomerPurchaseHistoryReadModel:
     """
     Customer purchase history.
     """
+
     customer_id: UUID
     customer_name: str
     total_spent: Decimal

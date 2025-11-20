@@ -14,7 +14,6 @@ Examples:
 
 from abc import ABC
 from typing import Any, Tuple
-from dataclasses import dataclass
 
 
 class ValueObject(ABC):
@@ -158,9 +157,7 @@ def validate_non_negative(value: Any, field_name: str) -> None:
         )
 
 
-def validate_range(
-    value: Any, min_value: Any, max_value: Any, field_name: str
-) -> None:
+def validate_range(value: Any, min_value: Any, max_value: Any, field_name: str) -> None:
     """
     Validate that a value is within a range.
 
@@ -180,7 +177,9 @@ def validate_range(
         )
 
 
-def validate_length(value: str, min_length: int, max_length: int, field_name: str) -> None:
+def validate_length(
+    value: str, min_length: int, max_length: int, field_name: str
+) -> None:
     """
     Validate string length.
 
@@ -202,7 +201,9 @@ def validate_length(value: str, min_length: int, max_length: int, field_name: st
         )
 
 
-def validate_regex(value: str, pattern: str, field_name: str, message: str = None) -> None:
+def validate_regex(
+    value: str, pattern: str, field_name: str, message: str = None
+) -> None:
     """
     Validate string against regex pattern.
 

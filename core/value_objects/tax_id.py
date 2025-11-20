@@ -23,11 +23,7 @@ Usage:
 
 from dataclasses import dataclass
 import re
-from core.value_objects.base import (
-    ValueObject,
-    ValidationError,
-    validate_not_empty
-)
+from core.value_objects.base import ValueObject, ValidationError, validate_not_empty
 
 
 @dataclass(frozen=True)
@@ -61,7 +57,7 @@ class TaxId(ValueObject):
     value: str
 
     # CUIT pattern: accepts XX-XXXXXXXX-X or XXXXXXXXXXX
-    CUIT_PATTERN = re.compile(r'^\d{2}-?\d{8}-?\d{1}$')
+    CUIT_PATTERN = re.compile(r"^\d{2}-?\d{8}-?\d{1}$")
 
     def __post_init__(self):
         """Validate tax ID on creation."""
@@ -69,24 +65,22 @@ class TaxId(ValueObject):
         validate_not_empty(self.value, "Tax ID")
 
         # Remove whitespace and dashes for validation
-        test_value = self.value.strip().replace('-', '')
+        test_value = self.value.strip().replace("-", "")
 
         # Check format
-        if not re.match(r'^\d{11}$', test_value):
+        if not re.match(r"^\d{11}$", test_value):
             raise ValidationError(
-                f"Tax ID must be 11 digits (got '{self.value}')",
-                field="tax_id"
+                f"Tax ID must be 11 digits (got '{self.value}')", field="tax_id"
             )
 
         # Validate check digit
         if not self._validate_check_digit(test_value):
             raise ValidationError(
-                f"Invalid tax ID check digit: '{self.value}'",
-                field="tax_id"
+                f"Invalid tax ID check digit: '{self.value}'", field="tax_id"
             )
 
         # Store normalized (digits only)
-        object.__setattr__(self, 'value', test_value)
+        object.__setattr__(self, "value", test_value)
 
     @staticmethod
     def _validate_check_digit(cuit: str) -> bool:
@@ -106,10 +100,7 @@ class TaxId(ValueObject):
         multipliers = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
 
         # Calculate sum
-        total = sum(
-            int(cuit[i]) * multipliers[i]
-            for i in range(10)
-        )
+        total = sum(int(cuit[i]) * multipliers[i] for i in range(10))
 
         # Calculate check digit
         remainder = total % 11
@@ -188,7 +179,7 @@ class TaxId(ValueObject):
         """
         return self.value[10]
 
-    def format(self, separator: str = '-') -> str:
+    def format(self, separator: str = "-") -> str:
         """
         Format tax ID with separators.
 
@@ -221,7 +212,7 @@ class TaxId(ValueObject):
             >>> TaxId('23-12345678-9').is_person()
             False
         """
-        return self.type_code in ('20', '23', '24', '27')
+        return self.type_code in ("20", "23", "24", "27")
 
     def is_company(self) -> bool:
         """
@@ -236,7 +227,7 @@ class TaxId(ValueObject):
             >>> TaxId('20-12345678-9').is_company()
             False
         """
-        return self.type_code in ('30', '33', '34')
+        return self.type_code in ("30", "33", "34")
 
     def __str__(self) -> str:
         """
@@ -265,7 +256,7 @@ class TaxId(ValueObject):
         return f"TaxId('{self.format()}')"
 
     @classmethod
-    def from_dni(cls, dni: str, gender: str = 'M') -> 'TaxId':
+    def from_dni(cls, dni: str, gender: str = "M") -> "TaxId":
         """
         Create CUIT from DNI (Documento Nacional de Identidad).
 
@@ -283,24 +274,21 @@ class TaxId(ValueObject):
         """
         # Validate DNI
         dni = dni.strip()
-        if not re.match(r'^\d{7,8}$', dni):
+        if not re.match(r"^\d{7,8}$", dni):
             raise ValidationError(f"Invalid DNI format: '{dni}'")
 
         # Pad to 8 digits if needed
         dni = dni.zfill(8)
 
         # Determine type code based on gender
-        type_code = '20' if gender.upper() == 'M' else '27'
+        type_code = "20" if gender.upper() == "M" else "27"
 
         # Calculate check digit
         temp_cuit = type_code + dni
 
         # Use multipliers
         multipliers = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
-        total = sum(
-            int(temp_cuit[i]) * multipliers[i]
-            for i in range(10)
-        )
+        total = sum(int(temp_cuit[i]) * multipliers[i] for i in range(10))
 
         remainder = total % 11
         check_digit = 11 - remainder

@@ -57,12 +57,12 @@ from core.value_objects.product_code import ProductCode
 from core.value_objects.percentage import Percentage
 
 __all__ = [
-    'ValueObject',
-    'Money',
-    'Address',
-    'Email',
-    'PhoneNumber',
-    'TaxId',
-    'ProductCode',
-    'Percentage',
+    "ValueObject",
+    "Money",
+    "Address",
+    "Email",
+    "PhoneNumber",
+    "TaxId",
+    "ProductCode",
+    "Percentage",
 ]

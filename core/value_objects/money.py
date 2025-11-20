@@ -59,26 +59,28 @@ class Money(ValueObject):
         # Ensure amount is Decimal
         if not isinstance(self.amount, Decimal):
             # Convert to Decimal if possible
-            object.__setattr__(self, 'amount', Decimal(str(self.amount)))
+            object.__setattr__(self, "amount", Decimal(str(self.amount)))
 
         # Validate amount
         validate_non_negative(self.amount, "Amount")
 
         # Validate currency
         if not self.currency or not isinstance(self.currency, str):
-            raise ValidationError("Currency must be a non-empty string", field="currency")
+            raise ValidationError(
+                "Currency must be a non-empty string", field="currency"
+            )
 
         # Normalize currency to uppercase
-        object.__setattr__(self, 'currency', self.currency.upper())
+        object.__setattr__(self, "currency", self.currency.upper())
 
         # Validate currency code format (3 letters)
         if len(self.currency) != 3 or not self.currency.isalpha():
             raise ValidationError(
                 f"Currency must be a 3-letter ISO code (got '{self.currency}')",
-                field="currency"
+                field="currency",
             )
 
-    def add(self, other: 'Money') -> 'Money':
+    def add(self, other: "Money") -> "Money":
         """
         Add two money amounts.
 
@@ -101,7 +103,7 @@ class Money(ValueObject):
         self._assert_same_currency(other)
         return Money(self.amount + other.amount, self.currency)
 
-    def subtract(self, other: 'Money') -> 'Money':
+    def subtract(self, other: "Money") -> "Money":
         """
         Subtract money amount.
 
@@ -129,7 +131,7 @@ class Money(ValueObject):
             )
         return Money(result, self.currency)
 
-    def multiply(self, multiplier: Union[Decimal, int, float]) -> 'Money':
+    def multiply(self, multiplier: Union[Decimal, int, float]) -> "Money":
         """
         Multiply money by a scalar.
 
@@ -154,7 +156,7 @@ class Money(ValueObject):
 
         return Money(self.amount * multiplier, self.currency)
 
-    def divide(self, divisor: Union[Decimal, int, float]) -> 'Money':
+    def divide(self, divisor: Union[Decimal, int, float]) -> "Money":
         """
         Divide money by a scalar.
 
@@ -181,7 +183,7 @@ class Money(ValueObject):
 
         return Money(self.amount / divisor, self.currency)
 
-    def round(self, decimal_places: int = 2) -> 'Money':
+    def round(self, decimal_places: int = 2) -> "Money":
         """
         Round money to specified decimal places.
 
@@ -200,12 +202,11 @@ class Money(ValueObject):
         from decimal import ROUND_HALF_UP
 
         rounded_amount = self.amount.quantize(
-            Decimal(10) ** -decimal_places,
-            rounding=ROUND_HALF_UP
+            Decimal(10) ** -decimal_places, rounding=ROUND_HALF_UP
         )
         return Money(rounded_amount, self.currency)
 
-    def allocate(self, ratios: list[Union[int, Decimal]]) -> list['Money']:
+    def allocate(self, ratios: list[Union[int, Decimal]]) -> list["Money"]:
         """
         Allocate money according to ratios.
 
@@ -240,9 +241,7 @@ class Money(ValueObject):
         results = []
 
         for ratio in ratios[:-1]:
-            share = (self.amount * ratio / total_ratio).quantize(
-                Decimal('0.01')
-            )
+            share = (self.amount * ratio / total_ratio).quantize(Decimal("0.01"))
             results.append(Money(share, self.currency))
             remainder -= share
 
@@ -251,7 +250,7 @@ class Money(ValueObject):
 
         return results
 
-    def convert_to(self, target_currency: str, exchange_rate: Decimal) -> 'Money':
+    def convert_to(self, target_currency: str, exchange_rate: Decimal) -> "Money":
         """
         Convert money to another currency.
 
@@ -309,22 +308,22 @@ class Money(ValueObject):
 
     # Comparison operators
 
-    def __lt__(self, other: 'Money') -> bool:
+    def __lt__(self, other: "Money") -> bool:
         """Less than comparison."""
         self._assert_same_currency(other)
         return self.amount < other.amount
 
-    def __le__(self, other: 'Money') -> bool:
+    def __le__(self, other: "Money") -> bool:
         """Less than or equal comparison."""
         self._assert_same_currency(other)
         return self.amount <= other.amount
 
-    def __gt__(self, other: 'Money') -> bool:
+    def __gt__(self, other: "Money") -> bool:
         """Greater than comparison."""
         self._assert_same_currency(other)
         return self.amount > other.amount
 
-    def __ge__(self, other: 'Money') -> bool:
+    def __ge__(self, other: "Money") -> bool:
         """Greater than or equal comparison."""
         self._assert_same_currency(other)
         return self.amount >= other.amount
@@ -353,7 +352,7 @@ class Money(ValueObject):
 
     # Helper methods
 
-    def _assert_same_currency(self, other: 'Money') -> None:
+    def _assert_same_currency(self, other: "Money") -> None:
         """
         Assert that two Money instances have the same currency.
 
@@ -369,7 +368,7 @@ class Money(ValueObject):
             )
 
     @classmethod
-    def zero(cls, currency: str) -> 'Money':
+    def zero(cls, currency: str) -> "Money":
         """
         Create a zero money amount.
 
@@ -384,10 +383,10 @@ class Money(ValueObject):
             >>> zero_usd.amount
             Decimal('0')
         """
-        return cls(Decimal('0'), currency)
+        return cls(Decimal("0"), currency)
 
     @classmethod
-    def from_float(cls, amount: float, currency: str) -> 'Money':
+    def from_float(cls, amount: float, currency: str) -> "Money":
         """
         Create Money from float (not recommended for precision).
 
@@ -410,7 +409,7 @@ class Money(ValueObject):
         return cls(Decimal(str(amount)), currency)
 
     @classmethod
-    def from_string(cls, amount: str, currency: str) -> 'Money':
+    def from_string(cls, amount: str, currency: str) -> "Money":
         """
         Create Money from string amount.
 
