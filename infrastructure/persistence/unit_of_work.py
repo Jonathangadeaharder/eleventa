@@ -3,13 +3,17 @@
 This module provides a centralized way to manage database sessions and repositories
 within a single transactional context, ensuring data consistency across multiple
 repository operations.
+
+Enhanced with Domain Events support - automatically collects and publishes
+events from aggregates after successful commits.
 """
 
-from typing import Optional
+from typing import Optional, List
 from contextlib import contextmanager
 import logging
 
 from .utils import session_scope_provider
+from core.domain_events import DomainEvent, EventPublisher
 from .sqlite.repositories import (
     SqliteDepartmentRepository,
     SqliteProductRepository,
@@ -44,6 +48,7 @@ class UnitOfWork:
         """Initialize the Unit of Work."""
         self.session_factory = session_scope_provider.get_session_factory()
         self.session = None
+        self._collected_events: List[DomainEvent] = []
 
         # Repository instances (initialized in __enter__)
         self.departments: Optional[SqliteDepartmentRepository] = None
@@ -107,10 +112,72 @@ class UnitOfWork:
 
         return self
 
+    def collect_events(self, aggregate) -> None:
+        """
+        Collect domain events from an aggregate.
+
+        Services can call this method to register events from domain
+        aggregates. Events are stored and will be published after
+        a successful commit.
+
+        Args:
+            aggregate: Domain aggregate with events to collect
+        """
+        if hasattr(aggregate, 'get_domain_events'):
+            events = aggregate.get_domain_events()
+            self._collected_events.extend(events)
+            logging.debug(f"Collected {len(events)} events from aggregate")
+
+    def add_event(self, event: DomainEvent) -> None:
+        """
+        Manually add a domain event to be published after commit.
+
+        Useful when services need to publish events that aren't tied
+        to a specific aggregate.
+
+        Args:
+            event: Domain event to publish
+        """
+        self._collected_events.append(event)
+        logging.debug(f"Added event: {type(event).__name__}")
+
+    def _publish_events(self) -> None:
+        """
+        Publish all collected domain events.
+
+        This is called automatically after a successful commit.
+        Events are published through the EventPublisher, which
+        will invoke all registered handlers.
+
+        Following the "events after facts" pattern from Cosmic Python,
+        events are only published after the database commit succeeds.
+        This ensures that event handlers see committed data.
+        """
+        if not self._collected_events:
+            return
+
+        logging.info(f"Publishing {len(self._collected_events)} domain events")
+
+        for event in self._collected_events:
+            try:
+                EventPublisher.publish(event)
+            except Exception as e:
+                # Log but don't fail - events are notifications, not critical path
+                logging.error(
+                    f"Error publishing event {type(event).__name__}: {e}",
+                    exc_info=True
+                )
+
+        # Clear after publishing
+        self._collected_events.clear()
+
     def __exit__(self, exc_type, exc_val, traceback):
         """Exit the Unit of Work context.
 
-        Handles transaction commit/rollback and session cleanup.
+        Handles transaction commit/rollback, session cleanup, and domain event publishing.
+
+        After a successful commit, all domain events collected from aggregates
+        are published through the EventPublisher.
 
         Args:
             exc_type: Exception type if an exception occurred.
@@ -125,10 +192,16 @@ class UnitOfWork:
                 # An exception occurred, rollback the transaction
                 logging.warning(f"Exception in UnitOfWork, rolling back: {exc_val}")
                 self.session.rollback()
+                # Clear events on rollback - don't publish failed operations
+                self._collected_events.clear()
             else:
                 # No exception, commit the transaction
                 # Always commit to ensure data persists across UnitOfWork instances
                 self.session.commit()
+
+                # After successful commit, publish all collected domain events
+                # This implements the "events after facts" pattern from Cosmic Python
+                self._publish_events()
         except Exception as e:
             # Error during commit/rollback
             logging.error(f"Error during transaction finalization: {e}")
@@ -136,6 +209,8 @@ class UnitOfWork:
                 self.session.rollback()
             except Exception as rollback_error:
                 logging.error(f"Additional error during rollback: {rollback_error}")
+            # Clear events on error
+            self._collected_events.clear()
             raise
         finally:
             # Don't close the session if it came from session_scope_provider (test environment)
@@ -159,6 +234,8 @@ class UnitOfWork:
             self.users = None
             self.cash_drawer = None
             self.units = None
+            # Clear collected events
+            self._collected_events.clear()
 
     def commit(self):
         """Manually commit the current transaction.
@@ -166,6 +243,10 @@ class UnitOfWork:
         This method allows for explicit transaction commits within
         the Unit of Work context. Use with caution as it may affect
         the atomicity of operations.
+
+        Note: Events are NOT published here - they are only published
+        on successful __exit__. This is intentional to ensure all
+        operations complete before events are emitted.
 
         Raises:
             ValueError: If no active session exists.
@@ -179,6 +260,8 @@ class UnitOfWork:
         except Exception as e:
             logging.error(f"Error during manual commit: {e}")
             self.session.rollback()
+            # Clear events on commit failure
+            self._collected_events.clear()
             raise ValueError(f"Database commit error: {e}") from e
 
     def rollback(self):
@@ -186,6 +269,9 @@ class UnitOfWork:
 
         This method allows for explicit transaction rollbacks within
         the Unit of Work context.
+
+        Collected events are cleared on rollback - failed operations
+        don't generate events.
 
         Raises:
             ValueError: If no active session exists.
@@ -195,6 +281,8 @@ class UnitOfWork:
 
         try:
             self.session.rollback()
+            # Clear events on rollback - don't publish failed operations
+            self._collected_events.clear()
             logging.debug("Transaction rolled back manually")
         except Exception as e:
             logging.error(f"Error during manual rollback: {e}")
