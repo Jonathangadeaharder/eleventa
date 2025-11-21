@@ -8,5 +8,5 @@ pydantic[email]
 pydantic-settings
 reportlab
 alembic
-numpy<2
+numpy<3
 pandas
