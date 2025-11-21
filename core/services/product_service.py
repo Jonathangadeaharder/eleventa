@@ -2,6 +2,7 @@
 
 from typing import List, Optional, Any
 from decimal import Decimal
+from uuid import UUID
 
 from core.models.product import Product, Department
 from infrastructure.persistence.unit_of_work import UnitOfWork, unit_of_work
@@ -11,6 +12,12 @@ from core.utils.validation import (
     validate_positive_number,
     validate_unique_field,
     validate_exists,
+)
+from core.events.product_events import (
+    ProductCreated,
+    ProductUpdated,
+    ProductPriceChanged,
+    ProductDeleted,
 )
 
 
@@ -63,17 +70,52 @@ class ProductService(ServiceBase):
             # For new products, check if code exists
             validate_unique_field(existing_by_code is not None, "Code", product.code)
 
-    def add_product(self, product_data: Product) -> Product:
-        """Adds a new product after validation."""
+    def add_product(self, product_data: Product, user_id: Optional[UUID] = None) -> Product:
+        """
+        Adds a new product after validation.
+
+        Args:
+            product_data: The product to add
+            user_id: The ID of the user performing the action (for event tracking)
+
+        Returns:
+            The created product
+
+        Raises:
+            ValueError: If validation fails
+        """
         with unit_of_work() as uow:
             self._validate_product(uow, product_data, is_update=False)
 
             self.logger.info(f"Adding product with code: {product_data.code}")
             added_product = uow.products.add(product_data)
+
+            # Publish domain event
+            if added_product and added_product.id:
+                event = ProductCreated(
+                    product_id=added_product.id,
+                    code=added_product.code,
+                    description=added_product.description,
+                    sell_price=added_product.sell_price,
+                    department_id=added_product.department_id,
+                    user_id=user_id or UUID(int=0)  # Fallback if no user provided
+                )
+                uow.add_event(event)
+                self.logger.debug(f"Published ProductCreated event for {added_product.code}")
+
             return added_product
 
-    def update_product(self, product_update_data: Product) -> None:
-        """Updates an existing product after validation."""
+    def update_product(self, product_update_data: Product, user_id: Optional[UUID] = None) -> None:
+        """
+        Updates an existing product after validation.
+
+        Args:
+            product_update_data: The updated product data
+            user_id: The ID of the user performing the action (for event tracking)
+
+        Raises:
+            ValueError: If validation fails or product not found
+        """
         with unit_of_work() as uow:
             if product_update_data.id is None:
                 raise ValueError("Product ID must be provided for update.")
@@ -81,6 +123,12 @@ class ProductService(ServiceBase):
             existing_product = uow.products.get_by_id(product_update_data.id)
             if not existing_product:
                 raise ValueError(f"Product with ID {product_update_data.id} not found")
+
+            # Detect price change before update
+            price_changed = (
+                existing_product.sell_price != product_update_data.sell_price
+            )
+            old_price = existing_product.sell_price if price_changed else None
 
             # Validate the incoming data, considering it's an update
             self._validate_product(
@@ -91,10 +139,48 @@ class ProductService(ServiceBase):
             )
 
             self.logger.info(f"Updating product with ID: {product_update_data.id}")
-            return uow.products.update(product_update_data)
+            updated_product = uow.products.update(product_update_data)
 
-    def delete_product(self, product_id: int) -> None:
-        """Deletes a product. Raises ValueError if it has stock."""
+            # Publish events
+            if updated_product:
+                # Specific event for price changes
+                if price_changed and old_price is not None:
+                    event = ProductPriceChanged(
+                        product_id=updated_product.id,
+                        code=updated_product.code,
+                        old_price=old_price,
+                        new_price=updated_product.sell_price,
+                        price_change_percent=Decimal('0'),  # Calculated in __post_init__
+                        user_id=user_id or UUID(int=0)
+                    )
+                    uow.add_event(event)
+                    self.logger.debug(
+                        f"Published ProductPriceChanged event: "
+                        f"{updated_product.code} from {old_price} to {updated_product.sell_price}"
+                    )
+
+                # General update event
+                event = ProductUpdated(
+                    product_id=updated_product.id,
+                    updated_fields={'code': updated_product.code},  # Could track more fields
+                    user_id=user_id or UUID(int=0)
+                )
+                uow.add_event(event)
+                self.logger.debug(f"Published ProductUpdated event for {updated_product.code}")
+
+            return updated_product
+
+    def delete_product(self, product_id: int, user_id: Optional[UUID] = None) -> None:
+        """
+        Deletes a product. Raises ValueError if it has stock.
+
+        Args:
+            product_id: The ID of the product to delete
+            user_id: The ID of the user performing the action (for event tracking)
+
+        Raises:
+            ValueError: If product has stock and cannot be deleted
+        """
         with unit_of_work() as uow:
             product = uow.products.get_by_id(product_id)
             if product:
@@ -115,8 +201,25 @@ class ProductService(ServiceBase):
                         f"Product '{product.code}' cannot be deleted because it has stock"
                     )
 
+                # Store info before deletion for event
+                product_code = product.code
+                product_description = product.description
+
                 self.logger.info(f"Deleting product with ID: {product_id}")
-                return uow.products.delete(product_id)
+                result = uow.products.delete(product_id)
+
+                # Publish event
+                if result:
+                    event = ProductDeleted(
+                        product_id=product.id,
+                        code=product_code,
+                        description=product_description,
+                        user_id=user_id or UUID(int=0)
+                    )
+                    uow.add_event(event)
+                    self.logger.debug(f"Published ProductDeleted event for {product_code}")
+
+                return result
             else:
                 self.logger.warning(
                     f"Attempted to delete non-existent product with ID: {product_id}"
@@ -241,12 +344,26 @@ class ProductService(ServiceBase):
             return updated_department
 
     def update_prices_by_percentage(
-        self, percentage: Decimal, department_id: Optional[int] = None
+        self,
+        percentage: Decimal,
+        department_id: Optional[int] = None,
+        user_id: Optional[UUID] = None
     ) -> int:
         """
         Updates product prices by a given percentage.
         If department_id is provided, only updates products in that department.
         Returns the number of products updated.
+
+        Args:
+            percentage: Percentage to increase/decrease prices
+            department_id: Optional department filter
+            user_id: The ID of the user performing the action (for event tracking)
+
+        Returns:
+            Number of products updated
+
+        Raises:
+            ValueError: If percentage is invalid
         """
         if not isinstance(percentage, Decimal) or percentage <= Decimal("-100"):
             raise ValueError("Percentage must be a number greater than -100.")
@@ -293,13 +410,25 @@ class ProductService(ServiceBase):
                     uow.products.update(
                         product
                     )  # Assuming update handles individual product persistence
+
+                    # Publish price change event
+                    event = ProductPriceChanged(
+                        product_id=product.id,
+                        code=product.code,
+                        old_price=original_price,
+                        new_price=product.sell_price,
+                        price_change_percent=Decimal('0'),  # Calculated in __post_init__
+                        user_id=user_id or UUID(int=0)
+                    )
+                    uow.add_event(event)
+
                     self.logger.debug(
                         f"Updated product ID {product.id} ('{product.code}'): sell_price from {original_price} to {product.sell_price}, cost_price updated proportionally."
                     )
                     updated_count += 1
 
             self.logger.info(
-                f"Successfully updated prices for {updated_count} products by {percentage}%."
+                f"Successfully updated prices for {updated_count} products by {percentage}%. Published {updated_count} events."
             )
             return updated_count
 

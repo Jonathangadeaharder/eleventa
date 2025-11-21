@@ -1,0 +1,98 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Eleventa.Desktop.ViewModels"
+             x:Class="Eleventa.Desktop.Views.ProductListView"
+             x:DataType="vm:ProductListViewModel">
+
+  <Design.DataContext>
+    <vm:ProductListViewModel/>
+  </Design.DataContext>
+
+  <Grid RowDefinitions="Auto,*" Margin="24">
+
+    <!-- Header -->
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+      <TextBlock Grid.Column="0"
+                 Text="Products"
+                 Classes="header"/>
+
+      <Button Grid.Column="1"
+              Content="Add Product"
+              Classes="primary"
+              Command="{Binding AddProductCommand}"/>
+    </Grid>
+
+    <!-- Content -->
+    <Border Grid.Row="1" Classes="card">
+      <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Search Bar -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+          <TextBox Grid.Column="0"
+                   Text="{Binding SearchText}"
+                   Watermark="Search products by name or SKU..."
+                   Margin="0,0,8,0"/>
+          <Button Grid.Column="1"
+                  Content="Search"
+                  Classes="primary"
+                  Command="{Binding SearchCommand}"/>
+        </Grid>
+
+        <!-- Products DataGrid -->
+        <DataGrid Grid.Row="1"
+                  ItemsSource="{Binding Products}"
+                  SelectedItem="{Binding SelectedProduct}"
+                  IsReadOnly="True"
+                  GridLinesVisibility="Horizontal"
+                  AutoGenerateColumns="False">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="SKU"
+                               Binding="{Binding Sku}"
+                               Width="120"/>
+            <DataGridTextColumn Header="Name"
+                               Binding="{Binding Name}"
+                               Width="*"/>
+            <DataGridTextColumn Header="Price"
+                               Binding="{Binding Price, StringFormat=C2}"
+                               Width="120"/>
+            <DataGridTextColumn Header="Stock"
+                               Binding="{Binding Stock}"
+                               Width="100"/>
+          </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Action Buttons -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="8"
+                    Margin="0,16,0,0">
+          <Button Content="Edit"
+                  Classes="secondary"
+                  Command="{Binding EditProductCommand}"/>
+          <Button Content="Delete"
+                  Classes="danger"
+                  Command="{Binding DeleteProductCommand}"/>
+        </StackPanel>
+
+      </Grid>
+    </Border>
+
+    <!-- Loading Indicator -->
+    <Grid Grid.Row="0" Grid.RowSpan="2"
+          IsVisible="{Binding IsBusy}"
+          Background="#80000000">
+      <Border Background="White"
+              CornerRadius="8"
+              Padding="32"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Center">
+        <TextBlock Text="Loading..."
+                   FontSize="16"
+                   FontWeight="SemiBold"/>
+      </Border>
+    </Grid>
+
+  </Grid>
+
+</UserControl>

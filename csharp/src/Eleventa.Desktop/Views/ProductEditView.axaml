@@ -1,0 +1,93 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Eleventa.Desktop.ViewModels"
+             x:Class="Eleventa.Desktop.Views.ProductEditView"
+             x:DataType="vm:ProductEditViewModel">
+
+  <Design.DataContext>
+    <vm:ProductEditViewModel/>
+  </Design.DataContext>
+
+  <Grid RowDefinitions="Auto,*" Margin="24">
+
+    <!-- Header -->
+    <TextBlock Grid.Row="0"
+               Text="Edit Product"
+               Classes="header"
+               Margin="0,0,0,16"/>
+
+    <!-- Content -->
+    <Border Grid.Row="1" Classes="card">
+      <ScrollViewer>
+        <StackPanel Spacing="16" MaxWidth="600">
+
+          <!-- SKU -->
+          <StackPanel Spacing="4">
+            <TextBlock Text="SKU" FontWeight="SemiBold"/>
+            <TextBox Text="{Binding Sku}"/>
+          </StackPanel>
+
+          <!-- Name -->
+          <StackPanel Spacing="4">
+            <TextBlock Text="Name" FontWeight="SemiBold"/>
+            <TextBox Text="{Binding Name}"/>
+          </StackPanel>
+
+          <!-- Description -->
+          <StackPanel Spacing="4">
+            <TextBlock Text="Description" FontWeight="SemiBold"/>
+            <TextBox Text="{Binding Description}"
+                     Height="100"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"/>
+          </StackPanel>
+
+          <!-- Price and Cost -->
+          <Grid ColumnDefinitions="*,16,*">
+            <StackPanel Grid.Column="0" Spacing="4">
+              <TextBlock Text="Price" FontWeight="SemiBold"/>
+              <TextBox Text="{Binding Price}"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="2" Spacing="4">
+              <TextBlock Text="Cost" FontWeight="SemiBold"/>
+              <TextBox Text="{Binding Cost}"/>
+            </StackPanel>
+          </Grid>
+
+          <!-- Stock -->
+          <StackPanel Spacing="4">
+            <TextBlock Text="Stock" FontWeight="SemiBold"/>
+            <TextBox Text="{Binding Stock}"/>
+          </StackPanel>
+
+          <!-- Barcode -->
+          <StackPanel Spacing="4">
+            <TextBlock Text="Barcode" FontWeight="SemiBold"/>
+            <TextBox Text="{Binding Barcode}"/>
+          </StackPanel>
+
+          <!-- Is Active -->
+          <CheckBox Content="Active"
+                    IsChecked="{Binding IsActive}"/>
+
+          <!-- Action Buttons -->
+          <StackPanel Orientation="Horizontal"
+                      HorizontalAlignment="Right"
+                      Spacing="8"
+                      Margin="0,16,0,0">
+            <Button Content="Cancel"
+                    Classes="secondary"
+                    Command="{Binding CancelCommand}"/>
+            <Button Content="Save"
+                    Classes="primary"
+                    Command="{Binding SaveCommand}"/>
+          </StackPanel>
+
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+
+  </Grid>
+
+</UserControl>

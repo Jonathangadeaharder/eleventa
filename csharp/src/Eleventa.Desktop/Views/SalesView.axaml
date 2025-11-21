@@ -1,0 +1,243 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Eleventa.Desktop.ViewModels"
+             x:Class="Eleventa.Desktop.Views.SalesView"
+             x:DataType="vm:SalesViewModel">
+
+  <Design.DataContext>
+    <vm:SalesViewModel/>
+  </Design.DataContext>
+
+  <Grid RowDefinitions="Auto,*" Margin="24">
+
+    <!-- Header -->
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+      <TextBlock Grid.Column="0"
+                 Text="Point of Sale"
+                 Classes="header"/>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+        <TextBlock Text="Customer:"
+                   VerticalAlignment="Center"
+                   FontWeight="SemiBold"/>
+        <TextBox Text="{Binding CustomerName}"
+                 MinWidth="200"
+                 VerticalAlignment="Center"/>
+      </StackPanel>
+    </Grid>
+
+    <!-- Content -->
+    <Grid Grid.Row="1" ColumnDefinitions="2*,3*">
+
+      <!-- Left Panel - Product Selection -->
+      <Border Grid.Column="0" Classes="card" Margin="0,0,12,0">
+        <Grid RowDefinitions="Auto,*">
+
+          <!-- Search -->
+          <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+            <TextBox Grid.Column="0"
+                     Text="{Binding SearchText}"
+                     Watermark="Search products..."
+                     Margin="0,0,8,0"/>
+            <Button Grid.Column="1"
+                    Content="Search"
+                    Classes="primary"
+                    Command="{Binding SearchProductsCommand}"/>
+          </Grid>
+
+          <!-- Available Products -->
+          <ScrollViewer Grid.Row="1">
+            <ItemsControl ItemsSource="{Binding AvailableProducts}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border Background="White"
+                          BorderBrush="#DEE2E6"
+                          BorderThickness="1"
+                          CornerRadius="4"
+                          Padding="12"
+                          Margin="0,0,0,8">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock Text="{Binding Name}"
+                                   FontWeight="SemiBold"
+                                   FontSize="14"/>
+                        <TextBlock Text="{Binding Sku}"
+                                   Foreground="#6C757D"
+                                   FontSize="12"/>
+                        <TextBlock Text="{Binding Price, StringFormat=C2}"
+                                   Foreground="#28A745"
+                                   FontWeight="Bold"/>
+                      </StackPanel>
+                      <Button Grid.Column="1"
+                              Content="+"
+                              Classes="primary"
+                              Command="{Binding $parent[ItemsControl].((vm:SalesViewModel)DataContext).AddToCartCommand}"
+                              CommandParameter="{Binding}"
+                              VerticalAlignment="Center"/>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+
+        </Grid>
+      </Border>
+
+      <!-- Right Panel - Cart and Checkout -->
+      <Border Grid.Column="1" Classes="card" Margin="12,0,0,0">
+        <Grid RowDefinitions="Auto,*,Auto">
+
+          <!-- Cart Header -->
+          <TextBlock Grid.Row="0"
+                     Text="Shopping Cart"
+                     Classes="subheader"
+                     Margin="0,0,0,16"/>
+
+          <!-- Cart Items -->
+          <ScrollViewer Grid.Row="1">
+            <ItemsControl ItemsSource="{Binding CartItems}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border BorderBrush="#DEE2E6"
+                          BorderThickness="0,0,0,1"
+                          Padding="0,8">
+                    <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                      <StackPanel Grid.Column="0" Spacing="2">
+                        <TextBlock Text="{Binding ProductName}"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding UnitPrice, StringFormat=C2}"
+                                   Foreground="#6C757D"
+                                   FontSize="12"/>
+                      </StackPanel>
+
+                      <StackPanel Grid.Column="1"
+                                  Orientation="Horizontal"
+                                  Spacing="4"
+                                  VerticalAlignment="Center"
+                                  Margin="8,0">
+                        <Button Content="-"
+                                Width="30"
+                                Command="{Binding $parent[ItemsControl].((vm:SalesViewModel)DataContext).DecreaseQuantityCommand}"
+                                CommandParameter="{Binding}"/>
+                        <TextBlock Text="{Binding Quantity}"
+                                   VerticalAlignment="Center"
+                                   MinWidth="30"
+                                   TextAlignment="Center"/>
+                        <Button Content="+"
+                                Width="30"
+                                Command="{Binding $parent[ItemsControl].((vm:SalesViewModel)DataContext).IncreaseQuantityCommand}"
+                                CommandParameter="{Binding}"/>
+                      </StackPanel>
+
+                      <TextBlock Grid.Column="2"
+                                 Text="{Binding Total, StringFormat=C2}"
+                                 FontWeight="Bold"
+                                 VerticalAlignment="Center"
+                                 MinWidth="80"
+                                 TextAlignment="Right"
+                                 Margin="8,0"/>
+
+                      <Button Grid.Column="3"
+                              Content="×"
+                              Classes="danger"
+                              Width="30"
+                              Command="{Binding $parent[ItemsControl].((vm:SalesViewModel)DataContext).RemoveFromCartCommand}"
+                              CommandParameter="{Binding}"
+                              VerticalAlignment="Center"/>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+
+          <!-- Totals and Payment -->
+          <StackPanel Grid.Row="2" Spacing="12" Margin="0,16,0,0">
+            <Border BorderBrush="#DEE2E6" BorderThickness="0,1,0,0" Padding="0,12,0,0">
+              <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="*,Auto">
+
+                <!-- Subtotal -->
+                <TextBlock Grid.Row="0" Grid.Column="0"
+                           Text="Subtotal:"
+                           FontSize="14"/>
+                <TextBlock Grid.Row="0" Grid.Column="1"
+                           Text="{Binding Subtotal, StringFormat=C2}"
+                           FontSize="14"
+                           TextAlignment="Right"/>
+
+                <!-- Tax -->
+                <TextBlock Grid.Row="1" Grid.Column="0"
+                           Text="Tax (21%):"
+                           FontSize="14"
+                           Margin="0,4,0,0"/>
+                <TextBlock Grid.Row="1" Grid.Column="1"
+                           Text="{Binding Tax, StringFormat=C2}"
+                           FontSize="14"
+                           TextAlignment="Right"
+                           Margin="0,4,0,0"/>
+
+                <!-- Total -->
+                <TextBlock Grid.Row="2" Grid.Column="0"
+                           Text="Total:"
+                           FontSize="18"
+                           FontWeight="Bold"
+                           Margin="0,8,0,0"/>
+                <TextBlock Grid.Row="2" Grid.Column="1"
+                           Text="{Binding Total, StringFormat=C2}"
+                           FontSize="18"
+                           FontWeight="Bold"
+                           Foreground="#28A745"
+                           TextAlignment="Right"
+                           Margin="0,8,0,0"/>
+
+                <!-- Payment Amount -->
+                <TextBlock Grid.Row="3" Grid.Column="0"
+                           Text="Payment:"
+                           FontSize="14"
+                           VerticalAlignment="Center"
+                           Margin="0,12,0,0"/>
+                <TextBox Grid.Row="3" Grid.Column="1"
+                         Text="{Binding PaymentAmount}"
+                         Width="120"
+                         HorizontalAlignment="Right"
+                         Margin="0,12,0,0"/>
+
+                <!-- Change -->
+                <TextBlock Grid.Row="4" Grid.Column="0"
+                           Text="Change:"
+                           FontSize="14"
+                           Margin="0,4,0,0"/>
+                <TextBlock Grid.Row="4" Grid.Column="1"
+                           Text="{Binding Change, StringFormat=C2}"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           TextAlignment="Right"
+                           Margin="0,4,0,0"/>
+
+              </Grid>
+            </Border>
+
+            <!-- Action Buttons -->
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+              <Button Grid.Column="0"
+                      Content="Clear Cart"
+                      Classes="secondary"
+                      Command="{Binding ClearCartCommand}"
+                      HorizontalAlignment="Stretch"/>
+              <Button Grid.Column="1"
+                      Content="Process Payment"
+                      Classes="primary"
+                      Command="{Binding ProcessPaymentCommand}"
+                      HorizontalAlignment="Stretch"/>
+            </Grid>
+          </StackPanel>
+
+        </Grid>
+      </Border>
+
+    </Grid>
+
+  </Grid>
+
+</UserControl>
